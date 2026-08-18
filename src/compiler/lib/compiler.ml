@@ -5,17 +5,6 @@ module SMap = Map.Make (String)
 type generic_struct_info = string list * (string * typ) list
 type generic_func_info = string list * func_def
 
-let c_symbol_name name =
-  let b = Buffer.create (String.length name) in
-  let rec loop i =
-    if i >= String.length name then ()
-    else if i + 1 < String.length name && name.[i] = ':' && name.[i + 1] = ':' then
-      (Buffer.add_string b "__"; loop (i + 2))
-    else (Buffer.add_char b name.[i]; loop (i + 1))
-  in
-  loop 0;
-  Buffer.contents b
-
 type emit_env = {
   vars : typ SMap.t;
   funcs : (typ list * typ) SMap.t;

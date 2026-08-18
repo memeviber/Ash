@@ -3537,12 +3537,92 @@ func tc_diag(): void {
   else if tc_error_code == 40 then print "type error: owned value copy requires an explicit move";
   else if tc_error_code == 41 then print "type error: unknown function";
   else if tc_error_code == 42 then print "type error: cannot call non-function value";
+  else if tc_error_code == 43 then print "type error: function name is reserved by the C runtime";
+  else if tc_error_code == 44 then print "type error: distinct functions collide after C mangling";
   else print "type error: invalid expression";
   print tc_diag_line(tc_error_pos);
   print tc_diag_col(tc_error_pos);
 }
+func tc_check_function_symbols(root: int): int {
+  let a: int = node_a[root];
+  while a != 0 {
+    if node_kind[a] == N_FUNC || node_kind[a] == N_GENERIC_FUNC || node_kind[a] == N_EXTERN then {
+      let b: int = node_next[a];
+      while b != 0 {
+        if (node_kind[b] == N_FUNC || node_kind[b] == N_GENERIC_FUNC || node_kind[b] == N_EXTERN) && node_value[a] != node_value[b] then {
+          let ca: int = sym_c_symbol(node_value[a]);
+          let cb: int = sym_c_symbol(node_value[b]);
+          if ca == cb then { tc_error_code = 44; tc_error_pos = node_pos[b]; tc_ok = 0; return 0; }
+        }
+        b = node_next[b];
+      }
+    }
+    a = node_next[a];
+  }
+  return 1;
+}
+func tc_reserved_function(name: int): int {
+  if sym_len[name] == 6 && sym_hash[name] == 509536 then return 1;
+  if sym_len[name] == 12 && sym_hash[name] == 334590 then return 1;
+  if sym_len[name] == 13 && sym_hash[name] == 806795 then return 1;
+  if sym_len[name] == 11 && sym_hash[name] == 649155 then return 1;
+  if sym_len[name] == 10 && sym_hash[name] == 984821 then return 1;
+  if sym_len[name] == 9 && sym_hash[name] == 340336 then return 1;
+  if sym_len[name] == 9 && sym_hash[name] == 739305 then return 1;
+  if sym_len[name] == 9 && sym_hash[name] == 17002 then return 1;
+  if sym_len[name] == 9 && sym_hash[name] == 977208 then return 1;
+  if sym_len[name] == 10 && sym_hash[name] == 327082 then return 1;
+  if sym_len[name] == 10 && sym_hash[name] == 493501 then return 1;
+  if sym_len[name] == 12 && sym_hash[name] == 904440 then return 1;
+  if sym_len[name] == 9 && sym_hash[name] == 667048 then return 1;
+  if sym_len[name] == 21 && sym_hash[name] == 550324 then return 1;
+  if sym_len[name] == 12 && sym_hash[name] == 909736 then return 1;
+  if sym_len[name] == 14 && sym_hash[name] == 282340 then return 1;
+  if sym_len[name] == 19 && sym_hash[name] == 597626 then return 1;
+  if sym_len[name] == 20 && sym_hash[name] == 960911 then return 1;
+  if sym_len[name] == 18 && sym_hash[name] == 141511 then return 1;
+  if sym_len[name] == 12 && sym_hash[name] == 721876 then return 1;
+  if sym_len[name] == 20 && sym_hash[name] == 341680 then return 1;
+  if sym_len[name] == 11 && sym_hash[name] == 668540 then return 1;
+  if sym_len[name] == 15 && sym_hash[name] == 960985 then return 1;
+  if sym_len[name] == 14 && sym_hash[name] == 559937 then return 1;
+  if sym_len[name] == 15 && sym_hash[name] == 694909 then return 1;
+  if sym_len[name] == 14 && sym_hash[name] == 920669 then return 1;
+  if sym_len[name] == 17 && sym_hash[name] == 268146 then return 1;
+  if sym_len[name] == 19 && sym_hash[name] == 51911 then return 1;
+  if sym_len[name] == 15 && sym_hash[name] == 819694 then return 1;
+  if sym_len[name] == 24 && sym_hash[name] == 435348 then return 1;
+  if sym_len[name] == 20 && sym_hash[name] == 349502 then return 1;
+  if sym_len[name] == 24 && sym_hash[name] == 124989 then return 1;
+  if sym_len[name] == 24 && sym_hash[name] == 940431 then return 1;
+  if sym_len[name] == 26 && sym_hash[name] == 804225 then return 1;
+  if sym_len[name] == 28 && sym_hash[name] == 895852 then return 1;
+  if sym_len[name] == 6 && sym_hash[name] == 9519 then return 1;
+  if sym_len[name] == 6 && sym_hash[name] == 718009 then return 1;
+  if sym_len[name] == 7 && sym_hash[name] == 168955 then return 1;
+  if sym_len[name] == 4 && sym_hash[name] == 616115 then return 1;
+  if sym_len[name] == 6 && sym_hash[name] == 724798 then return 1;
+  if sym_len[name] == 6 && sym_hash[name] == 739828 then return 1;
+  if sym_len[name] == 6 && sym_hash[name] == 509771 then return 1;
+  if sym_len[name] == 7 && sym_hash[name] == 979653 then return 1;
+  if sym_len[name] == 5 && sym_hash[name] == 20873 then return 1;
+  if sym_len[name] == 6 && sym_hash[name] == 455513 then return 1;
+  if sym_len[name] == 5 && sym_hash[name] == 772428 then return 1;
+  if sym_len[name] == 5 && sym_hash[name] == 55923 then return 1;
+  if sym_len[name] == 5 && sym_hash[name] == 55939 then return 1;
+  if sym_len[name] == 7 && sym_hash[name] == 658008 then return 1;
+  if sym_len[name] == 4 && sym_hash[name] == 592229 then return 1;
+  if sym_len[name] == 6 && sym_hash[name] == 809432 then return 1;
+  return 0;
+}
 func tc_program(root: int): int {
   tc_root = root; tc_ok = 1; tc_error_code = 0; tc_var_count = 0; tc_scope_count = 0; tc_path_count = 0; tc_loop_depth = 0;
+  let collision_item: int = node_a[root];
+  while collision_item != 0 {
+    if (node_kind[collision_item] == N_FUNC || node_kind[collision_item] == N_GENERIC_FUNC) && tc_reserved_function(node_value[collision_item]) == 1 then { tc_error_code = 43; tc_error_pos = node_pos[collision_item]; tc_ok = 0; return 0; }
+    collision_item = node_next[collision_item];
+  }
+  if tc_check_function_symbols(root) == 0 then return 0;
   tc_enter_scope();
   let item: int = node_a[root];
   while item != 0 { if node_kind[item] == N_STRUCT then { let f: int = node_a[item]; while f != 0 { tc_check_type(node_b[f]); f = node_next[f]; } if tc_cycle_struct(node_value[item]) == 1 then tc_fail(28); } item = node_next[item]; }

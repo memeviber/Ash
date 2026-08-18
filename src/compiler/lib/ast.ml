@@ -54,7 +54,18 @@ type decl =
   | GenericFuncDecl of string * string list * func_def
   | NamespaceDecl of string * decl list
 
- type program = {
+let c_symbol_name name =
+  let b = Buffer.create (String.length name) in
+  let rec loop i =
+    if i >= String.length name then ()
+    else if i + 1 < String.length name && name.[i] = ':' && name.[i + 1] = ':' then
+      (Buffer.add_string b "__"; loop (i + 2))
+    else (Buffer.add_char b name.[i]; loop (i + 1))
+  in
+  loop 0;
+  Buffer.contents b
+
+type program = {
   globals : global_def list;
   consts : global_def list;
   functions : func_def list;

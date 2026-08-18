@@ -108,6 +108,51 @@ let rec string_of_typ = function
   | TGeneric (n, args) -> n ^ "<" ^ String.concat "," (List.map string_of_typ args) ^ ">"
 
 let check program =
+  let function_names = List.map (fun f -> f.name) program.functions @ List.map (fun (name, _, _) -> name) program.generic_functions in
+  let reserved_names =
+    List.fold_left (fun s name -> SSet.add name s) SSet.empty
+      ["printf"; "memory_alloc"; "memory_resize"; "memory_free"; "alloc_ints"; "free_ints"; "grow_ints";
+       "open_file"; "read_char"; "close_file"; "write_char"; "write_string"; "write_int";
+       "runtime_string_concat"; "basalt_track"; "basalt_release"; "basalt_memory_alloc";
+       "basalt_memory_resize"; "basalt_memory_free"; "basalt_panic"; "basalt_checked_bytes";
+       "basalt_find"; "basalt_validate"; "basalt_cleanup"; "basalt_inc_find"; "basalt_inc_add";
+       "basalt_inc_strdup"; "basalt_inc_realpath"; "basalt_inc_join"; "basalt_include_line_mode";
+       "basalt_include_close"; "basalt_include_open_root"; "basalt_include_open_line";
+       "basalt_include_last_status"; "basalt_include_reset_session";
+       "malloc"; "calloc"; "realloc"; "free"; "memcpy"; "memset"; "strlen"; "strrchr";
+       "fopen"; "fclose"; "fgetc"; "fputc"; "fputs"; "fprintf"; "exit"; "atexit"]
+  in
+  let duplicate_name_error names kind =
+    let rec loop seen = function
+      | [] -> None
+      | name :: rest ->
+          if SSet.mem name seen then Some ("duplicate " ^ kind ^ " " ^ name)
+          else loop (SSet.add name seen) rest
+    in
+    loop SSet.empty names
+  in
+  let mangled_name_error names =
+    let rec loop seen = function
+      | [] -> None
+      | name :: rest ->
+          let emitted = Ast.c_symbol_name name in
+          (match SMap.find_opt emitted seen with
+           | Some previous -> Some ("C symbol collision: " ^ previous ^ " and " ^ name ^ " both emit " ^ emitted)
+           | None -> loop (SMap.add emitted name seen) rest)
+    in
+    loop SMap.empty names
+  in
+  let reserved_name_error names =
+    List.find_map (fun name -> if SSet.mem name reserved_names then Some ("reserved runtime function name " ^ name) else None) names
+  in
+  let declaration_error =
+    match duplicate_name_error function_names "function" with
+    | Some e -> Some e
+    | None ->
+        (match mangled_name_error function_names with
+         | Some e -> Some e
+         | None -> reserved_name_error function_names)
+  in
   let funcs =
     let user_funcs =
       List.fold_left
@@ -602,23 +647,24 @@ let check program =
         if compatible_typ t te || (match t, e with TNamed _, Int 0 | TGeneric _, Int 0 | TPtr _, Null | TPtr _, Int 0 -> true | _ -> false) then Ok ()
         else Error ("initializer type mismatch for " ^ x)))
   in
-  match check_struct_cycles () with
-  | Error e -> Some e
-  | Ok () ->
-      (match List.find_map (fun f -> match check_extern f with Ok () -> None | Error e -> Some e) program.externs with
-      | Some e -> Some e
-      | None ->
-      (match List.find_map (fun g -> match check_global g with Ok () -> None | Error e -> Some e) (program.globals @ program.consts) with
-  | Some e -> Some e
-  | None ->
-      match List.find_map
-        (fun f ->
-          let vars = List.fold_left (fun m (x, t) -> SMap.add x t m) globals f.params in
-          let scope_vars = List.fold_left (fun s (x, _) -> SSet.add x s) SSet.empty f.params in
-          (* Dynamic-array parameters are moved into the callee and become owned there. *)
-          let owned = List.fold_left (fun set (name, ty) -> match ty with TDynArray _ -> SSet.add name set | _ -> set) SSet.empty f.params in
-          let env = { vars; funcs; structs; enums; enum_values; consts = global_consts; scope_vars; owned; moved = SSet.empty; borrow_counts = SMap.empty; borrow_sources = SMap.empty } in
-          match stmt env f.return_type f.body with Ok _ -> None | Error e -> Some e)
-        program.functions with
-      | Some e -> Some e
-      | None -> None))
+  let semantic_error =
+    match check_struct_cycles () with
+    | Error e -> Some e
+    | Ok () ->
+        (match List.find_map (fun f -> match check_extern f with Ok () -> None | Error e -> Some e) program.externs with
+        | Some e -> Some e
+        | None ->
+        (match List.find_map (fun g -> match check_global g with Ok () -> None | Error e -> Some e) (program.globals @ program.consts) with
+        | Some e -> Some e
+        | None ->
+            List.find_map
+              (fun f ->
+                let vars = List.fold_left (fun m (x, t) -> SMap.add x t m) globals f.params in
+                let scope_vars = List.fold_left (fun s (x, _) -> SSet.add x s) SSet.empty f.params in
+                (* Dynamic-array parameters are moved into the callee and become owned there. *)
+                let owned = List.fold_left (fun set (name, ty) -> match ty with TDynArray _ -> SSet.add name set | _ -> set) SSet.empty f.params in
+                let env = { vars; funcs; structs; enums; enum_values; consts = global_consts; scope_vars; owned; moved = SSet.empty; borrow_counts = SMap.empty; borrow_sources = SMap.empty } in
+                match stmt env f.return_type f.body with Ok _ -> None | Error e -> Some e)
+              program.functions))
+  in
+  match declaration_error with Some e -> Some e | None -> semantic_error

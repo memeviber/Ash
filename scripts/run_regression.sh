@@ -75,7 +75,9 @@ compile_run "$ROOT/tests/regression/stress_containers_loop.basalt" stress_contai
 compile_run "$ROOT/tests/regression/generic_map_probe.basalt" generic_map_probe
 compile_run "$ROOT/tests/regression/include_test_main.basalt" include_test_main
 compile_run "$ROOT/tests/regression/namespace_collision.basalt" namespace_collision
+expect_reject "$ROOT/tests/regression/mangle_collision.basalt" mangle_collision
 expect_reject "$ROOT/tests/stress/modulo_invalid_string.basalt" modulo_invalid_string
 expect_reject "$ROOT/tests/regression/undefined_function_call.basalt" undefined_function_call
 expect_reject "$ROOT/tests/regression/non_function_value_call.basalt" non_function_value_call
+expect_reject "$ROOT/tests/regression/reserved_runtime_function.basalt" reserved_runtime_function
 printf 'Regression checks completed successfully.\n'

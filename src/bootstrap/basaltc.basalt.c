@@ -560,6 +560,8 @@ void tc_stmt(int id, int expected_kind, int expected_name);
 int tc_diag_line(int pos);
 int tc_diag_col(int pos);
 void tc_diag(void);
+int tc_check_function_symbols(int root);
+int tc_reserved_function(int name);
 int tc_program(int root);
 int pipeline_main(char* path);
 void emit_symbol(int* out, int id);
@@ -10308,7 +10310,15 @@ void tc_diag(void) {
                                       if ((tc_error_code == 42)) {
                                         printf("%s\n", "type error: cannot call non-function value");
                                       } else {
-                                        printf("%s\n", "type error: invalid expression");
+                                        if ((tc_error_code == 43)) {
+                                          printf("%s\n", "type error: function name is reserved by the C runtime");
+                                        } else {
+                                          if ((tc_error_code == 44)) {
+                                            printf("%s\n", "type error: distinct functions collide after C mangling");
+                                          } else {
+                                            printf("%s\n", "type error: invalid expression");
+                                          }
+                                        }
                                       }
                                     }
                                   }
@@ -10332,6 +10342,359 @@ void tc_diag(void) {
   printf("%d\n", tc_diag_col(tc_error_pos));
 }
 
+int tc_check_function_symbols(int root) {
+  int a = (node_a)[root];
+  while ((a != 0)) {
+    {
+      if (((((node_kind)[a] == N_FUNC) || ((node_kind)[a] == N_GENERIC_FUNC)) || ((node_kind)[a] == N_EXTERN))) {
+        {
+          int b = (node_next)[a];
+          while ((b != 0)) {
+            {
+              if ((((((node_kind)[b] == N_FUNC) || ((node_kind)[b] == N_GENERIC_FUNC)) || ((node_kind)[b] == N_EXTERN)) && ((node_value)[a] != (node_value)[b]))) {
+                {
+                  int ca = sym_c_symbol((node_value)[a]);
+                  int cb = sym_c_symbol((node_value)[b]);
+                  if ((ca == cb)) {
+                    {
+                      tc_error_code = 44;
+                      tc_error_pos = (node_pos)[b];
+                      tc_ok = 0;
+                      return 0;
+                    }
+                  } else {
+                    {
+                    }
+                  }
+                }
+              } else {
+                {
+                }
+              }
+              b = (node_next)[b];
+            }
+          }
+        }
+      } else {
+        {
+        }
+      }
+      a = (node_next)[a];
+    }
+  }
+  return 1;
+}
+
+int tc_reserved_function(int name) {
+  if ((((sym_len)[name] == 6) && ((sym_hash)[name] == 509536))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 12) && ((sym_hash)[name] == 334590))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 13) && ((sym_hash)[name] == 806795))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 11) && ((sym_hash)[name] == 649155))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 10) && ((sym_hash)[name] == 984821))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 9) && ((sym_hash)[name] == 340336))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 9) && ((sym_hash)[name] == 739305))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 9) && ((sym_hash)[name] == 17002))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 9) && ((sym_hash)[name] == 977208))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 10) && ((sym_hash)[name] == 327082))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 10) && ((sym_hash)[name] == 493501))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 12) && ((sym_hash)[name] == 904440))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 9) && ((sym_hash)[name] == 667048))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 21) && ((sym_hash)[name] == 550324))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 12) && ((sym_hash)[name] == 909736))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 14) && ((sym_hash)[name] == 282340))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 19) && ((sym_hash)[name] == 597626))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 20) && ((sym_hash)[name] == 960911))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 18) && ((sym_hash)[name] == 141511))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 12) && ((sym_hash)[name] == 721876))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 20) && ((sym_hash)[name] == 341680))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 11) && ((sym_hash)[name] == 668540))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 15) && ((sym_hash)[name] == 960985))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 14) && ((sym_hash)[name] == 559937))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 15) && ((sym_hash)[name] == 694909))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 14) && ((sym_hash)[name] == 920669))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 17) && ((sym_hash)[name] == 268146))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 19) && ((sym_hash)[name] == 51911))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 15) && ((sym_hash)[name] == 819694))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 24) && ((sym_hash)[name] == 435348))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 20) && ((sym_hash)[name] == 349502))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 24) && ((sym_hash)[name] == 124989))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 24) && ((sym_hash)[name] == 940431))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 26) && ((sym_hash)[name] == 804225))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 28) && ((sym_hash)[name] == 895852))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 6) && ((sym_hash)[name] == 9519))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 6) && ((sym_hash)[name] == 718009))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 7) && ((sym_hash)[name] == 168955))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 4) && ((sym_hash)[name] == 616115))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 6) && ((sym_hash)[name] == 724798))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 6) && ((sym_hash)[name] == 739828))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 6) && ((sym_hash)[name] == 509771))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 7) && ((sym_hash)[name] == 979653))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 5) && ((sym_hash)[name] == 20873))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 6) && ((sym_hash)[name] == 455513))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 5) && ((sym_hash)[name] == 772428))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 5) && ((sym_hash)[name] == 55923))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 5) && ((sym_hash)[name] == 55939))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 7) && ((sym_hash)[name] == 658008))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 4) && ((sym_hash)[name] == 592229))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[name] == 6) && ((sym_hash)[name] == 809432))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  return 0;
+}
+
 int tc_program(int root) {
   tc_root = root;
   tc_ok = 1;
@@ -10340,6 +10703,29 @@ int tc_program(int root) {
   tc_scope_count = 0;
   tc_path_count = 0;
   tc_loop_depth = 0;
+  int collision_item = (node_a)[root];
+  while ((collision_item != 0)) {
+    {
+      if (((((node_kind)[collision_item] == N_FUNC) || ((node_kind)[collision_item] == N_GENERIC_FUNC)) && (tc_reserved_function((node_value)[collision_item]) == 1))) {
+        {
+          tc_error_code = 43;
+          tc_error_pos = (node_pos)[collision_item];
+          tc_ok = 0;
+          return 0;
+        }
+      } else {
+        {
+        }
+      }
+      collision_item = (node_next)[collision_item];
+    }
+  }
+  if ((tc_check_function_symbols(root) == 0)) {
+    return 0;
+  } else {
+    {
+    }
+  }
   tc_enter_scope();
   int item = (node_a)[root];
   while ((item != 0)) {
