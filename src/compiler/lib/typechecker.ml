@@ -299,7 +299,14 @@ let check program =
              Result.bind (expr env capacity) (fun tc ->
                if is_integer_like tc then Ok (TDynArray TInt)
                else Error "array_make capacity must be an integer")
-         | _ -> Error "array_make expects one capacity argument")
+         | [capacity; zero] ->
+             Result.bind (expr env capacity) (fun tc ->
+               if not (is_integer_like tc) then Error "array_make capacity must be an integer"
+               else Result.bind (expr env zero) (fun tz ->
+                 match tz with
+                 | TVoid -> Error "array_make element type cannot be void"
+                 | _ -> Ok (TDynArray tz)))
+         | _ -> Error "array_make expects capacity and optional element witness")
     | Call (name, [array; minimum]) when name = "array_reserve" ->
         Result.bind (expr env array) (function
           | TDynArray t -> Result.bind (expr env minimum) (fun tm ->

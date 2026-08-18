@@ -44,7 +44,7 @@ prog:
     }
 
 decl:
-  | NAMESPACE; name = ID; LBRACE; ds = list(decl); RBRACE { NamespaceDecl (name, ds) }
+  | NAMESPACE; name = name_atom; LBRACE; ds = list(decl); RBRACE { NamespaceDecl (name, ds) }
   | STRUCT; name = ID; LT; ps = separated_nonempty_list(COMMA, ID); GT; LBRACE; fs = list(struct_field); RBRACE {
       GenericStructDecl (name, ps, List.map (fun (f, t) -> (f, genericize_type ps t)) fs)
     }
@@ -109,9 +109,13 @@ for_step:
   | lv = expr; EQUAL; e = expr { Assign(lv, e) }
   | e = expr { ExprStmt e }
 
-qualified_name:
+name_atom:
   | x = ID { x }
-  | x = qualified_name; COLONCOLON; y = ID { x ^ "::" ^ y }
+  | ARRAY { "array" }
+
+qualified_name:
+  | x = name_atom { x }
+  | x = qualified_name; COLONCOLON; y = name_atom { x ^ "::" ^ y }
 
 expr:
   | i = INT { Int i }

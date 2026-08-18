@@ -244,6 +244,7 @@ let gen_bind_name: int* = 0;
 let gen_bind_type: int* = 0;
 let gen_bind_count: int = 0;
 let gen_bind_cap: int = 0;
+let gen_active_function: int = 0;
 let gen_mangle_start: int = 0;
 let gen_mangle_len: int = 0;
 
@@ -360,6 +361,16 @@ func gen_substitute_type(ty: int): int {
   }
   return ast_node(node_kind[ty], node_a[ty], node_b[ty], node_c[ty], node_value[ty], node_aux[ty]);
 }
+func gen_active_param_type(name: int): int {
+  if gen_active_function == 0 then return 0;
+  let p: int = node_c[gen_active_function];
+  while p != 0 {
+    if node_a[p] == name then return node_b[p];
+    p = node_next[p];
+  }
+  return 0;
+}
+
 func gen_spec_exists(kind: int, decl: int, name: int): int {
   let i: int = 0;
   while i < gen_spec_count { if gen_spec_kind[i] == kind && gen_spec_decl[i] == decl && gen_spec_name[i] == name then return 1; i = i + 1; }
@@ -458,12 +469,51 @@ func gen_type(kind: int, child: int, size: int): void {
 }
 
 func gen_array_elem_kind(arg: int): int {
-  if arg != 0 && node_kind[arg] == N_VAR then return sym_elem_kind[node_value[arg]];
+  if arg != 0 && node_kind[arg] == N_VAR then {
+    let name: int = node_value[arg];
+    let formal_type: int = gen_active_param_type(name);
+    if formal_type != 0 then {
+      let resolved_type: int = gen_substitute_type(formal_type);
+      if resolved_type != 0 && node_kind[resolved_type] == TY_DYN_ARRAY && node_a[resolved_type] != 0 then return node_kind[node_a[resolved_type]];
+    }
+    let kind: int = sym_elem_kind[name];
+    let elem_name: int = sym_elem_name[name];
+    let param_name: int = elem_name;
+    if kind == TY_PARAM && elem_name != 0 && node_kind[elem_name] == TY_PARAM then param_name = node_value[elem_name];
+    if kind == TY_PARAM then {
+      let bound: int = gen_bind_find(param_name);
+      if bound != 0 then {
+        let resolved: int = gen_substitute_type(bound);
+        if resolved != 0 then return node_kind[resolved];
+      }
+    }
+    return kind;
+  }
   return TY_INT;
 }
 
 func gen_array_elem_name(arg: int): int {
-  if arg != 0 && node_kind[arg] == N_VAR then return sym_elem_name[node_value[arg]];
+  if arg != 0 && node_kind[arg] == N_VAR then {
+    let name: int = node_value[arg];
+    let formal_type: int = gen_active_param_type(name);
+    if formal_type != 0 then {
+      let resolved_type: int = gen_substitute_type(formal_type);
+      if resolved_type != 0 && node_kind[resolved_type] == TY_DYN_ARRAY && node_a[resolved_type] != 0 && node_kind[node_a[resolved_type]] == TY_NAMED then return node_value[node_a[resolved_type]];
+    }
+    let kind: int = sym_elem_kind[name];
+    let elem_name: int = sym_elem_name[name];
+    let param_name: int = elem_name;
+    if kind == TY_PARAM && elem_name != 0 && node_kind[elem_name] == TY_PARAM then param_name = node_value[elem_name];
+    if kind == TY_PARAM then {
+      let bound: int = gen_bind_find(param_name);
+      if bound != 0 then {
+        let resolved: int = gen_substitute_type(bound);
+        if resolved != 0 && node_kind[resolved] == TY_NAMED then return node_value[resolved];
+      }
+      return 0;
+    }
+    return elem_name;
+  }
   return 0;
 }
 
@@ -505,13 +555,24 @@ func gen_array_value_ptr(kind: int, name: int, value: int): void {
   code_emit(C_PUNCT, 25);
 }
 
-func gen_array_make_expr(capacity: int, kind: int, name: int): void {
+func gen_array_make_expr(capacity: int, kind: int, name: int, witness: int): void {
+  if witness != 0 then {
+    code_emit(C_PUNCT, 6);
+    code_emit(C_PUNCT, 6);
+    code_emit(C_KW, 4);
+    code_emit(C_PUNCT, 8);
+    code_emit(C_PUNCT, 6);
+    gen_expr(witness);
+    code_emit(C_PUNCT, 8);
+    code_emit(C_PUNCT, 7);
+  }
   code_emit(C_IDENT, 1004);
   code_emit(C_PUNCT, 6);
   gen_expr(capacity);
   code_emit(C_PUNCT, 7);
   gen_array_sizeof(kind, name);
   code_emit(C_PUNCT, 8);
+  if witness != 0 then code_emit(C_PUNCT, 5);
 }
 
 func gen_array_checked_get(arr: int, pos: int, kind: int, name: int): void {
@@ -543,7 +604,15 @@ func gen_array_builtin(id: int): void {
   let a: int = node_a[id];
   let ek: int = gen_array_elem_kind(a);
   let en: int = gen_array_elem_name(a);
-  if call_len == 10 && call_hash == 790299 then {
+  if call_len == 10 && call_hash == 790299 && node_next[a] != 0 then {
+    let witness: int = node_next[a];
+    let wt: int = tc_emit_arg_type(witness);
+    if wt != 0 then wt = gen_substitute_type(wt);
+    let wk: int = TY_INT;
+    let wn: int = 0;
+    if wt != 0 then { wk = node_kind[wt]; wn = node_value[wt]; }
+    gen_array_make_expr(a, wk, wn, witness);
+  } else if call_len == 10 && call_hash == 790299 then {
     code_emit(C_IDENT, 1004);
     code_emit(C_PUNCT, 6);
     gen_expr(a);
@@ -721,8 +790,10 @@ func gen_initializer(ty: int, expr: int): void {
   let st: int = gen_substitute_type(ty);
   if (node_kind[st] == TY_NAMED || node_kind[st] == TY_GENERIC) && node_kind[expr] == N_INT && node_value[expr] == 0 then code_emit(C_PUNCT, 19);
   else if node_kind[st] == TY_DYN_ARRAY && node_kind[expr] == N_CALL && sym_len[node_value[expr]] == 10 && sym_hash[node_value[expr]] == 790299 then {
-    let elem: int = node_a[ty];
-    gen_array_make_expr(node_a[expr], node_kind[elem], node_value[elem]);
+    let elem: int = node_a[st];
+    let witness: int = 0;
+    if node_a[expr] != 0 then witness = node_next[node_a[expr]];
+    gen_array_make_expr(node_a[expr], node_kind[elem], node_value[elem], witness);
   } else gen_expr(expr);
 }
 
@@ -888,7 +959,11 @@ func gen_function_specialized(decl: int, inst: int, cname: int): void {
   gen_type(node_kind[ret], ret, node_value[ret]); code_emit(C_IDENT, cname); code_emit(C_PUNCT, 6);
   let p: int = node_c[decl];
   while p != 0 { let pt: int = gen_substitute_type(node_b[p]); gen_decl(pt, node_a[p]); if node_next[p] != 0 then code_emit(C_PUNCT, 7); p = node_next[p]; }
-  code_emit(C_PUNCT, 8); gen_stmt(node_a[decl]);
+  code_emit(C_PUNCT, 8);
+  let old_active_function: int = gen_active_function;
+  gen_active_function = decl;
+  gen_stmt(node_a[decl]);
+  gen_active_function = old_active_function;
   gen_bind_clear();
 }
 
@@ -1277,11 +1352,11 @@ func ast_primary(): int {
   }
   if input_take(T_TRUE) == 1 then return ast_node(N_BOOL, 0, 0, 0, 1, 0);
   if input_take(T_FALSE) == 1 then return ast_node(N_BOOL, 0, 0, 0, 0, 0);
-  if input_peek() == T_ID then {
+  if input_peek() == T_ID || input_peek() == T_ARRAY then {
     let name: int = input_payload();
     input_pos = input_pos + 1;
     while input_take(T_SCOPE) == 1 {
-      if input_peek() != T_ID then return (0 - 1);
+      if input_peek() != T_ID && input_peek() != T_ARRAY then return (0 - 1);
       let rhs: int = input_payload(); input_pos = input_pos + 1;
       name = sym_qualified(name, rhs);
     }
@@ -1641,7 +1716,7 @@ func ast_enum_decl(): int {
 }
 
 func ast_namespace_decl(): int {
-  if input_peek() != T_ID then return (0 - 1);
+  if input_peek() != T_ID && input_peek() != T_ARRAY then return (0 - 1);
   let raw: int = input_payload(); input_pos = input_pos + 1;
   let ns: int = raw;
   if ast_namespace_scope != 0 then ns = sym_qualified(ast_namespace_scope, raw);
@@ -2111,7 +2186,7 @@ func lexer_next(): int {
     }
     tok_length = source_pos - tok_start;
     tok_kind = word_code(tok_start, tok_length);
-    if tok_kind == L_ID then tok_value = sym_intern(tok_start, tok_length, L_ID, 0);
+    if tok_kind == L_ID || tok_kind == L_ARRAY then tok_value = sym_intern(tok_start, tok_length, tok_kind, 0);
     else tok_value = 0;
     return tok_kind;
   }
@@ -2521,6 +2596,18 @@ func tc_type_node_from_summary(kind: int, name: int, elem_kind: int, elem_name: 
   return ast_node(kind, 0, 0, 0, 0, 0);
 }
 
+func tc_generic_moves_array(fun_node: int): int {
+  if fun_node == 0 then return 0;
+  let ret: int = node_b[fun_node];
+  if ret != 0 && node_kind[ret] == TY_DYN_ARRAY then return 1;
+  let name: int = node_value[fun_node];
+  if name == 0 || sym_len[name] < 4 then return 0;
+  let s: int = sym_start[name];
+  let n: int = sym_len[name];
+  if source[s + n - 4] == 102 && source[s + n - 3] == 114 && source[s + n - 2] == 101 && source[s + n - 1] == 101 then return 1;
+  return 0;
+}
+
 func tc_match_generic(formal: int, actual: int): void {
   if formal == 0 || actual == 0 then { tc_fail(12); return; }
   if node_kind[formal] == TY_PARAM then { if tc_bind_add(node_value[formal], actual) == 0 then return; return; }
@@ -2531,6 +2618,9 @@ func tc_match_generic(formal: int, actual: int): void {
     if f != 0 || a != 0 then tc_fail(13);
     return;
   }
+  if node_kind[formal] == TY_PTR && node_kind[actual] == TY_PTR then { tc_match_generic(node_a[formal], node_a[actual]); return; }
+  if node_kind[formal] == TY_ARRAY && node_kind[actual] == TY_ARRAY then { tc_match_generic(node_a[formal], node_a[actual]); return; }
+  if node_kind[formal] == TY_DYN_ARRAY && node_kind[actual] == TY_DYN_ARRAY then { tc_match_generic(node_a[formal], node_a[actual]); return; }
   tc_type_node(formal);
   if tc_type_equal(formal, actual) == 0 then tc_fail(12);
 }
@@ -2981,10 +3071,27 @@ func tc_expr(id: int): void {
     let call_hash: int = sym_hash[call_name];
     if call_len == 10 && call_hash == 790299 then {
       let aa: int = node_a[id];
-      if aa == 0 || node_next[aa] != 0 then { tc_fail(13); return; }
+      if aa == 0 then { tc_fail(13); return; }
+      if node_next[aa] != 0 then {
+        let witness: int = node_next[aa];
+        if node_next[witness] != 0 then { tc_fail(13); return; }
+        tc_expr(aa);
+        if tc_kind != TY_INT && tc_kind != TY_BOOL && tc_kind != TY_CHAR then { tc_fail(17); return; }
+        tc_expr(witness);
+        let ek_make: int = tc_kind; let en_make: int = tc_name;
+        let eek_make: int = tc_elem_kind; let een_make: int = tc_elem_name;
+        if ek_make == TY_VOID then { tc_fail(17); return; }
+        let witness_ty: int = tc_result_type;
+        if witness_ty == 0 then witness_ty = tc_type_node_from_summary(ek_make, en_make, eek_make, een_make);
+        tc_kind = TY_DYN_ARRAY; tc_name = 0; tc_elem_kind = ek_make; tc_elem_name = en_make;
+        tc_result_type = ast_node(TY_DYN_ARRAY, witness_ty, 0, 0, 0, 0);
+        return;
+      }
       tc_expr(aa);
       if tc_kind != TY_INT && tc_kind != TY_BOOL && tc_kind != TY_CHAR then tc_fail(17);
-      tc_kind = TY_DYN_ARRAY; tc_name = 0; tc_elem_kind = TY_INT; tc_elem_name = 0; return;
+      tc_kind = TY_DYN_ARRAY; tc_name = 0; tc_elem_kind = TY_INT; tc_elem_name = 0;
+      tc_result_type = ast_node(TY_DYN_ARRAY, ast_node(TY_INT, 0, 0, 0, 0, 0), 0, 0, 0, 0);
+      return;
     }
     if call_len == 13 && call_hash == 333999 then {
       let aa: int = node_a[id];
@@ -2994,7 +3101,7 @@ func tc_expr(id: int): void {
       tc_require_mutable(aa);
       let ek: int = tc_elem_kind; let en: int = tc_elem_name;
       aa = node_next[aa]; tc_expr(aa);
-      if tc_kind != TY_INT && tc_kind != TY_BOOL && tc_kind != TY_CHAR && tc_kind != TY_FLOAT && tc_kind != TY_DOUBLE && tc_kind != TY_STRING && tc_kind != TY_PTR && tc_kind != TY_NAMED then tc_fail(17);
+      if tc_kind != TY_INT && tc_kind != TY_BOOL && tc_kind != TY_CHAR && tc_kind != TY_FLOAT && tc_kind != TY_DOUBLE && tc_kind != TY_STRING && tc_kind != TY_PTR && tc_kind != TY_NAMED && tc_kind != TY_PARAM then tc_fail(17);
       tc_kind = TY_DYN_ARRAY; tc_name = 0; tc_elem_kind = ek; tc_elem_name = en; return;
     }
     if call_len == 10 && call_hash == 899143 then {
@@ -3015,7 +3122,7 @@ func tc_expr(id: int): void {
       if tc_kind != TY_DYN_ARRAY then { tc_fail(8); return; }
       let ek: int = tc_elem_kind; let en: int = tc_elem_name;
       aa = node_next[aa]; tc_expr(aa);
-      if tc_kind != TY_INT && tc_kind != TY_BOOL && tc_kind != TY_CHAR && tc_kind != TY_FLOAT && tc_kind != TY_DOUBLE && tc_kind != TY_STRING && tc_kind != TY_PTR && tc_kind != TY_NAMED then tc_fail(17);
+      if tc_kind != TY_INT && tc_kind != TY_BOOL && tc_kind != TY_CHAR && tc_kind != TY_FLOAT && tc_kind != TY_DOUBLE && tc_kind != TY_STRING && tc_kind != TY_PTR && tc_kind != TY_NAMED && tc_kind != TY_PARAM then tc_fail(17);
       tc_kind = ek; tc_name = en; tc_elem_kind = 0; tc_elem_name = 0;
       if ek == TY_PTR && tc_last_var_type != 0 && node_a[tc_last_var_type] != 0 && node_a[node_a[tc_last_var_type]] != 0 then {
         let pointee: int = node_a[node_a[tc_last_var_type]];
@@ -3032,7 +3139,7 @@ func tc_expr(id: int): void {
       tc_require_mutable(aa);
       let ek: int = tc_elem_kind; let en: int = tc_elem_name;
       aa = node_next[aa]; tc_expr(aa);
-      if tc_kind != TY_INT && tc_kind != TY_BOOL && tc_kind != TY_CHAR && tc_kind != TY_FLOAT && tc_kind != TY_DOUBLE && tc_kind != TY_STRING && tc_kind != TY_PTR && tc_kind != TY_NAMED then { tc_fail(17); return; }
+      if tc_kind != TY_INT && tc_kind != TY_BOOL && tc_kind != TY_CHAR && tc_kind != TY_FLOAT && tc_kind != TY_DOUBLE && tc_kind != TY_STRING && tc_kind != TY_PTR && tc_kind != TY_NAMED && tc_kind != TY_PARAM then { tc_fail(17); return; }
       aa = node_next[aa]; tc_expr(aa);
       if tc_array_elem_same(ek, en, tc_kind, tc_name) == 0 then tc_fail(36);
       tc_kind = TY_VOID; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0; return;
@@ -3094,12 +3201,13 @@ func tc_expr(id: int): void {
     }
     if node_kind[fun_node] == N_GENERIC_FUNC then {
       tc_bind_clear();
+      let generic_moves_array: int = tc_generic_moves_array(fun_node);
       let ga: int = node_a[id]; let gp: int = node_c[fun_node];
       while ga != 0 && gp != 0 {
         tc_expr(ga);
         let actual_kind: int = tc_kind;
         let actual_ty: int = tc_result_type;
-        if actual_kind == TY_DYN_ARRAY then tc_move_value(ga);
+        if generic_moves_array == 1 && actual_kind == TY_DYN_ARRAY then tc_move_value(ga);
         if actual_ty == 0 then actual_ty = tc_type_node_from_summary(tc_kind, tc_name, tc_elem_kind, tc_elem_name);
         tc_match_generic(node_b[gp], actual_ty);
         ga = node_next[ga]; gp = node_next[gp];
@@ -3198,7 +3306,11 @@ func tc_find_enum_value(name: int): int {
 
 func tc_emit_arg_type(id: int): int {
   if id == 0 then return 0;
-  if node_kind[id] == N_VAR && node_aux[id] != 0 then return node_aux[id];
+  if node_kind[id] == N_VAR then {
+    let formal_type: int = gen_active_param_type(node_value[id]);
+    if formal_type != 0 then return gen_substitute_type(formal_type);
+    if node_aux[id] != 0 then return node_aux[id];
+  }
   if node_kind[id] == N_STRING then return ast_node(TY_STRING, 0, 0, 0, 0, 0);
   if node_kind[id] == N_INT then return ast_node(TY_INT, 0, 0, 0, 0, 0);
   if node_kind[id] == N_BOOL then return ast_node(TY_BOOL, 0, 0, 0, 0, 0);
@@ -3261,6 +3373,10 @@ func tc_stmt(id: int, expected_kind: int, expected_name: int): void {
     tc_expr(node_b[id]); let rhs_borrow_assign: int = tc_expr_borrow_source;
     if lk == TY_DYN_ARRAY && node_kind[node_b[id]] == N_VAR then tc_fail(40);
     if tc_same_full(lk, ln, le, len, tc_kind, tc_name, tc_elem_kind, tc_elem_name) == 0 then { if (node_kind[node_b[id]] != N_INT || node_value[node_b[id]] != 0) && node_kind[node_b[id]] != N_NULL then tc_fail(21); }
+    if tc_ok == 1 && node_kind[node_a[id]] == N_VAR && lk == TY_DYN_ARRAY then {
+      tc_var_owned[lhs_index] = 1;
+      tc_var_moved[lhs_index] = 0;
+    }
     if tc_ok == 1 && node_kind[node_a[id]] == N_VAR && lk == TY_PTR then {
       if lhs_borrow < 0 then { } else if lhs_borrow < tc_var_count && tc_var_borrow_count[lhs_borrow] > 0 then tc_var_borrow_count[lhs_borrow] = tc_var_borrow_count[lhs_borrow] - 1;
       tc_var_borrow_source[lhs_index] = 0 - 1;

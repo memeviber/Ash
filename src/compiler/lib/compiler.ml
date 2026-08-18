@@ -145,6 +145,7 @@ let rec emit_expr_type env = function
            | _ when numeric ta && numeric tb && (real ta || real tb) -> TDouble
            | _ -> TInt)
       | Mul | Div | Mod -> if numeric ta && numeric tb && (real ta || real tb) then TDouble else TInt)
+  | Call ("array_make", [_; zero]) -> TDynArray (emit_expr_type env zero)
   | Call ("array_make", _) -> TDynArray TInt
   | Call ("array_reserve", a :: _) | Call ("array_push", a :: _) | Call ("array_clear", [a]) ->
       (match emit_expr_type env a with TDynArray t -> TDynArray t | _ -> TDynArray TInt)
@@ -308,6 +309,9 @@ and compile_expr env = function
       if op = Concat then
         "runtime_string_concat(" ^ compile_expr env e1 ^ ", " ^ compile_expr env e2 ^ ")"
       else "(" ^ compile_expr env e1 ^ " " ^ sop ^ " " ^ compile_expr env e2 ^ ")"
+  | Call ("array_make", [capacity; zero]) ->
+      let et = emit_expr_type env zero in
+      "((void)(" ^ compile_expr env zero ^ "), runtime_array_make(" ^ compile_expr env capacity ^ ", sizeof(" ^ c_type_of_element et ^ ")))"
   | Call ("array_make", [capacity]) ->
       "runtime_array_make(" ^ compile_expr env capacity ^ ", sizeof(int))"
   | Call ("array_reserve", [array; minimum]) ->
@@ -395,6 +399,7 @@ let compile_initializer env t e =
   match t, e with
   | TNamed n, Int 0 when SMap.mem n env.fields -> "{0}"
   | TGeneric _, Int 0 -> "{0}"
+  | TDynArray t, Call ("array_make", [capacity; zero]) -> "((void)(" ^ compile_expr env zero ^ "), runtime_array_make(" ^ compile_expr env capacity ^ ", sizeof(" ^ c_type_of_element t ^ ")))"
   | TDynArray t, Call ("array_make", [capacity]) -> "runtime_array_make(" ^ compile_expr env capacity ^ ", sizeof(" ^ c_type_of_element t ^ "))"
   | _ -> compile_expr env e
 
@@ -695,7 +700,9 @@ static PYREL_UNUSED void pyrel_include_reset_session(void){pyrel_inc_active_n=0;
       | TArray (inner, n), _ ->
           compile_typ inner ^ " " ^ c_symbol_name x ^ "[" ^ string_of_int n ^ "];\n"
        | (TNamed _ | TGeneric _), Int 0 -> compile_decl t (c_symbol_name x) ^ " = {0};\n"
-       | TDynArray inner, Call ("array_make", [capacity]) -> compile_decl t x ^ " = runtime_array_make(" ^ compile_expr emit_env capacity ^ ", sizeof(" ^ c_type_of_element inner ^ "));\n"
+               | TDynArray inner, Call ("array_make", [capacity; _]) -> compile_decl t x ^ " = runtime_array_make(" ^ compile_expr emit_env capacity ^ ", sizeof(" ^ c_type_of_element inner ^ "));\n"
+        | TDynArray inner, Call ("array_make", [capacity]) -> compile_decl t x ^ " = runtime_array_make(" ^ compile_expr emit_env capacity ^ ", sizeof(" ^ c_type_of_element inner ^ "));\n"
+
        | _ -> compile_decl t (c_symbol_name x) ^ " = " ^ compile_expr emit_env e ^ ";\n"
     ) (program.globals @ program.consts) |> String.concat "" in
   let extern_prototypes =

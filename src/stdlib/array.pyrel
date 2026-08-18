@@ -1,0 +1,49 @@
+namespace array {
+  // Owning, growable dynamic array API. The compiler/runtime only provides the
+  // typed allocation and ownership boundary; all public container operations
+  // are exposed through this Pyrel namespace.
+  func new<T>(capacity: int, zero: T): array<T> {
+    return array_make(capacity, zero);
+  }
+
+  func reserve<T>(a: array<T>, minimum: int): array<T> {
+    return array_reserve(a, minimum);
+  }
+
+  func push<T>(a: array<T>, value: T): array<T> {
+    return array_push(a, value);
+  }
+
+  func get<T>(a: array<T>, index: int): T {
+    return array_get(a, index);
+  }
+
+  func set<T>(a: array<T>, index: int, value: T): array<T> {
+    array_set(a, index, value);
+    return a;
+  }
+
+  func clear<T>(a: array<T>): array<T> {
+    return array_clear(a);
+  }
+
+  func length<T>(a: array<T>): int {
+    return a.len;
+  }
+
+  func capacity<T>(a: array<T>): int {
+    return a.cap;
+  }
+
+  func is_empty<T>(a: array<T>): bool {
+    return a.len == 0;
+  }
+
+  func is_full<T>(a: array<T>): bool {
+    return a.len == a.cap;
+  }
+
+  func free<T>(a: array<T>): void {
+    array_free(a);
+  }
+}

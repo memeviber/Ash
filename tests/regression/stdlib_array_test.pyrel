@@ -1,0 +1,36 @@
+include "../../src/stdlib/array.pyrel"
+
+func main(): int {
+  let status: int = 0;
+
+  let ints: array<int> = array::new(2, 0);
+  ints = array::push(ints, 10);
+  ints = array::push(ints, 20);
+  ints = array::push(ints, 30);
+  if array::length(ints) != 3 then status = 1;
+  if array::capacity(ints) < 3 then status = 2;
+  if array::get(ints, 2) != 30 then status = 3;
+  ints = array::set(ints, 1, 25);
+  if array::get(ints, 1) != 25 then status = 4;
+  if array::is_empty(ints) == true then status = 5;
+  ints = array::clear(ints);
+  if array::is_empty(ints) == false then status = 6;
+  array::free(ints);
+  if status != 0 then return status;
+
+  let chars: array<char> = array::new(2, 'x');
+  chars = array::push(chars, 'a');
+  chars = array::push(chars, 'b');
+  let char_value: char = array::get(chars, 1);
+  array::free(chars);
+  if char_value != 'b' then return 7;
+
+  let doubles: array<double> = array::new(2, 0.0);
+  doubles = array::push(doubles, 1.5);
+  doubles = array::push(doubles, 2.5);
+  let double_value: double = array::get(doubles, 1);
+  array::free(doubles);
+  if double_value != 2.5 then return 8;
+
+  return 0;
+}
