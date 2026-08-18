@@ -1,0 +1,17 @@
+// Minimal typed-memory boundary for standard-library containers.
+// Container layout, growth policy, indexing and higher-order operations belong
+// to the Pyrel standard library; these three calls only bridge to checked C
+// allocation and ownership tracking.
+namespace memory {
+  func alloc<T>(count: int, zero: T): T* {
+    return memory_alloc(count, zero);
+  }
+
+  func resize<T>(data: T*, old_count: int, new_count: int, zero: T): T* {
+    return memory_resize(data, old_count, new_count, zero);
+  }
+
+  func free<T>(data: T*): void {
+    memory_free(data);
+  }
+}

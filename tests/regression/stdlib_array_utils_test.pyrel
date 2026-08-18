@@ -1,0 +1,48 @@
+include "../../src/stdlib/array.pyrel"
+
+func square(value: int): int {
+  return value * value;
+}
+
+func keep_even(value: int): bool {
+  return (value % 2) == 0;
+}
+
+func main(): int {
+  let status: int = 0;
+  let values: array::Array<int> = array::new(4, 0);
+  values = array::push(values, 1, 0);
+  values = array::push(values, 2, 0);
+  values = array::push(values, 3, 0);
+  values = array::push(values, 4, 0);
+  values = array::push(values, 5, 0);
+
+  let middle: array::Array<int> = array::slice(values, 1, 3, 0);
+  if array::length(middle) != 3 then status = 1;
+  if array::get(middle, 0) != 2 then status = 2;
+  if array::get(middle, 2) != 4 then status = 3;
+
+  let tail: array::Array<int> = array::slice(values, 4, 20, 0);
+  if array::length(tail) != 1 then status = 4;
+  if array::get(tail, 0) != 5 then status = 5;
+
+  let empty: array::Array<int> = array::slice(values, (0 - 10), (0 - 1), 0);
+  if array::is_empty(empty) == false then status = 6;
+
+  let squared: array::Array<int> = array::map(values, &square, 0);
+  if array::length(squared) != 5 then status = 7;
+  if array::get(squared, 3) != 16 then status = 8;
+
+  let evens: array::Array<int> = array::filter(values, &keep_even, 0);
+  if array::length(evens) != 2 then status = 9;
+  if array::get(evens, 0) != 2 then status = 10;
+  if array::get(evens, 1) != 4 then status = 11;
+
+  array::free(values);
+  array::free(middle);
+  array::free(tail);
+  array::free(empty);
+  array::free(squared);
+  array::free(evens);
+  return status;
+}

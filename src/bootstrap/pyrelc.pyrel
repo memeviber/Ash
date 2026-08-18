@@ -386,6 +386,14 @@ func gen_add_struct_spec(ty: int): void {
   let a: int = node_a[q]; while a != 0 { gen_collect_type(a); a = node_next[a]; }
 }
 func gen_add_fun_spec(decl: int, args: int): void {
+  let saved_count: int = gen_bind_count;
+  ensure_gen_bind(saved_count + saved_count);
+  let save_i: int = 0;
+  while save_i < saved_count {
+    gen_bind_name[saved_count + save_i] = gen_bind_name[save_i];
+    gen_bind_type[saved_count + save_i] = gen_bind_type[save_i];
+    save_i = save_i + 1;
+  }
   let actual: int = 0; let p: int = args;
   while p != 0 { let q: int = gen_substitute_type(p); if actual == 0 then actual = q; else actual = ast_link(actual, q); p = node_next[p]; }
   gen_bind_decl(decl, actual);
@@ -398,6 +406,13 @@ func gen_add_fun_spec(decl: int, args: int): void {
     tp = node_next[tp];
   }
   gen_bind_clear();
+  let restore_i: int = 0;
+  while restore_i < saved_count {
+    gen_bind_name[restore_i] = gen_bind_name[saved_count + restore_i];
+    gen_bind_type[restore_i] = gen_bind_type[saved_count + restore_i];
+    restore_i = restore_i + 1;
+  }
+  gen_bind_count = saved_count;
   let name: int = gen_mangled_function_symbol(node_value[decl], typeargs);
   if gen_spec_exists(2, decl, name) == 1 then return;
   ensure_gen_specs(gen_spec_count); gen_spec_kind[gen_spec_count] = 2; gen_spec_decl[gen_spec_count] = decl; gen_spec_type[gen_spec_count] = actual; gen_spec_name[gen_spec_count] = name; gen_spec_count = gen_spec_count + 1;
@@ -415,7 +430,7 @@ func gen_collect_expr(id: int): void {
     let f: int = tc_find_function_ctx(node_value[id], node_scope[id]);
     if f != 0 && node_kind[f] == N_GENERIC_FUNC then {
       let aa: int = node_a[id]; let actual: int = 0;
-      while aa != 0 { let q: int = 0; if node_kind[aa] == N_VAR && node_aux[aa] != 0 then q = node_aux[aa]; else if node_kind[aa] == N_STRING then q = ast_node(TY_STRING, 0, 0, 0, 0, 0); else { tc_expr(aa); q = tc_result_type; if q == 0 then q = tc_type_node_from_summary(tc_kind, tc_name, tc_elem_kind, tc_elem_name); } if q != 0 then q = gen_substitute_type(q); if actual == 0 then actual = q; else actual = ast_link(actual, q); gen_collect_type(q); aa = node_next[aa]; }
+      while aa != 0 { let q: int = tc_emit_arg_type(aa); if q == 0 then { tc_expr(aa); q = tc_result_type; if q == 0 then q = tc_type_node_from_summary(tc_kind, tc_name, tc_elem_kind, tc_elem_name); } if q != 0 then q = gen_substitute_type(q); if actual == 0 then actual = q; else actual = ast_link(actual, q); gen_collect_type(q); aa = node_next[aa]; }
       gen_add_fun_spec(f, actual);
     } else { let aa: int = node_a[id]; while aa != 0 { gen_collect_expr(aa); aa = node_next[aa]; } }
     return;
@@ -575,6 +590,96 @@ func gen_array_make_expr(capacity: int, kind: int, name: int, witness: int): voi
   if witness != 0 then code_emit(C_PUNCT, 5);
 }
 
+func gen_memory_sizeof(arg: int): void {
+  let ty: int = tc_emit_arg_type(arg);
+  if ty != 0 then ty = gen_substitute_type(ty);
+  if ty != 0 && node_kind[ty] == TY_PTR && node_a[ty] != 0 then {
+    let elem: int = gen_substitute_type(node_a[ty]);
+    gen_array_sizeof(node_kind[elem], node_value[elem]);
+  } else if ty != 0 then gen_array_sizeof(node_kind[ty], node_value[ty]);
+  else gen_array_sizeof(TY_INT, 0);
+}
+
+func gen_memory_builtin(id: int): void {
+  let call_name: int = node_value[id];
+  let call_len: int = sym_len[call_name];
+  let call_hash: int = sym_hash[call_name];
+  let a: int = node_a[id];
+  if call_len == 12 && call_hash == 334590 then {
+    let witness: int = node_next[a];
+    let elem_ty: int = tc_emit_arg_type(witness);
+    if elem_ty != 0 then elem_ty = gen_substitute_type(elem_ty);
+    if elem_ty == 0 then elem_ty = ast_node(TY_INT, 0, 0, 0, 0, 0);
+    let ptr_ty: int = ast_node(TY_PTR, elem_ty, 0, 0, 0, 0);
+    code_emit(C_PUNCT, 6);
+    code_emit(C_PUNCT, 6);
+    code_emit(C_KW, 4);
+    code_emit(C_PUNCT, 8);
+    code_emit(C_PUNCT, 6);
+    gen_expr(witness);
+    code_emit(C_PUNCT, 8);
+    code_emit(C_PUNCT, 7);
+    code_emit(C_PUNCT, 6);
+    gen_type(node_kind[ptr_ty], ptr_ty, 0);
+    code_emit(C_PUNCT, 8);
+    code_emit(C_IDENT, 1016);
+    code_emit(C_PUNCT, 6);
+    gen_expr(a);
+    code_emit(C_PUNCT, 7);
+    gen_memory_sizeof(witness);
+    code_emit(C_PUNCT, 8);
+    code_emit(C_PUNCT, 8);
+  } else if call_len == 13 && call_hash == 806795 then {
+    let old_count: int = node_next[a];
+    let new_count: int = node_next[old_count];
+    let zero: int = node_next[new_count];
+    let ptr_ty: int = tc_emit_arg_type(a);
+    if ptr_ty != 0 then ptr_ty = gen_substitute_type(ptr_ty);
+    if ptr_ty == 0 then ptr_ty = ast_node(TY_PTR, ast_node(TY_INT, 0, 0, 0, 0, 0), 0, 0, 0, 0);
+    code_emit(C_PUNCT, 6);
+    code_emit(C_PUNCT, 6);
+    code_emit(C_KW, 4);
+    code_emit(C_PUNCT, 8);
+    code_emit(C_PUNCT, 6);
+    gen_expr(zero);
+    code_emit(C_PUNCT, 8);
+    code_emit(C_PUNCT, 7);
+    code_emit(C_PUNCT, 6);
+    gen_type(node_kind[ptr_ty], ptr_ty, 0);
+    code_emit(C_PUNCT, 8);
+    code_emit(C_IDENT, 1017);
+    code_emit(C_PUNCT, 6);
+    code_emit(C_PUNCT, 6);
+    code_emit(C_KW, 4);
+    code_emit(C_PUNCT, 1);
+    code_emit(C_PUNCT, 8);
+    gen_expr(a);
+    code_emit(C_PUNCT, 7);
+    gen_expr(old_count);
+    code_emit(C_PUNCT, 7);
+    gen_expr(new_count);
+    code_emit(C_PUNCT, 7);
+    gen_memory_sizeof(a);
+    code_emit(C_PUNCT, 8);
+    code_emit(C_PUNCT, 8);
+  } else if call_len == 11 && call_hash == 649155 then {
+    code_emit(C_IDENT, 1018);
+    code_emit(C_PUNCT, 6);
+    code_emit(C_PUNCT, 6);
+    code_emit(C_KW, 4);
+    code_emit(C_PUNCT, 1);
+    code_emit(C_PUNCT, 8);
+    gen_expr(a);
+    code_emit(C_PUNCT, 8);
+  } else {
+    code_emit(C_IDENT, sym_c_symbol(call_name));
+    code_emit(C_PUNCT, 6);
+    let arg: int = a;
+    while arg != 0 { gen_expr(arg); if node_next[arg] != 0 then code_emit(C_PUNCT, 7); arg = node_next[arg]; }
+    code_emit(C_PUNCT, 8);
+  }
+}
+
 func gen_array_checked_get(arr: int, pos: int, kind: int, name: int): void {
   code_emit(C_PUNCT, 9);
   code_emit(C_PUNCT, 6);
@@ -681,12 +786,19 @@ func gen_call_name(id: int): int {
   let actual: int = 0; let a: int = node_a[id];
   while a != 0 {
     let q: int = 0;
-      if node_kind[a] == N_VAR && node_aux[a] != 0 then q = node_aux[a];
-    else if node_kind[a] == N_STRING then q = ast_node(TY_STRING, 0, 0, 0, 0, 0);
-    else { tc_expr(a); q = tc_result_type; if q == 0 then q = tc_type_node_from_summary(tc_kind, tc_name, tc_elem_kind, tc_elem_name); }
+      q = tc_emit_arg_type(a);
+    if q == 0 then { tc_expr(a); q = tc_result_type; if q == 0 then q = tc_type_node_from_summary(tc_kind, tc_name, tc_elem_kind, tc_elem_name); }
     if q != 0 then q = gen_substitute_type(q);
     if actual == 0 then actual = q; else actual = ast_link(actual, q);
     a = node_next[a];
+  }
+  let saved_count: int = gen_bind_count;
+  ensure_gen_bind(saved_count + saved_count);
+  let save_i: int = 0;
+  while save_i < saved_count {
+    gen_bind_name[saved_count + save_i] = gen_bind_name[save_i];
+    gen_bind_type[saved_count + save_i] = gen_bind_type[save_i];
+    save_i = save_i + 1;
   }
   gen_bind_decl(f, actual);
   let typeargs: int = 0; let tp: int = node_aux[f];
@@ -698,6 +810,13 @@ func gen_call_name(id: int): int {
     tp = node_next[tp];
   }
   gen_bind_clear();
+  let restore_i: int = 0;
+  while restore_i < saved_count {
+    gen_bind_name[restore_i] = gen_bind_name[saved_count + restore_i];
+    gen_bind_type[restore_i] = gen_bind_type[saved_count + restore_i];
+    restore_i = restore_i + 1;
+  }
+  gen_bind_count = saved_count;
   return gen_mangled_function_symbol(node_value[f], typeargs);
 }
 
@@ -717,7 +836,8 @@ func gen_expr(id: int): void {
     let call_name: int = node_value[id];
     let call_len: int = sym_len[call_name];
     let call_hash: int = sym_hash[call_name];
-    if (call_len == 10 && call_hash == 790299) || (call_len == 13 && call_hash == 333999) || (call_len == 10 && call_hash == 899143) || (call_len == 9 && call_hash == 890825) || (call_len == 9 && call_hash == 902357) || (call_len == 11 && call_hash == 585984) || (call_len == 10 && call_hash == 597913) then gen_array_builtin(id);
+    if (call_len == 12 && call_hash == 334590) || (call_len == 13 && call_hash == 806795) || (call_len == 11 && call_hash == 649155) then gen_memory_builtin(id);
+    else if (call_len == 10 && call_hash == 790299) || (call_len == 13 && call_hash == 333999) || (call_len == 10 && call_hash == 899143) || (call_len == 9 && call_hash == 890825) || (call_len == 9 && call_hash == 902357) || (call_len == 11 && call_hash == 585984) || (call_len == 10 && call_hash == 597913) then gen_array_builtin(id);
     else { code_emit(C_IDENT, gen_call_name(id)); code_emit(C_PUNCT, 6); let arg: int = node_a[id]; while arg != 0 { gen_expr(arg); if node_next[arg] != 0 then code_emit(C_PUNCT, 7); arg = node_next[arg]; } code_emit(C_PUNCT, 8); }
   } else if k == N_DEREF then { code_emit(C_PUNCT, 9); gen_expr(node_a[id]); }
   else if k == N_ADDRESS then { code_emit(C_PUNCT, 10); gen_expr(node_a[id]); }
@@ -923,7 +1043,11 @@ func gen_stmt(id: int): void {
 
 func gen_unify_formal(formal: int, actual: int): void {
   if formal == 0 || actual == 0 then return;
-  if node_kind[formal] == TY_PARAM then { if gen_bind_find(node_value[formal]) == 0 then gen_bind_add(node_value[formal], actual); return; }
+  if node_kind[formal] == TY_PARAM then {
+    if node_kind[actual] == TY_PARAM && node_value[formal] == node_value[actual] then return;
+    if gen_bind_find(node_value[formal]) == 0 then gen_bind_add(node_value[formal], actual);
+    return;
+  }
   if node_kind[formal] == TY_GENERIC && node_kind[actual] == TY_GENERIC then {
     if node_value[formal] != node_value[actual] then return;
     let fp: int = node_a[formal]; let ap: int = node_a[actual];
@@ -1072,6 +1196,20 @@ func gen_program(id: int): void {
   }
   let si: int = 0;
   while si < gen_spec_count { if gen_spec_kind[si] == 1 then { code_emit(C_KW, 14); code_emit(C_KW, 12); code_emit(C_IDENT, gen_spec_name[si]); code_emit(C_PUNCT, 22); code_emit(C_IDENT, gen_spec_name[si]); code_emit(C_PUNCT, 12); code_emit(C_NEWLINE, 0); } si = si + 1; }
+  // Rescan each discovered generic function instance until nested calls reach a fixed point.
+  let scan_si: int = 0;
+  while scan_si < gen_spec_count {
+    if gen_spec_kind[scan_si] == 2 then {
+      let scan_decl: int = gen_spec_decl[scan_si];
+      let old_active_scan: int = gen_active_function;
+      gen_bind_decl(scan_decl, gen_spec_type[scan_si]);
+      gen_active_function = scan_decl;
+      gen_collect_stmt(node_a[scan_decl]);
+      gen_active_function = old_active_scan;
+      gen_bind_clear();
+    }
+    scan_si = scan_si + 1;
+  }
   // Definitions for ordinary and specialized structs.
   item = node_a[id];
   while item != 0 { if node_kind[item] == N_STRUCT then gen_struct_decl(item); else if node_kind[item] == N_ENUM then gen_enum_decl(item); item = node_next[item]; }
@@ -1277,7 +1415,27 @@ func ast_type(): int {
     if ret == 0 then return 0;
     return ast_node(TY_FUN, args, ret, 0, 0, 0);
   }
-  if input_take(T_ARRAY) == 1 then {
+  if input_peek() == T_ARRAY && input_pos + 1 < input_count && input_kind[input_pos + 1] == T_SCOPE then {
+    let ns: int = input_payload(); input_pos = input_pos + 2;
+    if input_peek() != T_ID && input_peek() != T_ARRAY then return 0;
+    let rhs: int = input_payload(); input_pos = input_pos + 1;
+    let named_type: int = sym_qualified(ns, rhs);
+    if input_take(T_LT) == 1 then {
+      let args: int = 0;
+      if input_peek() != T_GT then {
+        let at: int = ast_type();
+        if at == 0 then return 0;
+        args = at;
+        while input_take(T_COMMA) == 1 {
+          at = ast_type();
+          if at == 0 then return 0;
+          args = ast_link(args, at);
+        }
+      }
+      if input_take(T_GT) == 0 then return 0;
+      ty = ast_node(TY_GENERIC, args, 0, 0, named_type, 0);
+    } else ty = ast_node(TY_NAMED, 0, 0, 0, named_type, 0);
+  } else if input_take(T_ARRAY) == 1 then {
     if input_take(T_LT) == 0 then return 0;
     let elem: int = ast_type();
     if elem == 0 then return 0;
@@ -2845,6 +3003,7 @@ func tc_name_is_array_free(name: int): int {
   return 1;
 }
 func tc_release_name(name: int): int {
+  if sym_len[name] == 11 && sym_hash[name] == 649155 then return 1;
   if sym_len[name] == 9 && sym_hash[name] == 340336 then return 1;
   if sym_len[name] == 10 && sym_hash[name] == 327082 then return 1;
   if tc_name_is_array_free(name) == 1 then return 1;
@@ -2854,6 +3013,8 @@ func tc_release_name(name: int): int {
 func tc_owned_initializer(id: int): int {
   if id == 0 || node_kind[id] != N_CALL then return 0;
   if sym_len[node_value[id]] == 10 && sym_hash[node_value[id]] == 984821 then return 1;
+  if sym_len[node_value[id]] == 12 && sym_hash[node_value[id]] == 334590 then return 1;
+  if sym_len[node_value[id]] == 13 && sym_hash[node_value[id]] == 806795 then return 1;
   if sym_len[node_value[id]] == 9 && sym_hash[node_value[id]] == 17002 then return 1;
   if sym_len[node_value[id]] == 21 && sym_hash[node_value[id]] == 375664 then return 1;
   if sym_len[node_value[id]] == 21 && sym_hash[node_value[id]] == 191106 then return 1;
@@ -3069,6 +3230,41 @@ func tc_expr(id: int): void {
     let call_name: int = node_value[id];
     let call_len: int = sym_len[call_name];
     let call_hash: int = sym_hash[call_name];
+    if call_len == 12 && call_hash == 334590 then {
+      let aa: int = node_a[id];
+      if aa == 0 || node_next[aa] == 0 || node_next[node_next[aa]] != 0 then { tc_fail(13); return; }
+      tc_expr(aa);
+      if tc_kind != TY_INT then { tc_fail(17); return; }
+      let witness: int = node_next[aa];
+      tc_expr(witness);
+      if tc_kind == TY_VOID then { tc_fail(17); return; }
+      let wk: int = tc_kind; let wn: int = tc_name;
+      let witness_ty: int = tc_result_type;
+      if witness_ty == 0 then witness_ty = tc_type_node_from_summary(wk, wn, tc_elem_kind, tc_elem_name);
+      tc_kind = TY_PTR; tc_name = 0; tc_elem_kind = wk; tc_elem_name = wn;
+      tc_result_type = ast_node(TY_PTR, witness_ty, 0, 0, 0, 0);
+      return;
+    }
+    if call_len == 13 && call_hash == 806795 then {
+      let aa: int = node_a[id];
+      if aa == 0 || node_next[aa] == 0 || node_next[node_next[aa]] == 0 || node_next[node_next[node_next[aa]]] == 0 || node_next[node_next[node_next[node_next[aa]]]] != 0 then { tc_fail(13); return; }
+      tc_expr(aa);
+      if tc_kind != TY_PTR then { tc_fail(8); return; }
+      let pk: int = tc_elem_kind; let pn: int = tc_elem_name;
+      let ptr_ty: int = tc_result_type;
+      aa = node_next[aa]; tc_expr(aa); if tc_kind != TY_INT then { tc_fail(17); return; }
+      aa = node_next[aa]; tc_expr(aa); if tc_kind != TY_INT then { tc_fail(17); return; }
+      aa = node_next[aa]; tc_expr(aa);
+      if tc_kind == TY_VOID || tc_array_elem_same(pk, pn, tc_kind, tc_name) == 0 then { tc_fail(36); return; }
+      tc_kind = TY_PTR; tc_name = 0; tc_elem_kind = pk; tc_elem_name = pn; tc_result_type = ptr_ty; return;
+    }
+    if call_len == 11 && call_hash == 649155 then {
+      let aa: int = node_a[id];
+      if aa == 0 || node_next[aa] != 0 then { tc_fail(13); return; }
+      tc_expr(aa);
+      if tc_kind != TY_PTR then { tc_fail(8); return; }
+      tc_kind = TY_VOID; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0; tc_result_type = 0; return;
+    }
     if call_len == 10 && call_hash == 790299 then {
       let aa: int = node_a[id];
       if aa == 0 then { tc_fail(13); return; }
@@ -3304,8 +3500,37 @@ func tc_find_enum_value(name: int): int {
   return 0;
 }
 
+func tc_emit_field_type(id: int): int {
+  if id == 0 || node_kind[id] != N_FIELD_ACCESS then return 0;
+  let base_ty: int = tc_emit_arg_type(node_a[id]);
+  if base_ty == 0 then return 0;
+  base_ty = gen_substitute_type(base_ty);
+  let struct_name: int = 0;
+  let args: int = 0;
+  if node_kind[base_ty] == TY_GENERIC then { struct_name = node_value[base_ty]; args = node_a[base_ty]; }
+  else if node_kind[base_ty] == TY_NAMED then struct_name = node_value[base_ty];
+  else return 0;
+  let decl: int = tc_find_struct(struct_name);
+  if decl == 0 then return 0;
+  if node_kind[decl] == N_GENERIC_STRUCT then {
+    let gp: int = node_c[decl]; let ga: int = args;
+    tc_bind_clear();
+    while gp != 0 && ga != 0 { if tc_bind_add(node_a[gp], ga) == 0 then return 0; gp = node_next[gp]; ga = node_next[ga]; }
+  }
+  let f: int = node_a[decl];
+  while f != 0 {
+    if node_a[f] == node_value[id] then return gen_substitute_type(node_b[f]);
+    f = node_next[f];
+  }
+  return 0;
+}
+
 func tc_emit_arg_type(id: int): int {
   if id == 0 then return 0;
+  if node_kind[id] == N_FIELD_ACCESS then {
+    let field_ty: int = tc_emit_field_type(id);
+    if field_ty != 0 then return field_ty;
+  }
   if node_kind[id] == N_VAR then {
     let formal_type: int = gen_active_param_type(node_value[id]);
     if formal_type != 0 then return gen_substitute_type(formal_type);
@@ -3331,11 +3556,26 @@ func tc_expr_kind_for_emit(id: int): int {
         if q != 0 then { if actual == 0 then actual = q; else actual = ast_link(actual, q); }
         a = node_next[a];
       }
+      let saved_count: int = gen_bind_count;
+      ensure_gen_bind(saved_count + saved_count);
+      let save_i: int = 0;
+      while save_i < saved_count {
+        gen_bind_name[saved_count + save_i] = gen_bind_name[save_i];
+        gen_bind_type[saved_count + save_i] = gen_bind_type[save_i];
+        save_i = save_i + 1;
+      }
       gen_bind_decl(f, actual);
       let ret: int = gen_substitute_type(node_b[f]);
       let result_kind: int = TY_INT;
       if ret != 0 then { result_kind = node_kind[ret]; }
       gen_bind_clear();
+      let restore_i: int = 0;
+      while restore_i < saved_count {
+        gen_bind_name[restore_i] = gen_bind_name[saved_count + restore_i];
+        gen_bind_type[restore_i] = gen_bind_type[saved_count + restore_i];
+        restore_i = restore_i + 1;
+      }
+      gen_bind_count = saved_count;
       if result_kind == TY_PARAM then { return TY_INT; }
       return result_kind;
     }
@@ -3562,6 +3802,9 @@ func emit_c_token(out: int*, kind: int, value: int): void {
     else if value == 1013 then write_string(out, "cap");
     else if value == 1014 then write_string(out, "runtime_array_get_raw");
     else if value == 1015 then write_string(out, "data");
+    else if value == 1016 then write_string(out, "pyrel_memory_alloc");
+    else if value == 1017 then write_string(out, "pyrel_memory_resize");
+    else if value == 1018 then write_string(out, "pyrel_memory_free");
     else emit_symbol(out, value);
   } else if kind == C_INT then emit_int_text(out, value);
   else if kind == C_STRING then emit_string(out, value);
@@ -3647,6 +3890,9 @@ func emit_runtime(out: int*): void {
   write_string(out, "static PYREL_UNUSED void pyrel_cleanup(void){size_t i;pyrel_validate();for(i=0;i<pyrel_live_n;i++)free(pyrel_live[i]);free(pyrel_live);pyrel_live=NULL;pyrel_live_n=pyrel_live_cap=0;}\n");
   write_string(out, "static PYREL_UNUSED void* pyrel_track(void* p){size_t c;void**q;if(!p)return NULL;if(pyrel_find(p)!=(size_t)-1)pyrel_panic(2);if(pyrel_live_n==pyrel_live_cap){if(pyrel_live_cap>(size_t)-1/2)c=(size_t)-1;else c=pyrel_live_cap?pyrel_live_cap*2:32;if(c>(size_t)-1/sizeof(void*))pyrel_panic(2);q=(void**)realloc(pyrel_live,c*sizeof(void*));if(!q)pyrel_panic(2);pyrel_live=q;pyrel_live_cap=c;}pyrel_live[pyrel_live_n++]=p;atexit(pyrel_cleanup);return p;}\n");
   write_string(out, "static PYREL_UNUSED void pyrel_release(void* p){size_t i;if(!p)return;i=pyrel_find(p);if(i==(size_t)-1)pyrel_panic(2);free(p);pyrel_live[i]=pyrel_live[--pyrel_live_n];}\n");
+  write_string(out, "static PYREL_UNUSED void* pyrel_memory_alloc(int count,size_t elem_size){size_t bytes=pyrel_checked_bytes(count,elem_size);void*p=calloc(1,bytes?bytes:1);if(!p)pyrel_panic(5);return pyrel_track(p);}\n");
+  write_string(out, "static PYREL_UNUSED void* pyrel_memory_resize(void* old,int old_count,int new_count,size_t elem_size){size_t slot=(size_t)-1;size_t old_bytes;size_t new_bytes;void*p;if(old_count<0||new_count<0||new_count<old_count)pyrel_panic(1);if(old){slot=pyrel_find(old);if(slot==(size_t)-1)pyrel_panic(2);}old_bytes=pyrel_checked_bytes(old_count,elem_size);new_bytes=pyrel_checked_bytes(new_count,elem_size);p=realloc(old,new_bytes?new_bytes:1);if(!p)pyrel_panic(6);if(slot==(size_t)-1)pyrel_track(p);else pyrel_live[slot]=p;if(new_bytes>old_bytes)memset((char*)p+old_bytes,0,new_bytes-old_bytes);return p;}\n");
+  write_string(out, "static PYREL_UNUSED void pyrel_memory_free(void*p){pyrel_release(p);}\n");
   write_string(out, "static PYREL_UNUSED char* runtime_string_concat(const char* a,const char* b){size_t na,nb,total;char* p;if(!a||!b)pyrel_panic(4);na=strlen(a);nb=strlen(b);if(na>(size_t)-1-nb-1)pyrel_panic(1);total=na+nb+1;p=(char*)malloc(total);if(!p)pyrel_panic(5);memcpy(p,a,na);memcpy(p+na,b,nb);p[na+nb]=0;return(char*)pyrel_track(p);}\n");
   write_string(out, "typedef struct PyrelArray { void* data; int len; int cap; } PyrelArray;\n");
   write_string(out, "static PYREL_UNUSED void pyrel_array_check(const PyrelArray* a){if(!a)pyrel_panic(4);if(a->len<0||a->cap<0||a->len>a->cap)pyrel_panic(3);if(a->cap>0&&(!a->data||pyrel_find(a->data)==(size_t)-1))pyrel_panic(2);}\n");

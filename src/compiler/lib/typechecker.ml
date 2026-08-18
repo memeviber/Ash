@@ -293,6 +293,30 @@ let check program =
               | t -> Error ("cannot index " ^ string_of_typ t)))
     | Field (e, field) ->
         Result.bind (expr env e) (fun base -> field_type base field)
+    | Call (name, [count; zero]) when name = "memory_alloc" ->
+        Result.bind (expr env count) (fun tc ->
+          if not (is_integer_like tc) then Error "memory_alloc count must be an integer"
+          else Result.bind (expr env zero) (fun tz ->
+            match tz with
+            | TVoid -> Error "memory_alloc element type cannot be void"
+            | _ -> Ok (TPtr tz)))
+    | Call (name, [ptr; old_count; new_count; zero]) when name = "memory_resize" ->
+        Result.bind (expr env ptr) (fun tp ->
+          match tp with
+          | TPtr elem ->
+              Result.bind (expr env old_count) (fun told ->
+                if not (is_integer_like told) then Error "memory_resize old count must be an integer"
+                else Result.bind (expr env new_count) (fun tnew ->
+                  if not (is_integer_like tnew) then Error "memory_resize new count must be an integer"
+                  else Result.bind (expr env zero) (fun tz ->
+                    if compatible_typ elem tz then Ok (TPtr elem)
+                    else Error "memory_resize witness type mismatch")))
+          | other -> Error ("memory_resize expects a pointer, got " ^ string_of_typ other))
+    | Call (name, [ptr]) when name = "memory_free" ->
+        Result.bind (expr env ptr) (fun tp ->
+          match tp with
+          | TPtr _ -> Ok TVoid
+          | other -> Error ("memory_free expects a pointer, got " ^ string_of_typ other))
     | Call (name, args) when name = "array_make" ->
         (match args with
          | [capacity] ->
