@@ -1909,22 +1909,41 @@ func ast_decl(): int {
   return (0 - 1);
 }
 
+func ast_flatten_decl_list(item: int): int {
+  let head: int = 0;
+  let tail: int = 0;
+  let p: int = item;
+  while p != 0 {
+    let next: int = node_next[p];
+    node_next[p] = 0;
+    let part: int = p;
+    if node_kind[p] == N_LIST then part = ast_flatten_decl_list(node_a[p]);
+    if part != 0 then {
+      if head == 0 then { head = part; tail = part; }
+      else { node_next[tail] = part; }
+      while node_next[tail] != 0 { tail = node_next[tail]; }
+    }
+    p = next;
+  }
+  return head;
+}
+
 func ast_program(): int {
   let items: int = 0;
   while input_peek() != T_EOF {
     let item: int = ast_decl();
     if item < 0 then return (0 - 1);
-    if node_kind[item] == N_LIST then {
-      let nested: int = node_a[item];
-      if nested != 0 then {
-        if items == 0 then items = nested;
-        else {
-          let tail: int = items;
-          while node_next[tail] != 0 { tail = node_next[tail]; }
-          node_next[tail] = nested;
-        }
+    let flat: int = 0;
+    if node_kind[item] == N_LIST then flat = ast_flatten_decl_list(node_a[item]);
+    else flat = item;
+    if flat != 0 then {
+      if items == 0 then items = flat;
+      else {
+        let tail: int = items;
+        while node_next[tail] != 0 { tail = node_next[tail]; }
+        node_next[tail] = flat;
       }
-    } else if items == 0 then items = item; else items = ast_link(items, item);
+    }
   }
   return ast_node(N_PROGRAM, items, 0, 0, 0, 0);
 }
@@ -3619,10 +3638,10 @@ func tc_program(root: int): int {
   tc_root = root; tc_ok = 1; tc_error_code = 0; tc_var_count = 0; tc_scope_count = 0; tc_path_count = 0; tc_loop_depth = 0;
   let collision_item: int = node_a[root];
   while collision_item != 0 {
-    if (node_kind[collision_item] == N_FUNC || node_kind[collision_item] == N_GENERIC_FUNC) && tc_reserved_function(node_value[collision_item]) == 1 then { tc_error_code = 43; tc_error_pos = node_pos[collision_item]; tc_ok = 0; return 0; }
+    if (node_kind[collision_item] == N_FUNC || node_kind[collision_item] == N_GENERIC_FUNC) && tc_reserved_function(node_value[collision_item]) == 1 then { tc_error_code = 43; tc_error_pos = node_pos[collision_item]; tc_ok = 0; tc_diag(); return 0; }
     collision_item = node_next[collision_item];
   }
-  if tc_check_function_symbols(root) == 0 then return 0;
+  if tc_check_function_symbols(root) == 0 then { tc_diag(); return 0; }
   tc_enter_scope();
   let item: int = node_a[root];
   while item != 0 { if node_kind[item] == N_STRUCT then { let f: int = node_a[item]; while f != 0 { tc_check_type(node_b[f]); f = node_next[f]; } if tc_cycle_struct(node_value[item]) == 1 then tc_fail(28); } item = node_next[item]; }

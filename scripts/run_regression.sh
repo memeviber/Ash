@@ -65,6 +65,13 @@ expect_reject() {
   printf 'PASS %s (rejected)\n' "$label"
 }
 
+expect_collision_reject() {
+  local source=$1 label=$2
+  expect_reject "$source" "$label"
+  grep -Fq 'C symbol collision' "$OUT/${label}.host.log"
+  grep -Fq 'distinct functions collide after C mangling' "$OUT/${label}.boot.log"
+}
+
 compile_run "$ROOT/tests/stress/modulo_stress.basalt" modulo_stress
 compile_run "$ROOT/tests/regression/stdlib_growth_test.basalt" stdlib_growth_test
 compile_run "$ROOT/tests/regression/stdlib_containers_test.basalt" stdlib_containers_test
@@ -75,7 +82,10 @@ compile_run "$ROOT/tests/regression/stress_containers_loop.basalt" stress_contai
 compile_run "$ROOT/tests/regression/generic_map_probe.basalt" generic_map_probe
 compile_run "$ROOT/tests/regression/include_test_main.basalt" include_test_main
 compile_run "$ROOT/tests/regression/namespace_collision.basalt" namespace_collision
-expect_reject "$ROOT/tests/regression/mangle_collision.basalt" mangle_collision
+compile_run "$ROOT/tests/regression/nested_namespace_valid.basalt" nested_namespace_valid
+expect_collision_reject "$ROOT/tests/regression/mangle_collision.basalt" mangle_collision
+expect_collision_reject "$ROOT/tests/regression/nested_namespace_flat_collision.basalt" nested_namespace_flat_collision
+expect_collision_reject "$ROOT/tests/regression/nested_namespace_segment_collision.basalt" nested_namespace_segment_collision
 expect_reject "$ROOT/tests/stress/modulo_invalid_string.basalt" modulo_invalid_string
 expect_reject "$ROOT/tests/regression/undefined_function_call.basalt" undefined_function_call
 expect_reject "$ROOT/tests/regression/non_function_value_call.basalt" non_function_value_call

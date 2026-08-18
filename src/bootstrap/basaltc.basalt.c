@@ -479,6 +479,7 @@ int ast_struct_decl(void);
 int ast_enum_decl(void);
 int ast_namespace_decl(void);
 int ast_decl(void);
+int ast_flatten_decl_list(int item);
 int ast_program(void);
 void c_source_reset(void);
 void ensure_c_source(int need);
@@ -5180,6 +5181,49 @@ int ast_decl(void) {
   return (0 - 1);
 }
 
+int ast_flatten_decl_list(int item) {
+  int head = 0;
+  int tail = 0;
+  int p = item;
+  while ((p != 0)) {
+    {
+      int next = (node_next)[p];
+      (node_next)[p] = 0;
+      int part = p;
+      if (((node_kind)[p] == N_LIST)) {
+        part = ast_flatten_decl_list((node_a)[p]);
+      } else {
+        {
+        }
+      }
+      if ((part != 0)) {
+        {
+          if ((head == 0)) {
+            {
+              head = part;
+              tail = part;
+            }
+          } else {
+            {
+              (node_next)[tail] = part;
+            }
+          }
+          while (((node_next)[tail] != 0)) {
+            {
+              tail = (node_next)[tail];
+            }
+          }
+        }
+      } else {
+        {
+        }
+      }
+      p = next;
+    }
+  }
+  return head;
+}
+
 int ast_program(void) {
   int items = 0;
   while ((input_peek() != T_EOF)) {
@@ -5191,35 +5235,30 @@ int ast_program(void) {
         {
         }
       }
+      int flat = 0;
       if (((node_kind)[item] == N_LIST)) {
+        flat = ast_flatten_decl_list((node_a)[item]);
+      } else {
+        flat = item;
+      }
+      if ((flat != 0)) {
         {
-          int nested = (node_a)[item];
-          if ((nested != 0)) {
-            {
-              if ((items == 0)) {
-                items = nested;
-              } else {
-                {
-                  int tail = items;
-                  while (((node_next)[tail] != 0)) {
-                    {
-                      tail = (node_next)[tail];
-                    }
-                  }
-                  (node_next)[tail] = nested;
-                }
-              }
-            }
+          if ((items == 0)) {
+            items = flat;
           } else {
             {
+              int tail = items;
+              while (((node_next)[tail] != 0)) {
+                {
+                  tail = (node_next)[tail];
+                }
+              }
+              (node_next)[tail] = flat;
             }
           }
         }
       } else {
-        if ((items == 0)) {
-          items = item;
-        } else {
-          items = ast_link(items, item);
+        {
         }
       }
     }
@@ -10711,6 +10750,7 @@ int tc_program(int root) {
           tc_error_code = 43;
           tc_error_pos = (node_pos)[collision_item];
           tc_ok = 0;
+          tc_diag();
           return 0;
         }
       } else {
@@ -10721,7 +10761,10 @@ int tc_program(int root) {
     }
   }
   if ((tc_check_function_symbols(root) == 0)) {
-    return 0;
+    {
+      tc_diag();
+      return 0;
+    }
   } else {
     {
     }
