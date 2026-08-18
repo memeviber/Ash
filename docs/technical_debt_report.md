@@ -156,3 +156,27 @@ Ownership của `Array<T>`, `Slice<T>` và `HashMap<K,V>` đã được làm rõ
 Sau các thay đổi này, full validation vẫn đạt: ownership, regression, stress, adversarial, conformance, strict GCC và fixed-point; `n2.c` và `n3.c` vẫn byte-identical. Checksum production đã được cập nhật theo canonical `n2.c` mới.
 
 Các rủi ro còn lại chủ yếu là **chuẩn hóa type representation dùng chung giữa Host/Bootstrap**, **mở rộng coverage cho string/named values và callback edge cases**, và **hợp nhất cleanup artifact thành cơ chế tự động trong runner**. Đây là các công việc tiếp theo, không phải lý do để trì hoãn việc sử dụng API hiện tại trong phạm vi đã được regression bảo vệ.
+
+## 8. Addendum: C prologue và include bị phát sinh lặp
+
+Đã loại bỏ duplication trong C output của Host compiler. Trước đây `main.ml` phát sinh riêng feature prelude cho `_POSIX_C_SOURCE` và `_XOPEN_SOURCE`, trong khi `compiler.ml` lại phát sinh cùng nhóm macro bên trong runtime prologue. `compiler.ml` đồng thời nối thêm lần thứ hai các include `<stdio.h>`, `<stdlib.h>` và `<string.h>`. Vì vậy output C có hai lớp logic môi trường và hai bộ include giống nhau.
+
+Hiện `Compiler.compile` nhận raw `includec` payload qua tham số `c_includes` và đặt payload này sau **một runtime prologue trung tâm**. `main.ml` không còn tự nối feature prelude hoặc ghép include lần nữa. Cách sắp xếp này vừa loại bỏ code lặp, vừa bảo đảm macro môi trường xuất hiện trước các header C do `includec` cung cấp.
+
+Regression `include_test_main` nay kiểm tra riêng cả Host và Bootstrap: mỗi macro/include chuẩn phải xuất hiện đúng một lần trong phần prologue thực tế, đồng thời phải vắng feature prelude cũ `#if !defined(_WIN32)`. Regression, strict GCC và fixed-point `n2.c == n3.c` đều đạt sau thay đổi.
+
+| Hạng mục | Trước | Sau |
+|---|---:|---:|
+| Feature prelude `_POSIX_C_SOURCE`/`_XOPEN_SOURCE` trong output prologue | 2 | 1 |
+| `<stdio.h>` trong output prologue | 2 | 1 |
+| `<stdlib.h>` trong output prologue | 2 | 1 |
+| `<string.h>` trong output prologue | 2 | 1 |
+| Điểm phát sinh prologue | `main.ml` và `compiler.ml` | `compiler.ml` |
+
+Đây là một structural cleanup, không thay đổi semantics của `include`, `includec`, runtime allocator hoặc generated program body.
+
+## 9. References
+
+[13]: https://github.com/memeviber/Pyrel/blob/main/src/compiler/lib/compiler.ml "Host C emitter and centralized runtime prologue"
+
+[14]: https://github.com/memeviber/Pyrel/blob/main/scripts/run_regression.sh "Regression checks for Host/Bootstrap C prologue parity"

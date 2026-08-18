@@ -94,8 +94,7 @@ let () =
           Printf.eprintf "Type Error: %s\n" err;
           exit 1
       | None ->
-          let feature_prelude = "#if !defined(_WIN32)\n#define _POSIX_C_SOURCE 200809L\n#define _XOPEN_SOURCE 700\n#endif\n" in
-          let c_code = feature_prelude ^ c_includes ^ "\n" ^ Compiler.compile program in
+          let c_code = Compiler.compile ~c_includes program in
           let out_c = filename ^ ".c" in
           let oc = open_out out_c in
           Fun.protect (fun () -> output_string oc c_code) ~finally:(fun () -> close_out_noerr oc);

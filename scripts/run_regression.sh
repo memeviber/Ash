@@ -13,6 +13,23 @@ mkdir -p "$OUT"
 (cd "$ROOT/src/compiler" && "$COMPILER" "$BOOT_SOURCE")
 gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror "$BOOT_C" -o "$BOOT_BIN"
 
+assert_single_runtime_prologue() {
+  local c_file=$1 label=$2
+  local prefix needle count
+  prefix=$(awk '/^static void\* pyrel_track\(void\*\);/{print; exit} {print}' "$c_file")
+  for needle in '#include <stdio.h>' '#include <stdlib.h>' '#include <string.h>' '_POSIX_C_SOURCE 200809L' '_XOPEN_SOURCE 700'; do
+    count=$(printf '%s\n' "$prefix" | grep -F -c "$needle" || true)
+    if [[ "$count" -ne 1 ]]; then
+      echo "FAIL $label: expected exactly one '$needle' in generated C prologue, found $count" >&2
+      return 1
+    fi
+  done
+  if printf '%s\n' "$prefix" | grep -Fq '#if !defined(_WIN32)'; then
+    echo "FAIL $label: obsolete duplicate feature prelude remains in generated C" >&2
+    return 1
+  fi
+}
+
 compile_run() {
   local source=$1 label=$2
   local host_c="$OUT/${label}.host.c" boot_c="$OUT/${label}.boot.c"
@@ -21,6 +38,10 @@ compile_run() {
   (cd "$(dirname "$source")" && "$COMPILER" "$(basename "$source")") >/dev/null
   cp "${source}.c" "$host_c"
   "$BOOT_BIN" "$source" "$boot_c" >/dev/null
+  if [[ "$label" == "include_test_main" ]]; then
+    assert_single_runtime_prologue "$host_c" "$label (Host)"
+    assert_single_runtime_prologue "$boot_c" "$label (Bootstrap)"
+  fi
   gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror "$host_c" -o "$host_bin"
   gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror "$boot_c" -o "$boot_bin"
   "$host_bin"
@@ -52,6 +73,7 @@ compile_run "$ROOT/tests/regression/stdlib_map_only_test.pyrel" stdlib_map_only_
 compile_run "$ROOT/tests/regression/stdlib_hashing_test.pyrel" stdlib_hashing_test
 compile_run "$ROOT/tests/regression/stress_containers_loop.pyrel" stress_containers_loop
 compile_run "$ROOT/tests/regression/generic_map_probe.pyrel" generic_map_probe
+compile_run "$ROOT/tests/regression/include_test_main.pyrel" include_test_main
 expect_reject "$ROOT/tests/stress/modulo_invalid_string.pyrel" modulo_invalid_string
 expect_reject "$ROOT/tests/regression/undefined_function_call.pyrel" undefined_function_call
 expect_reject "$ROOT/tests/regression/non_function_value_call.pyrel" non_function_value_call

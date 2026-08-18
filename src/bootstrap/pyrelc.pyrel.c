@@ -1,8 +1,3 @@
-#if !defined(_WIN32)
-#define _POSIX_C_SOURCE 200809L
-#define _XOPEN_SOURCE 700
-#endif
-
 #if defined(_WIN32)
 #include <direct.h>
 #else
@@ -39,10 +34,6 @@ static PYREL_UNUSED void* pyrel_include_open_root(const char*path){char*p=pyrel_
 static PYREL_UNUSED void* pyrel_include_open_line(int*line,int n,int mode){int i=0,a,b,j;char*raw,*joined,*canon;FILE*f;(void)mode;while(i<n&&line[i]!='"')i++;if(i>=n)return NULL;a=++i;while(i<n&&line[i]!='"')i++;if(i>=n)return NULL;b=i;raw=(char*)malloc((size_t)(b-a)+1);if(!raw)exit(2);{int k;for(k=0;k<b-a;k++)raw[k]=(char)line[a+k];}raw[b-a]=0;raw=(char*)pyrel_track(raw);j=i+1;while(j<n&&(line[j]==' '||line[j]=='\t'))j++;if(j<n&&line[j]==';')j++;while(j<n&&(line[j]==' '||line[j]=='\t'))j++;if(j!=n)return NULL;joined=pyrel_inc_join(pyrel_inc_active[pyrel_inc_active_n-1],raw);canon=pyrel_inc_realpath(joined);if(!pyrel_inc_begin(canon))return NULL;f=fopen(canon,"r");if(!f){pyrel_inc_status=3;pyrel_include_close();return NULL;}return(void*)f;}
 static PYREL_UNUSED int pyrel_include_last_status(void){return pyrel_inc_status;}
 static PYREL_UNUSED void pyrel_include_reset_session(void){pyrel_inc_active_n=0;pyrel_inc_loaded_n=0;pyrel_inc_status=0;}
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
 static PYREL_UNUSED void* open_file(const char* path, const char* mode) {
   return (void*)fopen(path, mode);
 }

@@ -448,7 +448,7 @@ let compile_prototype f =
   return_type ^ " " ^ (if f.name = "main" then "main" else c_symbol_name f.name)
   ^ "(" ^ params f ^ ");\n"
 
-let compile program =
+let compile ?(c_includes = "") program =
   let struct_instances = ref [] in
   let function_instances = ref [] in
   let seen_struct = Hashtbl.create 32 in
@@ -559,7 +559,7 @@ static PYREL_UNUSED void pyrel_include_reset_session(void){pyrel_inc_active_n=0;
 |} in
   let header =
     include_runtime ^
-    "#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n\n"
+    (if c_includes = "" then "" else c_includes ^ "\n")
     ^ "static PYREL_UNUSED void* open_file(const char* path, const char* mode) {\n"
     ^ "  return (void*)fopen(path, mode);\n}\n"
     ^ "static PYREL_UNUSED int read_char(void* handle) {\n"
