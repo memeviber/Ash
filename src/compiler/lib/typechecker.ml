@@ -123,7 +123,6 @@ let check program =
       ("alloc_ints", ([TInt], TPtr TInt));
       ("free_ints", ([TPtr TInt], TVoid));
       ("grow_ints", ([TPtr TInt; TInt; TInt], TPtr TInt));
-      ("string_concat", ([TString; TString], TString));
       ("open_file", ([TString; TString], TPtr TVoid));
       ("read_char", ([TPtr TVoid], TInt));
       ("close_file", ([TPtr TVoid], TInt));
@@ -317,54 +316,6 @@ let check program =
           match tp with
           | TPtr _ -> Ok TVoid
           | other -> Error ("memory_free expects a pointer, got " ^ string_of_typ other))
-    | Call (name, args) when name = "array_make" ->
-        (match args with
-         | [capacity] ->
-             Result.bind (expr env capacity) (fun tc ->
-               if is_integer_like tc then Ok (TDynArray TInt)
-               else Error "array_make capacity must be an integer")
-         | [capacity; zero] ->
-             Result.bind (expr env capacity) (fun tc ->
-               if not (is_integer_like tc) then Error "array_make capacity must be an integer"
-               else Result.bind (expr env zero) (fun tz ->
-                 match tz with
-                 | TVoid -> Error "array_make element type cannot be void"
-                 | _ -> Ok (TDynArray tz)))
-         | _ -> Error "array_make expects capacity and optional element witness")
-    | Call (name, [array; minimum]) when name = "array_reserve" ->
-        Result.bind (expr env array) (function
-          | TDynArray t -> Result.bind (expr env minimum) (fun tm ->
-              if is_integer_like tm then Ok (TDynArray t)
-              else Error "array_reserve minimum must be an integer")
-          | other -> Error ("array_reserve expects a dynamic array, got " ^ string_of_typ other))
-    | Call (name, [array; value]) when name = "array_push" ->
-        Result.bind (expr env array) (function
-          | TDynArray t -> Result.bind (expr env value) (fun tv ->
-              if equal_array_elem_typ t tv then Ok (TDynArray t)
-              else Error ("array_push value type mismatch: expected " ^ string_of_typ t ^ " got " ^ string_of_typ tv))
-          | other -> Error ("array_push expects a dynamic array, got " ^ string_of_typ other))
-    | Call (name, [array; index]) when name = "array_get" ->
-        Result.bind (expr env array) (function
-          | TDynArray t -> Result.bind (expr env index) (fun ti ->
-              if is_integer_like ti then Ok t else Error "array_get index must be an integer")
-          | other -> Error ("array_get expects a dynamic array, got " ^ string_of_typ other))
-    | Call (name, [array; index; value]) when name = "array_set" ->
-        Result.bind (expr env array) (function
-          | TDynArray t ->
-              Result.bind (expr env index) (fun ti ->
-                if not (is_integer_like ti) then Error "array_set index must be an integer"
-                else Result.bind (expr env value) (fun tv ->
-                  if equal_array_elem_typ t tv then Ok TVoid
-                  else Error ("array_set value type mismatch: expected " ^ string_of_typ t ^ " got " ^ string_of_typ tv)))
-          | other -> Error ("array_set expects a dynamic array, got " ^ string_of_typ other))
-    | Call (name, [array]) when name = "array_clear" ->
-        Result.bind (expr env array) (function
-          | TDynArray t -> Ok (TDynArray t)
-          | other -> Error ("array_clear expects a dynamic array, got " ^ string_of_typ other))
-    | Call (name, [array]) when name = "array_free" ->
-        Result.bind (expr env array) (function
-          | TDynArray _ -> Ok TVoid
-          | other -> Error ("array_free expects a dynamic array, got " ^ string_of_typ other))
     | Call (name, args) ->
         (match SMap.find_opt name generic_functions with
          | Some (type_params, (formal_params, formal_return)) ->
@@ -465,7 +416,7 @@ let check program =
                 else Error "++ operands must be string"))
   in
   let ownership_of_initializer = function
-    | Call ("alloc_ints", _) | Call ("open_file", _) | Call ("pyrel_include_open_root", _) | Call ("pyrel_include_open_line", _) | Call ("array_make", _) -> true
+    | Call ("alloc_ints", _) | Call ("open_file", _) | Call ("pyrel_include_open_root", _) | Call ("pyrel_include_open_line", _) -> true
     | _ -> false
   in
   let is_owner_type = function
@@ -511,7 +462,7 @@ let check program =
     | _ -> Ok env
   in
   let ownership_effect env = function
-    | Call ("free_ints", [Var x]) | Call ("close_file", [Var x]) | Call ("array_free", [Var x]) ->
+    | Call ("free_ints", [Var x]) | Call ("close_file", [Var x]) ->
         if SSet.mem x env.moved then Error ("double release of moved value " ^ x)
         else if is_borrowed env x then Error ("cannot release borrowed value: " ^ x)
         else if not (SSet.mem x env.owned) then Error ("release requires an owned value: " ^ x)
@@ -524,14 +475,12 @@ let check program =
         else
           Result.bind (check_type t) (fun () ->
             Result.bind (expr env e) (fun te ->
-              if compatible_typ t te || (match t, e with TDynArray _, Call ("array_make", [_]) -> true | TNamed _, Int 0 | TGeneric _, Int 0 | TPtr _, Null | TPtr _, Int 0 -> true | _ -> false) then
+              if compatible_typ t te || (match t, e with TNamed _, Int 0 | TGeneric _, Int 0 | TPtr _, Null | TPtr _, Int 0 -> true | _ -> false) then
                   let move_result =
-                    match t, e with
-                    | TDynArray _, Var _ -> Error "owned value copy requires an explicit move"
-                    | _ -> Ok env
+                    Ok env
                   in
                 Result.bind move_result (fun moved_env ->
-                  let owned = if ownership_of_initializer e || (match t with TDynArray _ -> true | _ -> false) then SSet.add x moved_env.owned else moved_env.owned in
+                  let owned = if ownership_of_initializer e then SSet.add x moved_env.owned else moved_env.owned in
                   let borrowed_env =
                     match e with
                     | AddressOf (Var source) -> record_borrow moved_env x source
@@ -559,8 +508,6 @@ let check program =
               (match l, r with
                | Var x, init when ownership_of_initializer init -> Ok { env with owned = SSet.add x env.owned; moved = SSet.remove x env.moved }
                | Var x, Call ("grow_ints", [Var y; _; _]) when x = y && SSet.mem y env.owned -> Ok env
-               | Var x, Call (name, [Var y; _]) when x = y && (name = "array_push" || name = "array_reserve") && SSet.mem y env.owned -> Ok env
-               | Var x, Call ("array_clear", [Var y]) when x = y && SSet.mem y env.owned -> Ok env
                | _ -> Ok env)
             else Error ("assignment type mismatch: " ^ string_of_typ tl ^ " <- " ^ string_of_typ tr)))
         )

@@ -24,6 +24,7 @@ open Ast
 %left PLUS MINUS
 %left STAR DIVIDE MOD
 %nonassoc BIT_NOT AMP
+%right UMINUS
 
 %start <Ast.program> prog
 
@@ -78,7 +79,6 @@ typ:
   | TFLOAT { TFloat }
   | TDOUBLE { TDouble }
   | TVOID { TVoid }
-  | ARRAY; LT; t = typ; GT { TDynArray t }
   | x = qualified_name { TNamed x }
   | FN; LPAREN; ps = separated_list(COMMA, typ); RPAREN; COLON; r = typ { TFunPtr (ps, r) }
   | t = typ; STAR { TPtr t }
@@ -118,6 +118,7 @@ qualified_name:
   | x = qualified_name; COLONCOLON; y = name_atom { x ^ "::" ^ y }
 
 expr:
+  | MINUS; e = expr %prec UMINUS { Binop (Sub, Int 0, e) }
   | i = INT { Int i }
   | f = FLOAT { Float f }
   | c = CHAR { Char c }

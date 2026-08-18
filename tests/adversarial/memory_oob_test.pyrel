@@ -1,9 +1,16 @@
-// Runtime memory-safety test: out-of-bounds dynamic array access must abort.
-// Expected: process exits with code != 0 (pyrel_panic(3) calls exit(2)).
+include "../../src/stdlib/array.pyrel"
+
+// Bounds-safety test: checked accessors must reject an invalid index without
+// reading or writing outside the owned allocation.
 func main(): int {
-  let a: array<int> = array_make(1);
-  a = array_push(a, 42);
-  // index 1 is out of bounds for a length-1 array
-  print a[1];
+  let a: array::Array<int> = array::new(1, 0);
+  a = array::push(a, 42, 0);
+  print array::get_or(a, 1, -1);
+  if array::set_if_in_bounds(a, 1, 99) then {
+    print 1;
+  } else {
+    print 0;
+  }
+  array::free(a);
   return 0;
 }

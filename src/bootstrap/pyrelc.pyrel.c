@@ -70,15 +70,6 @@ static PYREL_UNUSED void pyrel_release(void* p) { size_t i; if (!p) return; i = 
 static PYREL_UNUSED void* pyrel_memory_alloc(int count, size_t elem_size) { size_t bytes = pyrel_checked_bytes(count, elem_size); void* p = calloc(1, bytes ? bytes : 1); if (!p) pyrel_panic(5); return pyrel_track(p); }
 static PYREL_UNUSED void* pyrel_memory_resize(void* old, int old_count, int new_count, size_t elem_size) { size_t slot = (size_t)-1; size_t old_bytes; size_t new_bytes; void* p; if (old_count < 0 || new_count < 0) pyrel_panic(1); if (new_count < old_count) pyrel_panic(1); if (old) { slot = pyrel_find(old); if (slot == (size_t)-1) pyrel_panic(2); } old_bytes = pyrel_checked_bytes(old_count, elem_size); new_bytes = pyrel_checked_bytes(new_count, elem_size); p = realloc(old, new_bytes ? new_bytes : 1); if (!p) pyrel_panic(6); if (slot == (size_t)-1) pyrel_track(p); else pyrel_live[slot] = p; if (new_bytes > old_bytes) memset((char*)p + old_bytes, 0, new_bytes - old_bytes); return p; }
 static PYREL_UNUSED void pyrel_memory_free(void* p) { pyrel_release(p); }
-typedef struct PyrelArray { void* data; int len; int cap; } PyrelArray;
-static PYREL_UNUSED void pyrel_array_check(const PyrelArray* a) { if (!a) pyrel_panic(4); if (a->len < 0 || a->cap < 0 || a->len > a->cap) pyrel_panic(3); if (a->cap > 0 && (!a->data || pyrel_find(a->data) == (size_t)-1)) pyrel_panic(2); }
-static PYREL_UNUSED PyrelArray runtime_array_make(int capacity, size_t elem_size) { PyrelArray a; if (capacity < 0) pyrel_panic(1); if (capacity < 1) capacity = 4; pyrel_checked_bytes(capacity, elem_size); a.data = calloc((size_t)capacity, elem_size); if (!a.data) pyrel_panic(5); a.len = 0; a.cap = capacity; a.data = pyrel_track(a.data); return a; }
-static PYREL_UNUSED PyrelArray runtime_array_reserve(PyrelArray* a, int minimum, size_t elem_size) { void* p; pyrel_array_check(a); if (minimum < 0) pyrel_panic(1); if (minimum <= a->cap) return *a; pyrel_checked_bytes(minimum, elem_size); p = calloc((size_t)minimum, elem_size); if (!p) pyrel_panic(5); if (a->data) { memcpy(p, a->data, pyrel_checked_bytes(a->len, elem_size)); pyrel_release(a->data); } a->data = pyrel_track(p); a->cap = minimum; return *a; }
-static PYREL_UNUSED PyrelArray runtime_array_push(PyrelArray* a, const void* value, size_t elem_size) { int next; pyrel_array_check(a); if (!value) pyrel_panic(4); if (a->len >= a->cap) { if (a->cap > 2147483647 / 2) pyrel_panic(1); next = a->cap > 0 ? a->cap * 2 : 4; runtime_array_reserve(a, next, elem_size); } memcpy((char*)a->data + pyrel_checked_bytes(a->len, elem_size), value, elem_size); a->len += 1; return *a; }
-static PYREL_UNUSED void runtime_array_set(PyrelArray* a, int index, const void* value, size_t elem_size) { pyrel_array_check(a); if (index < 0 || index >= a->len) pyrel_panic(3); if (!value) pyrel_panic(4); memcpy((char*)a->data + pyrel_checked_bytes(index, elem_size), value, elem_size); }
-static PYREL_UNUSED PyrelArray runtime_array_clear(PyrelArray* a) { pyrel_array_check(a); a->len = 0; return *a; }
-static PYREL_UNUSED void runtime_array_free(PyrelArray* a) { if (!a) pyrel_panic(4); if (a->data) { if (pyrel_find(a->data) == (size_t)-1) pyrel_panic(2); pyrel_release(a->data); } a->data = NULL; a->len = 0; a->cap = 0; }
-static PYREL_UNUSED void* runtime_array_get_raw(PyrelArray* a, int index, size_t elem_size) { pyrel_array_check(a); if (index < 0 || index >= a->len) pyrel_panic(3); return (char*)a->data + pyrel_checked_bytes(index, elem_size); }
 static PYREL_UNUSED char* runtime_string_concat(const char* a, const char* b) {
   size_t na, nb, total; char* p; if (!a || !b) pyrel_panic(4); na = strlen(a); nb = strlen(b); if (na > (size_t)-1 - nb - 1) pyrel_panic(1); total = na + nb + 1; p = (char*)malloc(total); if (!p) pyrel_panic(5); memcpy(p, a, na); memcpy(p + na, b, nb); p[na + nb] = 0; return (char*)pyrel_track(p);
 }
@@ -448,11 +439,8 @@ int gen_array_elem_name(int arg);
 void gen_array_elem_type(int kind, int name);
 void gen_array_sizeof(int kind, int name);
 void gen_array_value_ptr(int kind, int name, int value);
-void gen_array_make_expr(int capacity, int kind, int name, int witness);
 void gen_memory_sizeof(int arg);
 void gen_memory_builtin(int id);
-void gen_array_checked_get(int arr, int pos, int kind, int name);
-void gen_array_builtin(int id);
 int gen_call_name(int id);
 void gen_expr(int id);
 int gen_expr_kind(int id);
@@ -554,7 +542,6 @@ int tc_named_exists(int name);
 void tc_check_type(int ty);
 int tc_cycle_struct(int name);
 int tc_cycle_type(int ty);
-int tc_name_is_array_free(int name);
 int tc_release_name(int name);
 int tc_owned_initializer(int id);
 int tc_is_owner_kind(int kind);
@@ -1742,36 +1729,6 @@ void gen_array_value_ptr(int kind, int name, int value) {
   code_emit(C_PUNCT, 25);
 }
 
-void gen_array_make_expr(int capacity, int kind, int name, int witness) {
-  if ((witness != 0)) {
-    {
-      code_emit(C_PUNCT, 6);
-      code_emit(C_PUNCT, 6);
-      code_emit(C_KW, 4);
-      code_emit(C_PUNCT, 8);
-      code_emit(C_PUNCT, 6);
-      gen_expr(witness);
-      code_emit(C_PUNCT, 8);
-      code_emit(C_PUNCT, 7);
-    }
-  } else {
-    {
-    }
-  }
-  code_emit(C_IDENT, 1004);
-  code_emit(C_PUNCT, 6);
-  gen_expr(capacity);
-  code_emit(C_PUNCT, 7);
-  gen_array_sizeof(kind, name);
-  code_emit(C_PUNCT, 8);
-  if ((witness != 0)) {
-    code_emit(C_PUNCT, 5);
-  } else {
-    {
-    }
-  }
-}
-
 void gen_memory_sizeof(int arg) {
   int ty = tc_emit_arg_type(arg);
   if ((ty != 0)) {
@@ -1911,160 +1868,6 @@ void gen_memory_builtin(int id) {
             }
           }
           code_emit(C_PUNCT, 8);
-        }
-      }
-    }
-  }
-}
-
-void gen_array_checked_get(int arr, int pos, int kind, int name) {
-  code_emit(C_PUNCT, 9);
-  code_emit(C_PUNCT, 6);
-  code_emit(C_PUNCT, 6);
-  gen_array_elem_type(kind, name);
-  code_emit(C_PUNCT, 1);
-  code_emit(C_PUNCT, 5);
-  code_emit(C_IDENT, 1014);
-  code_emit(C_PUNCT, 6);
-  code_emit(C_PUNCT, 10);
-  code_emit(C_PUNCT, 6);
-  gen_expr(arr);
-  code_emit(C_PUNCT, 5);
-  code_emit(C_PUNCT, 7);
-  gen_expr(pos);
-  code_emit(C_PUNCT, 7);
-  gen_array_sizeof(kind, name);
-  code_emit(C_PUNCT, 8);
-  code_emit(C_PUNCT, 5);
-}
-
-void gen_array_builtin(int id) {
-  int call_name = (node_value)[id];
-  int call_len = (sym_len)[call_name];
-  int call_hash = (sym_hash)[call_name];
-  int a = (node_a)[id];
-  int ek = gen_array_elem_kind(a);
-  int en = gen_array_elem_name(a);
-  if ((((call_len == 10) && (call_hash == 790299)) && ((node_next)[a] != 0))) {
-    {
-      int witness = (node_next)[a];
-      int wt = tc_emit_arg_type(witness);
-      if ((wt != 0)) {
-        wt = gen_substitute_type(wt);
-      } else {
-        {
-        }
-      }
-      int wk = TY_INT;
-      int wn = 0;
-      if ((wt != 0)) {
-        {
-          wk = (node_kind)[wt];
-          wn = (node_value)[wt];
-        }
-      } else {
-        {
-        }
-      }
-      gen_array_make_expr(a, wk, wn, witness);
-    }
-  } else {
-    if (((call_len == 10) && (call_hash == 790299))) {
-      {
-        code_emit(C_IDENT, 1004);
-        code_emit(C_PUNCT, 6);
-        gen_expr(a);
-        code_emit(C_PUNCT, 7);
-        gen_array_sizeof(ek, en);
-        code_emit(C_PUNCT, 8);
-      }
-    } else {
-      if (((call_len == 13) && (call_hash == 333999))) {
-        {
-          code_emit(C_IDENT, 1008);
-          code_emit(C_PUNCT, 6);
-          code_emit(C_PUNCT, 10);
-          gen_expr(a);
-          code_emit(C_PUNCT, 7);
-          gen_expr((node_next)[a]);
-          code_emit(C_PUNCT, 7);
-          gen_array_sizeof(ek, en);
-          code_emit(C_PUNCT, 8);
-        }
-      } else {
-        if (((call_len == 10) && (call_hash == 899143))) {
-          {
-            code_emit(C_IDENT, 1005);
-            code_emit(C_PUNCT, 6);
-            code_emit(C_PUNCT, 10);
-            gen_expr(a);
-            code_emit(C_PUNCT, 7);
-            gen_array_value_ptr(ek, en, (node_next)[a]);
-            code_emit(C_PUNCT, 7);
-            gen_array_sizeof(ek, en);
-            code_emit(C_PUNCT, 8);
-          }
-        } else {
-          if (((call_len == 9) && (call_hash == 890825))) {
-            {
-              gen_array_checked_get(a, (node_next)[a], ek, en);
-            }
-          } else {
-            if (((call_len == 9) && (call_hash == 902357))) {
-              {
-                code_emit(C_IDENT, 1007);
-                code_emit(C_PUNCT, 6);
-                code_emit(C_PUNCT, 10);
-                gen_expr(a);
-                code_emit(C_PUNCT, 7);
-                gen_expr((node_next)[a]);
-                code_emit(C_PUNCT, 7);
-                gen_array_value_ptr(ek, en, (node_next)[(node_next)[a]]);
-                code_emit(C_PUNCT, 7);
-                gen_array_sizeof(ek, en);
-                code_emit(C_PUNCT, 8);
-              }
-            } else {
-              if (((call_len == 11) && (call_hash == 585984))) {
-                {
-                  code_emit(C_IDENT, 1009);
-                  code_emit(C_PUNCT, 6);
-                  code_emit(C_PUNCT, 10);
-                  gen_expr(a);
-                  code_emit(C_PUNCT, 8);
-                }
-              } else {
-                if (((call_len == 10) && (call_hash == 597913))) {
-                  {
-                    code_emit(C_IDENT, 1010);
-                    code_emit(C_PUNCT, 6);
-                    code_emit(C_PUNCT, 10);
-                    gen_expr(a);
-                    code_emit(C_PUNCT, 8);
-                  }
-                } else {
-                  {
-                    code_emit(C_IDENT, sym_c_symbol(call_name));
-                    code_emit(C_PUNCT, 6);
-                    int arg = a;
-                    while ((arg != 0)) {
-                      {
-                        gen_expr(arg);
-                        if (((node_next)[arg] != 0)) {
-                          code_emit(C_PUNCT, 7);
-                        } else {
-                          {
-                          }
-                        }
-                        arg = (node_next)[arg];
-                      }
-                    }
-                    code_emit(C_PUNCT, 8);
-                  }
-                }
-              }
-            }
-          }
         }
       }
     }
@@ -2219,27 +2022,23 @@ void gen_expr(int id) {
                       if (((((call_len == 12) && (call_hash == 334590)) || ((call_len == 13) && (call_hash == 806795))) || ((call_len == 11) && (call_hash == 649155)))) {
                         gen_memory_builtin(id);
                       } else {
-                        if (((((((((call_len == 10) && (call_hash == 790299)) || ((call_len == 13) && (call_hash == 333999))) || ((call_len == 10) && (call_hash == 899143))) || ((call_len == 9) && (call_hash == 890825))) || ((call_len == 9) && (call_hash == 902357))) || ((call_len == 11) && (call_hash == 585984))) || ((call_len == 10) && (call_hash == 597913)))) {
-                          gen_array_builtin(id);
-                        } else {
-                          {
-                            code_emit(C_IDENT, gen_call_name(id));
-                            code_emit(C_PUNCT, 6);
-                            int arg = (node_a)[id];
-                            while ((arg != 0)) {
-                              {
-                                gen_expr(arg);
-                                if (((node_next)[arg] != 0)) {
-                                  code_emit(C_PUNCT, 7);
-                                } else {
-                                  {
-                                  }
+                        {
+                          code_emit(C_IDENT, gen_call_name(id));
+                          code_emit(C_PUNCT, 6);
+                          int arg = (node_a)[id];
+                          while ((arg != 0)) {
+                            {
+                              gen_expr(arg);
+                              if (((node_next)[arg] != 0)) {
+                                code_emit(C_PUNCT, 7);
+                              } else {
+                                {
                                 }
-                                arg = (node_next)[arg];
                               }
+                              arg = (node_next)[arg];
                             }
-                            code_emit(C_PUNCT, 8);
                           }
+                          code_emit(C_PUNCT, 8);
                         }
                       }
                     }
@@ -2258,17 +2057,10 @@ void gen_expr(int id) {
                       } else {
                         if ((k == N_INDEX)) {
                           {
-                            int base_kind = gen_expr_kind((node_a)[id]);
-                            if ((base_kind == TY_DYN_ARRAY)) {
-                              gen_array_checked_get((node_a)[id], (node_b)[id], gen_array_elem_kind((node_a)[id]), gen_array_elem_name((node_a)[id]));
-                            } else {
-                              {
-                                gen_expr((node_a)[id]);
-                                code_emit(C_PUNCT, 2);
-                                gen_expr((node_b)[id]);
-                                code_emit(C_PUNCT, 3);
-                              }
-                            }
+                            gen_expr((node_a)[id]);
+                            code_emit(C_PUNCT, 2);
+                            gen_expr((node_b)[id]);
+                            code_emit(C_PUNCT, 3);
                           }
                         } else {
                           if ((k == N_FIELD_ACCESS)) {
@@ -2380,16 +2172,7 @@ int gen_expr_kind(int id) {
     }
   }
   if ((k == N_CALL)) {
-    {
-      int call_name = (node_value)[id];
-      if ((((sym_len)[call_name] == 9) && ((sym_hash)[call_name] == 890825))) {
-        return gen_array_elem_kind((node_a)[id]);
-      } else {
-        {
-        }
-      }
-      return tc_expr_kind_for_emit(id);
-    }
+    return tc_expr_kind_for_emit(id);
   } else {
     {
     }
@@ -2486,21 +2269,7 @@ void gen_initializer(int ty, int expr) {
   if ((((((node_kind)[st] == TY_NAMED) || ((node_kind)[st] == TY_GENERIC)) && ((node_kind)[expr] == N_INT)) && ((node_value)[expr] == 0))) {
     code_emit(C_PUNCT, 19);
   } else {
-    if ((((((node_kind)[st] == TY_DYN_ARRAY) && ((node_kind)[expr] == N_CALL)) && ((sym_len)[(node_value)[expr]] == 10)) && ((sym_hash)[(node_value)[expr]] == 790299))) {
-      {
-        int elem = (node_a)[st];
-        int witness = 0;
-        if (((node_a)[expr] != 0)) {
-          witness = (node_next)[(node_a)[expr]];
-        } else {
-          {
-          }
-        }
-        gen_array_make_expr((node_a)[expr], (node_kind)[elem], (node_value)[elem], witness);
-      }
-    } else {
-      gen_expr(expr);
-    }
+    gen_expr(expr);
   }
 }
 
@@ -3478,121 +3247,96 @@ int ast_type(void) {
       }
     }
   } else {
-    if ((input_take(T_ARRAY) == 1)) {
-      {
-        if ((input_take(T_LT) == 0)) {
-          return 0;
+    {
+      if ((input_take(T_TINT) == 1)) {
+        base = TY_INT;
+      } else {
+        if ((input_take(T_TBOOL) == 1)) {
+          base = TY_BOOL;
         } else {
-          {
-          }
-        }
-        int elem = ast_type();
-        if ((elem == 0)) {
-          return 0;
-        } else {
-          {
-          }
-        }
-        if ((input_take(T_GT) == 0)) {
-          return 0;
-        } else {
-          {
-          }
-        }
-        ty = ast_node(TY_DYN_ARRAY, elem, 0, 0, 0, 0);
-      }
-    } else {
-      {
-        if ((input_take(T_TINT) == 1)) {
-          base = TY_INT;
-        } else {
-          if ((input_take(T_TBOOL) == 1)) {
-            base = TY_BOOL;
+          if ((input_take(T_TSTRING) == 1)) {
+            base = TY_STRING;
           } else {
-            if ((input_take(T_TSTRING) == 1)) {
-              base = TY_STRING;
+            if ((input_take(T_TCHAR) == 1)) {
+              base = TY_CHAR;
             } else {
-              if ((input_take(T_TCHAR) == 1)) {
-                base = TY_CHAR;
+              if ((input_take(T_FLOAT) == 1)) {
+                base = TY_FLOAT;
               } else {
-                if ((input_take(T_FLOAT) == 1)) {
-                  base = TY_FLOAT;
+                if ((input_take(T_TDOUBLE) == 1)) {
+                  base = TY_DOUBLE;
                 } else {
-                  if ((input_take(T_TDOUBLE) == 1)) {
-                    base = TY_DOUBLE;
+                  if ((input_take(T_TVOID) == 1)) {
+                    base = TY_VOID;
                   } else {
-                    if ((input_take(T_TVOID) == 1)) {
-                      base = TY_VOID;
-                    } else {
-                      if ((input_peek() == T_ID)) {
-                        {
-                          named = input_payload();
-                          input_pos = (input_pos + 1);
-                          if ((input_take(T_SCOPE) == 1)) {
-                            {
-                              if ((input_peek() != T_ID)) {
-                                return 0;
-                              } else {
-                                {
-                                }
-                              }
-                              int rhs = input_payload();
-                              input_pos = (input_pos + 1);
-                              named = sym_qualified(named, rhs);
-                            }
-                          } else {
-                            named = ast_type_name(named);
-                          }
-                          if ((input_peek() == T_LT)) {
-                            {
-                              int args = 0;
-                              input_pos = (input_pos + 1);
-                              if ((input_peek() != T_GT)) {
-                                {
-                                  int at = ast_type();
-                                  if ((at == 0)) {
-                                    return 0;
-                                  } else {
-                                    {
-                                    }
-                                  }
-                                  args = at;
-                                  while ((input_take(T_COMMA) == 1)) {
-                                    {
-                                      at = ast_type();
-                                      if ((at == 0)) {
-                                        return 0;
-                                      } else {
-                                        {
-                                        }
-                                      }
-                                      args = ast_link(args, at);
-                                    }
-                                  }
-                                }
-                              } else {
-                                {
-                                }
-                              }
-                              if ((input_take(T_GT) == 0)) {
-                                return 0;
-                              } else {
-                                {
-                                }
-                              }
-                              ty = ast_node(TY_GENERIC, args, 0, 0, named, 0);
-                            }
-                          } else {
-                            if ((ast_generic_param(named) == 1)) {
-                              ty = ast_node(TY_PARAM, 0, 0, 0, named, 0);
+                    if ((input_peek() == T_ID)) {
+                      {
+                        named = input_payload();
+                        input_pos = (input_pos + 1);
+                        if ((input_take(T_SCOPE) == 1)) {
+                          {
+                            if ((input_peek() != T_ID)) {
+                              return 0;
                             } else {
-                              ty = ast_node(TY_NAMED, 0, 0, 0, named, 0);
+                              {
+                              }
                             }
+                            int rhs = input_payload();
+                            input_pos = (input_pos + 1);
+                            named = sym_qualified(named, rhs);
+                          }
+                        } else {
+                          named = ast_type_name(named);
+                        }
+                        if ((input_peek() == T_LT)) {
+                          {
+                            int args = 0;
+                            input_pos = (input_pos + 1);
+                            if ((input_peek() != T_GT)) {
+                              {
+                                int at = ast_type();
+                                if ((at == 0)) {
+                                  return 0;
+                                } else {
+                                  {
+                                  }
+                                }
+                                args = at;
+                                while ((input_take(T_COMMA) == 1)) {
+                                  {
+                                    at = ast_type();
+                                    if ((at == 0)) {
+                                      return 0;
+                                    } else {
+                                      {
+                                      }
+                                    }
+                                    args = ast_link(args, at);
+                                  }
+                                }
+                              }
+                            } else {
+                              {
+                              }
+                            }
+                            if ((input_take(T_GT) == 0)) {
+                              return 0;
+                            } else {
+                              {
+                              }
+                            }
+                            ty = ast_node(TY_GENERIC, args, 0, 0, named, 0);
+                          }
+                        } else {
+                          if ((ast_generic_param(named) == 1)) {
+                            ty = ast_node(TY_PARAM, 0, 0, 0, named, 0);
+                          } else {
+                            ty = ast_node(TY_NAMED, 0, 0, 0, named, 0);
                           }
                         }
-                      } else {
-                        return 0;
                       }
+                    } else {
+                      return 0;
                     }
                   }
                 }
@@ -3600,11 +3344,11 @@ int ast_type(void) {
             }
           }
         }
-        if ((ty == 0)) {
-          ty = ast_node(base, 0, 0, 0, named, 0);
-        } else {
-          {
-          }
+      }
+      if ((ty == 0)) {
+        ty = ast_node(base, 0, 0, 0, named, 0);
+      } else {
+        {
         }
       }
     }
@@ -3802,6 +3546,22 @@ int ast_primary(void) {
 }
 
 int ast_unary(void) {
+  if ((input_take(T_MINUS) == 1)) {
+    {
+      int e = ast_unary();
+      if ((e < 0)) {
+        return (0 - 1);
+      } else {
+        {
+        }
+      }
+      int zero = ast_node(N_INT, 0, 0, 0, 0, 0);
+      return ast_node(N_BINOP, zero, e, 0, OP_SUB, 0);
+    }
+  } else {
+    {
+    }
+  }
   if ((input_take(T_BITNOT) == 1)) {
     {
       int e = ast_unary();
@@ -7968,35 +7728,6 @@ int tc_cycle_type(int ty) {
   return 0;
 }
 
-int tc_name_is_array_free(int name) {
-  if (((sym_len)[name] != 10)) {
-    return 0;
-  } else {
-    {
-    }
-  }
-  int s = (sym_start)[name];
-  if ((((((source)[s] != 97) || ((source)[(s + 1)] != 114)) || ((source)[(s + 2)] != 114)) || ((source)[(s + 3)] != 97))) {
-    return 0;
-  } else {
-    {
-    }
-  }
-  if ((((((source)[(s + 4)] != 121) || ((source)[(s + 5)] != 95)) || ((source)[(s + 6)] != 102)) || ((source)[(s + 7)] != 114))) {
-    return 0;
-  } else {
-    {
-    }
-  }
-  if ((((source)[(s + 8)] != 101) || ((source)[(s + 9)] != 101))) {
-    return 0;
-  } else {
-    {
-    }
-  }
-  return 1;
-}
-
 int tc_release_name(int name) {
   if ((((sym_len)[name] == 11) && ((sym_hash)[name] == 649155))) {
     return 1;
@@ -8016,24 +7747,12 @@ int tc_release_name(int name) {
     {
     }
   }
-  if ((tc_name_is_array_free(name) == 1)) {
-    return 1;
-  } else {
-    {
-    }
-  }
   return 0;
 }
 
 int tc_owned_initializer(int id) {
   if (((id == 0) || ((node_kind)[id] != N_CALL))) {
     return 0;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[(node_value)[id]] == 10) && ((sym_hash)[(node_value)[id]] == 984821))) {
-    return 1;
   } else {
     {
     }
@@ -8045,6 +7764,12 @@ int tc_owned_initializer(int id) {
     }
   }
   if ((((sym_len)[(node_value)[id]] == 13) && ((sym_hash)[(node_value)[id]] == 806795))) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if ((((sym_len)[(node_value)[id]] == 10) && ((sym_hash)[(node_value)[id]] == 984821))) {
     return 1;
   } else {
     {
@@ -9015,352 +8740,6 @@ void tc_expr(int id) {
         {
         }
       }
-      if (((call_len == 10) && (call_hash == 790299))) {
-        {
-          int aa = (node_a)[id];
-          if ((aa == 0)) {
-            {
-              tc_fail(13);
-              return;
-            }
-          } else {
-            {
-            }
-          }
-          if (((node_next)[aa] != 0)) {
-            {
-              int witness = (node_next)[aa];
-              if (((node_next)[witness] != 0)) {
-                {
-                  tc_fail(13);
-                  return;
-                }
-              } else {
-                {
-                }
-              }
-              tc_expr(aa);
-              if ((((tc_kind != TY_INT) && (tc_kind != TY_BOOL)) && (tc_kind != TY_CHAR))) {
-                {
-                  tc_fail(17);
-                  return;
-                }
-              } else {
-                {
-                }
-              }
-              tc_expr(witness);
-              int ek_make = tc_kind;
-              int en_make = tc_name;
-              int eek_make = tc_elem_kind;
-              int een_make = tc_elem_name;
-              if ((ek_make == TY_VOID)) {
-                {
-                  tc_fail(17);
-                  return;
-                }
-              } else {
-                {
-                }
-              }
-              int witness_ty = tc_result_type;
-              if ((witness_ty == 0)) {
-                witness_ty = tc_type_node_from_summary(ek_make, en_make, eek_make, een_make);
-              } else {
-                {
-                }
-              }
-              tc_kind = TY_DYN_ARRAY;
-              tc_name = 0;
-              tc_elem_kind = ek_make;
-              tc_elem_name = en_make;
-              tc_result_type = ast_node(TY_DYN_ARRAY, witness_ty, 0, 0, 0, 0);
-              return;
-            }
-          } else {
-            {
-            }
-          }
-          tc_expr(aa);
-          if ((((tc_kind != TY_INT) && (tc_kind != TY_BOOL)) && (tc_kind != TY_CHAR))) {
-            tc_fail(17);
-          } else {
-            {
-            }
-          }
-          tc_kind = TY_DYN_ARRAY;
-          tc_name = 0;
-          tc_elem_kind = TY_INT;
-          tc_elem_name = 0;
-          tc_result_type = ast_node(TY_DYN_ARRAY, ast_node(TY_INT, 0, 0, 0, 0, 0), 0, 0, 0, 0);
-          return;
-        }
-      } else {
-        {
-        }
-      }
-      if (((call_len == 13) && (call_hash == 333999))) {
-        {
-          int aa = (node_a)[id];
-          if ((((aa == 0) || ((node_next)[aa] == 0)) || ((node_next)[(node_next)[aa]] != 0))) {
-            {
-              tc_fail(13);
-              return;
-            }
-          } else {
-            {
-            }
-          }
-          tc_expr(aa);
-          if ((tc_kind != TY_DYN_ARRAY)) {
-            {
-              tc_fail(8);
-              return;
-            }
-          } else {
-            {
-            }
-          }
-          tc_require_mutable(aa);
-          int ek = tc_elem_kind;
-          int en = tc_elem_name;
-          aa = (node_next)[aa];
-          tc_expr(aa);
-          if ((((((((((tc_kind != TY_INT) && (tc_kind != TY_BOOL)) && (tc_kind != TY_CHAR)) && (tc_kind != TY_FLOAT)) && (tc_kind != TY_DOUBLE)) && (tc_kind != TY_STRING)) && (tc_kind != TY_PTR)) && (tc_kind != TY_NAMED)) && (tc_kind != TY_PARAM))) {
-            tc_fail(17);
-          } else {
-            {
-            }
-          }
-          tc_kind = TY_DYN_ARRAY;
-          tc_name = 0;
-          tc_elem_kind = ek;
-          tc_elem_name = en;
-          return;
-        }
-      } else {
-        {
-        }
-      }
-      if (((call_len == 10) && (call_hash == 899143))) {
-        {
-          int aa = (node_a)[id];
-          if ((((aa == 0) || ((node_next)[aa] == 0)) || ((node_next)[(node_next)[aa]] != 0))) {
-            {
-              tc_fail(13);
-              return;
-            }
-          } else {
-            {
-            }
-          }
-          tc_expr(aa);
-          if ((tc_kind != TY_DYN_ARRAY)) {
-            {
-              tc_fail(8);
-              return;
-            }
-          } else {
-            {
-            }
-          }
-          tc_require_mutable(aa);
-          int ek = tc_elem_kind;
-          int en = tc_elem_name;
-          aa = (node_next)[aa];
-          tc_expr(aa);
-          if ((tc_array_elem_same(ek, en, tc_kind, tc_name) == 0)) {
-            tc_fail(36);
-          } else {
-            {
-            }
-          }
-          tc_kind = TY_DYN_ARRAY;
-          tc_name = 0;
-          tc_elem_kind = ek;
-          tc_elem_name = en;
-          return;
-        }
-      } else {
-        {
-        }
-      }
-      if (((call_len == 9) && (call_hash == 890825))) {
-        {
-          int aa = (node_a)[id];
-          if ((((aa == 0) || ((node_next)[aa] == 0)) || ((node_next)[(node_next)[aa]] != 0))) {
-            {
-              tc_fail(13);
-              return;
-            }
-          } else {
-            {
-            }
-          }
-          tc_expr(aa);
-          if ((tc_kind != TY_DYN_ARRAY)) {
-            {
-              tc_fail(8);
-              return;
-            }
-          } else {
-            {
-            }
-          }
-          int ek = tc_elem_kind;
-          int en = tc_elem_name;
-          aa = (node_next)[aa];
-          tc_expr(aa);
-          if ((((((((((tc_kind != TY_INT) && (tc_kind != TY_BOOL)) && (tc_kind != TY_CHAR)) && (tc_kind != TY_FLOAT)) && (tc_kind != TY_DOUBLE)) && (tc_kind != TY_STRING)) && (tc_kind != TY_PTR)) && (tc_kind != TY_NAMED)) && (tc_kind != TY_PARAM))) {
-            tc_fail(17);
-          } else {
-            {
-            }
-          }
-          tc_kind = ek;
-          tc_name = en;
-          tc_elem_kind = 0;
-          tc_elem_name = 0;
-          if (((((ek == TY_PTR) && (tc_last_var_type != 0)) && ((node_a)[tc_last_var_type] != 0)) && ((node_a)[(node_a)[tc_last_var_type]] != 0))) {
-            {
-              int pointee = (node_a)[(node_a)[tc_last_var_type]];
-              tc_elem_kind = (node_kind)[pointee];
-              if ((tc_elem_kind == TY_NAMED)) {
-                tc_elem_name = (node_value)[pointee];
-              } else {
-                {
-                }
-              }
-            }
-          } else {
-            {
-            }
-          }
-          return;
-        }
-      } else {
-        {
-        }
-      }
-      if (((call_len == 9) && (call_hash == 902357))) {
-        {
-          int aa = (node_a)[id];
-          if (((((aa == 0) || ((node_next)[aa] == 0)) || ((node_next)[(node_next)[aa]] == 0)) || ((node_next)[(node_next)[(node_next)[aa]]] != 0))) {
-            {
-              tc_fail(13);
-              return;
-            }
-          } else {
-            {
-            }
-          }
-          tc_expr(aa);
-          if ((tc_kind != TY_DYN_ARRAY)) {
-            {
-              tc_fail(8);
-              return;
-            }
-          } else {
-            {
-            }
-          }
-          tc_require_mutable(aa);
-          int ek = tc_elem_kind;
-          int en = tc_elem_name;
-          aa = (node_next)[aa];
-          tc_expr(aa);
-          if ((((((((((tc_kind != TY_INT) && (tc_kind != TY_BOOL)) && (tc_kind != TY_CHAR)) && (tc_kind != TY_FLOAT)) && (tc_kind != TY_DOUBLE)) && (tc_kind != TY_STRING)) && (tc_kind != TY_PTR)) && (tc_kind != TY_NAMED)) && (tc_kind != TY_PARAM))) {
-            {
-              tc_fail(17);
-              return;
-            }
-          } else {
-            {
-            }
-          }
-          aa = (node_next)[aa];
-          tc_expr(aa);
-          if ((tc_array_elem_same(ek, en, tc_kind, tc_name) == 0)) {
-            tc_fail(36);
-          } else {
-            {
-            }
-          }
-          tc_kind = TY_VOID;
-          tc_name = 0;
-          tc_elem_kind = 0;
-          tc_elem_name = 0;
-          return;
-        }
-      } else {
-        {
-        }
-      }
-      if (((call_len == 11) && (call_hash == 585984))) {
-        {
-          int aa = (node_a)[id];
-          if (((aa == 0) || ((node_next)[aa] != 0))) {
-            {
-              tc_fail(13);
-              return;
-            }
-          } else {
-            {
-            }
-          }
-          tc_expr(aa);
-          if ((tc_kind != TY_DYN_ARRAY)) {
-            {
-              tc_fail(8);
-              return;
-            }
-          } else {
-            {
-            }
-          }
-          tc_require_mutable(aa);
-          int ek = tc_elem_kind;
-          int en = tc_elem_name;
-          tc_kind = TY_DYN_ARRAY;
-          tc_name = 0;
-          tc_elem_kind = ek;
-          tc_elem_name = en;
-          return;
-        }
-      } else {
-        {
-        }
-      }
-      if (((call_len == 10) && (call_hash == 597913))) {
-        {
-          int aa = (node_a)[id];
-          if (((aa == 0) || ((node_next)[aa] != 0))) {
-            {
-              tc_fail(13);
-              return;
-            }
-          } else {
-            {
-            }
-          }
-          tc_expr(aa);
-          if ((tc_kind != TY_DYN_ARRAY)) {
-            tc_fail(8);
-          } else {
-            {
-            }
-          }
-          tc_require_mutable(aa);
-          tc_kind = TY_VOID;
-          tc_name = 0;
-          tc_elem_kind = 0;
-          tc_elem_name = 0;
-          return;
-        }
-      } else {
-        {
-        }
-      }
       int fun_node = tc_find_function_ctx((node_value)[id], (node_scope)[id]);
       if ((fun_node == 0)) {
         {
@@ -9678,6 +9057,7 @@ void tc_expr(int id) {
           }
           int generic_ret = tc_substitute_type((node_b)[fun_node]);
           tc_type_node(generic_ret);
+          (node_aux)[id] = tc_result_type;
           return;
         }
       } else {
@@ -10165,6 +9545,12 @@ int tc_emit_arg_type(int id) {
 }
 
 int tc_expr_kind_for_emit(int id) {
+  if ((((id != 0) && ((node_kind)[id] == N_CALL)) && ((node_aux)[id] != 0))) {
+    return (node_kind)[(node_aux)[id]];
+  } else {
+    {
+    }
+  }
   int f = tc_find_function_ctx((node_value)[id], (node_scope)[id]);
   if ((f != 0)) {
     {
@@ -10316,14 +9702,7 @@ void tc_stmt(int id, int expected_kind, int expected_name) {
         }
         if ((tc_same_full(dk, dn, de, den, ek, en, ee, een) == 0)) {
           {
-            int polymorphic_make = 0;
-            if (((((node_kind)[(node_c)[id]] == N_CALL) && ((sym_len)[(node_value)[(node_c)[id]]] == 10)) && ((sym_hash)[(node_value)[(node_c)[id]]] == 790299))) {
-              polymorphic_make = 1;
-            } else {
-              {
-              }
-            }
-            if ((((polymorphic_make == 0) && (((node_kind)[(node_c)[id]] != N_INT) || ((node_value)[(node_c)[id]] != 0))) && ((node_kind)[(node_c)[id]] != N_NULL))) {
+            if (((((node_kind)[(node_c)[id]] != N_INT) || ((node_value)[(node_c)[id]] != 0)) && ((node_kind)[(node_c)[id]] != N_NULL))) {
               tc_fail(20);
             } else {
               {
@@ -10745,22 +10124,8 @@ int tc_program(int root) {
             }
           }
           tc_expr((node_c)[item]);
-          if ((tc_same_full(gk, gn, ge, gen, tc_kind, tc_name, tc_elem_kind, tc_elem_name) == 0)) {
-            {
-              int polymorphic_make = 0;
-              if (((((node_kind)[(node_c)[item]] == N_CALL) && ((sym_len)[(node_value)[(node_c)[item]]] == 10)) && ((sym_hash)[(node_value)[(node_c)[item]]] == 790299))) {
-                polymorphic_make = 1;
-              } else {
-                {
-                }
-              }
-              if ((((polymorphic_make == 0) && (((node_kind)[(node_c)[item]] != N_INT) || ((node_value)[(node_c)[item]] != 0))) && ((node_kind)[(node_c)[item]] != N_NULL))) {
-                tc_fail(29);
-              } else {
-                {
-                }
-              }
-            }
+          if ((((tc_same_full(gk, gn, ge, gen, tc_kind, tc_name, tc_elem_kind, tc_elem_name) == 0) && (((node_kind)[(node_c)[item]] != N_INT) || ((node_value)[(node_c)[item]] != 0))) && ((node_kind)[(node_c)[item]] != N_NULL))) {
+            tc_fail(29);
           } else {
             {
             }
@@ -11043,64 +10408,28 @@ void emit_c_token(int* out, int kind, int value) {
           if ((value == 1002)) {
             write_string(out, "runtime_string_concat");
           } else {
-            if ((value == 1003)) {
-              write_string(out, "PyrelArray");
+            if ((value == 1011)) {
+              write_string(out, "sizeof");
             } else {
-              if ((value == 1004)) {
-                write_string(out, "runtime_array_make");
+              if ((value == 1012)) {
+                write_string(out, "len");
               } else {
-                if ((value == 1005)) {
-                  write_string(out, "runtime_array_push");
+                if ((value == 1013)) {
+                  write_string(out, "cap");
                 } else {
-                  if ((value == 1006)) {
-                    write_string(out, "runtime_array_get");
+                  if ((value == 1015)) {
+                    write_string(out, "data");
                   } else {
-                    if ((value == 1007)) {
-                      write_string(out, "runtime_array_set");
+                    if ((value == 1016)) {
+                      write_string(out, "pyrel_memory_alloc");
                     } else {
-                      if ((value == 1008)) {
-                        write_string(out, "runtime_array_reserve");
+                      if ((value == 1017)) {
+                        write_string(out, "pyrel_memory_resize");
                       } else {
-                        if ((value == 1009)) {
-                          write_string(out, "runtime_array_clear");
+                        if ((value == 1018)) {
+                          write_string(out, "pyrel_memory_free");
                         } else {
-                          if ((value == 1010)) {
-                            write_string(out, "runtime_array_free");
-                          } else {
-                            if ((value == 1011)) {
-                              write_string(out, "sizeof");
-                            } else {
-                              if ((value == 1012)) {
-                                write_string(out, "len");
-                              } else {
-                                if ((value == 1013)) {
-                                  write_string(out, "cap");
-                                } else {
-                                  if ((value == 1014)) {
-                                    write_string(out, "runtime_array_get_raw");
-                                  } else {
-                                    if ((value == 1015)) {
-                                      write_string(out, "data");
-                                    } else {
-                                      if ((value == 1016)) {
-                                        write_string(out, "pyrel_memory_alloc");
-                                      } else {
-                                        if ((value == 1017)) {
-                                          write_string(out, "pyrel_memory_resize");
-                                        } else {
-                                          if ((value == 1018)) {
-                                            write_string(out, "pyrel_memory_free");
-                                          } else {
-                                            emit_symbol(out, value);
-                                          }
-                                        }
-                                      }
-                                    }
-                                  }
-                                }
-                              }
-                            }
-                          }
+                          emit_symbol(out, value);
                         }
                       }
                     }
@@ -11379,15 +10708,6 @@ void emit_runtime(int* out) {
   write_string(out, "static PYREL_UNUSED void* pyrel_memory_resize(void* old,int old_count,int new_count,size_t elem_size){size_t slot=(size_t)-1;size_t old_bytes;size_t new_bytes;void*p;if(old_count<0||new_count<0||new_count<old_count)pyrel_panic(1);if(old){slot=pyrel_find(old);if(slot==(size_t)-1)pyrel_panic(2);}old_bytes=pyrel_checked_bytes(old_count,elem_size);new_bytes=pyrel_checked_bytes(new_count,elem_size);p=realloc(old,new_bytes?new_bytes:1);if(!p)pyrel_panic(6);if(slot==(size_t)-1)pyrel_track(p);else pyrel_live[slot]=p;if(new_bytes>old_bytes)memset((char*)p+old_bytes,0,new_bytes-old_bytes);return p;}\n");
   write_string(out, "static PYREL_UNUSED void pyrel_memory_free(void*p){pyrel_release(p);}\n");
   write_string(out, "static PYREL_UNUSED char* runtime_string_concat(const char* a,const char* b){size_t na,nb,total;char* p;if(!a||!b)pyrel_panic(4);na=strlen(a);nb=strlen(b);if(na>(size_t)-1-nb-1)pyrel_panic(1);total=na+nb+1;p=(char*)malloc(total);if(!p)pyrel_panic(5);memcpy(p,a,na);memcpy(p+na,b,nb);p[na+nb]=0;return(char*)pyrel_track(p);}\n");
-  write_string(out, "typedef struct PyrelArray { void* data; int len; int cap; } PyrelArray;\n");
-  write_string(out, "static PYREL_UNUSED void pyrel_array_check(const PyrelArray* a){if(!a)pyrel_panic(4);if(a->len<0||a->cap<0||a->len>a->cap)pyrel_panic(3);if(a->cap>0&&(!a->data||pyrel_find(a->data)==(size_t)-1))pyrel_panic(2);}\n");
-  write_string(out, "static PYREL_UNUSED PyrelArray runtime_array_make(int capacity,size_t elem_size){PyrelArray a;if(capacity<0)pyrel_panic(1);if(capacity<1)capacity=4;pyrel_checked_bytes(capacity,elem_size);a.data=calloc((size_t)capacity,elem_size);if(!a.data)pyrel_panic(5);a.len=0;a.cap=capacity;a.data=pyrel_track(a.data);return a;}\n");
-  write_string(out, "static PYREL_UNUSED PyrelArray runtime_array_reserve(PyrelArray* a,int minimum,size_t elem_size){void*p;pyrel_array_check(a);if(minimum<0)pyrel_panic(1);if(minimum<=a->cap)return *a;pyrel_checked_bytes(minimum,elem_size);p=calloc((size_t)minimum,elem_size);if(!p)pyrel_panic(5);if(a->data){memcpy(p,a->data,pyrel_checked_bytes(a->len,elem_size));pyrel_release(a->data);}a->data=pyrel_track(p);a->cap=minimum;return *a;}\n");
-  write_string(out, "static PYREL_UNUSED PyrelArray runtime_array_push(PyrelArray* a,const void* value,size_t elem_size){int next;pyrel_array_check(a);if(!value)pyrel_panic(4);if(a->len>=a->cap){if(a->cap>2147483647/2)pyrel_panic(1);next=a->cap>0?a->cap*2:4;runtime_array_reserve(a,next,elem_size);}memcpy((char*)a->data+(size_t)a->len*elem_size,value,elem_size);a->len+=1;return *a;}\n");
-  write_string(out, "static PYREL_UNUSED void runtime_array_set(PyrelArray* a,int index,const void* value,size_t elem_size){pyrel_array_check(a);if(index<0||index>=a->len)pyrel_panic(3);if(!value)pyrel_panic(4);memcpy((char*)a->data+pyrel_checked_bytes(index,elem_size),value,elem_size);}\n");
-  write_string(out, "static PYREL_UNUSED PyrelArray runtime_array_clear(PyrelArray* a){pyrel_array_check(a);a->len=0;return *a;}\n");
-  write_string(out, "static PYREL_UNUSED void runtime_array_free(PyrelArray* a){if(!a)pyrel_panic(4);if(a->data){if(pyrel_find(a->data)==(size_t)-1)pyrel_panic(2);pyrel_release(a->data);}a->data=NULL;a->len=0;a->cap=0;}\n");
-  write_string(out, "static PYREL_UNUSED void* runtime_array_get_raw(PyrelArray* a,int index,size_t elem_size){pyrel_array_check(a);if(index<0||index>=a->len)pyrel_panic(3);return(char*)a->data+pyrel_checked_bytes(index,elem_size);}\n");
   write_string(out, "static PYREL_UNUSED int* alloc_ints(int n){int* p;if(n<0)pyrel_panic(1);if(n<1)n=1;pyrel_checked_bytes(n,sizeof(int));p=(int*)calloc((size_t)n,sizeof(int));if(!p)pyrel_panic(5);return(int*)pyrel_track(p);}\n");
   write_string(out, "static PYREL_UNUSED void free_ints(int* p){pyrel_release(p);}\n");
   write_string(out, "static PYREL_UNUSED int* grow_ints(int* p,int old,int n){size_t slot=(size_t)-1;int* q;if(old<0||n<0)pyrel_panic(1);if(n<=old)return p;if(p){slot=pyrel_find(p);if(slot==(size_t)-1)pyrel_panic(2);}pyrel_checked_bytes(n,sizeof(int));q=(int*)realloc(p,(size_t)n*sizeof(int));if(!q)pyrel_panic(6);if(p)pyrel_live[slot]=q;else pyrel_track(q);memset(q+old,0,(size_t)(n-old)*sizeof(int));return q;}\n");

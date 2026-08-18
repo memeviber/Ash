@@ -29,8 +29,8 @@ for source in \
   ! grep -Eqi 'ERROR:|runtime error:|LeakSanitizer' "$OUT/${name}.host.out" "$OUT/${name}.boot.out"
 done
 
-# Negative runtime check: both compiler paths must reject an out-of-bounds
-# dynamic-array read deterministically, without sanitizer diagnostics.
+# Bounds-safe runtime check: both compiler paths must return the same fallback
+# value and reject an invalid write without sanitizer diagnostics.
 OOB_SOURCE="$ROOT/tests/adversarial/memory_oob_test.pyrel"
 OOB_OUT="$OUT/memory_oob"
 (
@@ -41,16 +41,9 @@ cp "${OOB_SOURCE}.c" "$OOB_OUT.host.c"
 "$OUT/bootstrap.bin" "$OOB_SOURCE" "$OOB_OUT.boot.c" >"$OOB_OUT.boot.compile.log" 2>&1
 gcc -std=c11 -O1 -g -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror=implicit-function-declaration -Werror=incompatible-pointer-types -Werror=int-conversion -fsanitize=address,undefined -fno-omit-frame-pointer "$OOB_OUT.host.c" -o "$OOB_OUT.host.bin"
 gcc -std=c11 -O1 -g -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror=implicit-function-declaration -Werror=incompatible-pointer-types -Werror=int-conversion -fsanitize=address,undefined -fno-omit-frame-pointer "$OOB_OUT.boot.c" -o "$OOB_OUT.boot.bin"
-set +e
 ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 "$OOB_OUT.host.bin" >"$OOB_OUT.host.log" 2>&1
-host_status=$?
 ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 "$OOB_OUT.boot.bin" >"$OOB_OUT.boot.log" 2>&1
-boot_status=$?
-set -e
-[ "$host_status" -eq 2 ]
-[ "$boot_status" -eq 2 ]
-# The Host includes a short panic diagnostic; the Bootstrap runtime intentionally
-# keeps this path message-free. Exit status is the parity contract here.
+cmp -s "$OOB_OUT.host.log" "$OOB_OUT.boot.log"
 ! grep -Eqi 'AddressSanitizer|UndefinedBehaviorSanitizer|runtime error:|LeakSanitizer' "$OOB_OUT.host.log" "$OOB_OUT.boot.log"
 
 printf 'Adversarial sanitizer checks passed, including deterministic OOB rejection.\n'

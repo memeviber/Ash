@@ -156,14 +156,7 @@ let rec emit_expr_type env = function
    | Call ("memory_resize", [ptr; _; _; _]) ->
        (match emit_expr_type env ptr with TPtr t -> TPtr t | _ -> TPtr TVoid)
    | Call ("memory_free", _) -> TVoid
-   | Call ("array_make", [_; zero]) -> TDynArray (emit_expr_type env zero)
-   | Call ("array_make", _) -> TDynArray TInt
 
-  | Call ("array_reserve", a :: _) | Call ("array_push", a :: _) | Call ("array_clear", [a]) ->
-      (match emit_expr_type env a with TDynArray t -> TDynArray t | _ -> TDynArray TInt)
-  | Call ("array_get", a :: _) ->
-      (match emit_expr_type env a with TDynArray t -> t | _ -> TInt)
-  | Call ("array_set", _) | Call ("array_free", _) -> TVoid
   | Call (f, args) ->
       (match SMap.find_opt f env.generic_functions with
        | Some (params, gf) ->
@@ -202,7 +195,7 @@ let rec compile_typ = function
   | TVoid -> "void"
   | TPtr t -> compile_typ t ^ "*"
   | TArray (t, n) -> compile_typ t ^ "[" ^ string_of_int n ^ "]"
-  | TDynArray _ -> "PyrelArray"
+  | TDynArray _ -> failwith "dynamic arrays are not supported; use array::Array<T>"
   | TFunPtr (_, r) -> compile_typ r
   | TNamed n -> c_symbol_name n
   | TParam n -> n
@@ -231,7 +224,7 @@ let instantiate_func params f args name =
     body = substitute_stmt subst f.body }
 
 let rec collect_typ add = function
-  | TPtr t | TDynArray t -> collect_typ add t
+  | TPtr t -> collect_typ add t
   | TArray (t, _) -> collect_typ add t
   | TFunPtr (args, r) -> List.iter (collect_typ add) args; collect_typ add r
   | TGeneric (n, args) -> add (TGeneric (n, args)); List.iter (collect_typ add) args
@@ -256,9 +249,7 @@ let rec collect_stmt add = function
   | Return eo -> Option.iter (collect_expr add) eo
   | Break | Continue -> ()
 
-let c_type_of_element = function
-  | TDynArray _ -> "PyrelArray"
-  | t -> compile_typ t
+let c_type_of_element t = compile_typ t
 
 let rec compile_decl t name =
   match t with
@@ -298,10 +289,7 @@ let c_escape_char = function
   | '\000' -> "\\0"
   | c -> String.make 1 c
 
-let rec array_data_expr env e =
-  "(" ^ compile_expr env e ^ ").data"
-
-and compile_expr env = function
+let rec compile_expr env = function
   | Int i -> string_of_int i
   | Float f ->
       let s = Printf.sprintf "%.17g" f in
@@ -331,41 +319,6 @@ and compile_expr env = function
       "((void)(" ^ compile_expr env zero ^ "), (" ^ cty ^ "*)pyrel_memory_resize((void*)" ^ compile_expr env ptr ^ ", " ^ compile_expr env old_count ^ ", " ^ compile_expr env new_count ^ ", sizeof(" ^ cty ^ ")))"
   | Call ("memory_free", [ptr]) ->
       "pyrel_memory_free((void*)" ^ compile_expr env ptr ^ ")"
-  | Call ("array_make", [capacity; zero]) ->
-      let et = emit_expr_type env zero in
-      "((void)(" ^ compile_expr env zero ^ "), runtime_array_make(" ^ compile_expr env capacity ^ ", sizeof(" ^ c_type_of_element et ^ ")))"
-  | Call ("array_make", [capacity]) ->
-      "runtime_array_make(" ^ compile_expr env capacity ^ ", sizeof(int))"
-  | Call ("array_reserve", [array; minimum]) ->
-      let et = match emit_expr_type env array with TDynArray t -> t | _ -> TInt in
-      "runtime_array_reserve(&(" ^ compile_expr env array ^ "), " ^ compile_expr env minimum ^ ", sizeof(" ^ c_type_of_element et ^ "))"
-  | Call ("array_push", [array; value]) ->
-      let et = match emit_expr_type env array with TDynArray t -> t | _ -> TInt in
-      let rendered_value = compile_expr env value in
-      let rendered_value = match et with
-        | TFloat -> "(float)(" ^ rendered_value ^ ")"
-        | TDouble -> "(double)(" ^ rendered_value ^ ")"
-        | _ -> rendered_value
-      in
-      "runtime_array_push(&(" ^ compile_expr env array ^ "), ((" ^ c_type_of_element et ^ "[]){" ^ rendered_value ^ "}), sizeof(" ^ c_type_of_element et ^ "))"
-  | Call ("array_get", [array; index]) ->
-      let et = match emit_expr_type env array with TDynArray t -> t | _ -> TInt in
-      let cty = c_type_of_element et in
-      let ix = compile_expr env index in
-      "(*((" ^ cty ^ "*)runtime_array_get_raw(&(" ^ compile_expr env array ^ "), (" ^ ix ^ "), sizeof(" ^ cty ^ "))))"
-  | Call ("array_set", [array; index; value]) ->
-      let et = match emit_expr_type env array with TDynArray t -> t | _ -> TInt in
-      let rendered_value = compile_expr env value in
-      let rendered_value = match et with
-        | TFloat -> "(float)(" ^ rendered_value ^ ")"
-        | TDouble -> "(double)(" ^ rendered_value ^ ")"
-        | _ -> rendered_value
-      in
-      "runtime_array_set(&(" ^ compile_expr env array ^ "), (" ^ compile_expr env index ^ "), ((" ^ c_type_of_element et ^ "[]){" ^ rendered_value ^ "}), sizeof(" ^ c_type_of_element et ^ "))"
-  | Call ("array_clear", [array]) ->
-      "runtime_array_clear(&(" ^ compile_expr env array ^ "))"
-  | Call ("array_free", [array]) ->
-      "runtime_array_free(&(" ^ compile_expr env array ^ "))"
   | Call (f, args) ->
       let rendered = List.map (compile_expr env) args |> String.concat ", " in
       let target =
@@ -390,10 +343,7 @@ and compile_expr env = function
   | IndirectCall (f, args) ->
       "(" ^ compile_expr env f ^ ")(" ^ (List.map (compile_expr env) args |> String.concat ", ") ^ ")"
   | Deref e -> "*(" ^ compile_expr env e ^ ")"
-  | Index (e, idx) ->
-      (match emit_expr_type env e with
-       | TDynArray t -> "(*((" ^ c_type_of_element t ^ "*)runtime_array_get_raw(&(" ^ compile_expr env e ^ "), (" ^ compile_expr env idx ^ "), sizeof(" ^ c_type_of_element t ^ "))))"
-       | _ -> "(" ^ compile_expr env e ^ ")[" ^ compile_expr env idx ^ "]")
+  | Index (e, idx) -> "(" ^ compile_expr env e ^ ")[" ^ compile_expr env idx ^ "]"
   | AddressOf e -> "&( " ^ compile_expr env e ^ ")"
   | Field (e, f) -> "(" ^ compile_expr env e ^ ")." ^ f
 
@@ -421,8 +371,6 @@ let compile_initializer env t e =
   match t, e with
   | TNamed n, Int 0 when SMap.mem n env.fields -> "{0}"
   | TGeneric _, Int 0 -> "{0}"
-  | TDynArray t, Call ("array_make", [capacity; zero]) -> "((void)(" ^ compile_expr env zero ^ "), runtime_array_make(" ^ compile_expr env capacity ^ ", sizeof(" ^ c_type_of_element t ^ ")))"
-  | TDynArray t, Call ("array_make", [capacity]) -> "runtime_array_make(" ^ compile_expr env capacity ^ ", sizeof(" ^ c_type_of_element t ^ "))"
   | _ -> compile_expr env e
 
 let rec compile_stmt env indent = function
@@ -630,15 +578,6 @@ static PYREL_UNUSED void pyrel_include_reset_session(void){pyrel_inc_active_n=0;
     ^ "static PYREL_UNUSED void* pyrel_memory_alloc(int count, size_t elem_size) { size_t bytes = pyrel_checked_bytes(count, elem_size); void* p = calloc(1, bytes ? bytes : 1); if (!p) pyrel_panic(5); return pyrel_track(p); }\n"
     ^ "static PYREL_UNUSED void* pyrel_memory_resize(void* old, int old_count, int new_count, size_t elem_size) { size_t slot = (size_t)-1; size_t old_bytes; size_t new_bytes; void* p; if (old_count < 0 || new_count < 0) pyrel_panic(1); if (new_count < old_count) pyrel_panic(1); if (old) { slot = pyrel_find(old); if (slot == (size_t)-1) pyrel_panic(2); } old_bytes = pyrel_checked_bytes(old_count, elem_size); new_bytes = pyrel_checked_bytes(new_count, elem_size); p = realloc(old, new_bytes ? new_bytes : 1); if (!p) pyrel_panic(6); if (slot == (size_t)-1) pyrel_track(p); else pyrel_live[slot] = p; if (new_bytes > old_bytes) memset((char*)p + old_bytes, 0, new_bytes - old_bytes); return p; }\n"
     ^ "static PYREL_UNUSED void pyrel_memory_free(void* p) { pyrel_release(p); }\n"
-    ^ "typedef struct PyrelArray { void* data; int len; int cap; } PyrelArray;\n"
-    ^ "static PYREL_UNUSED void pyrel_array_check(const PyrelArray* a) { if (!a) pyrel_panic(4); if (a->len < 0 || a->cap < 0 || a->len > a->cap) pyrel_panic(3); if (a->cap > 0 && (!a->data || pyrel_find(a->data) == (size_t)-1)) pyrel_panic(2); }\n"
-    ^ "static PYREL_UNUSED PyrelArray runtime_array_make(int capacity, size_t elem_size) { PyrelArray a; if (capacity < 0) pyrel_panic(1); if (capacity < 1) capacity = 4; pyrel_checked_bytes(capacity, elem_size); a.data = calloc((size_t)capacity, elem_size); if (!a.data) pyrel_panic(5); a.len = 0; a.cap = capacity; a.data = pyrel_track(a.data); return a; }\n"
-    ^ "static PYREL_UNUSED PyrelArray runtime_array_reserve(PyrelArray* a, int minimum, size_t elem_size) { void* p; pyrel_array_check(a); if (minimum < 0) pyrel_panic(1); if (minimum <= a->cap) return *a; pyrel_checked_bytes(minimum, elem_size); p = calloc((size_t)minimum, elem_size); if (!p) pyrel_panic(5); if (a->data) { memcpy(p, a->data, pyrel_checked_bytes(a->len, elem_size)); pyrel_release(a->data); } a->data = pyrel_track(p); a->cap = minimum; return *a; }\n"
-    ^ "static PYREL_UNUSED PyrelArray runtime_array_push(PyrelArray* a, const void* value, size_t elem_size) { int next; pyrel_array_check(a); if (!value) pyrel_panic(4); if (a->len >= a->cap) { if (a->cap > 2147483647 / 2) pyrel_panic(1); next = a->cap > 0 ? a->cap * 2 : 4; runtime_array_reserve(a, next, elem_size); } memcpy((char*)a->data + pyrel_checked_bytes(a->len, elem_size), value, elem_size); a->len += 1; return *a; }\n"
-    ^ "static PYREL_UNUSED void runtime_array_set(PyrelArray* a, int index, const void* value, size_t elem_size) { pyrel_array_check(a); if (index < 0 || index >= a->len) pyrel_panic(3); if (!value) pyrel_panic(4); memcpy((char*)a->data + pyrel_checked_bytes(index, elem_size), value, elem_size); }\n"
-    ^ "static PYREL_UNUSED PyrelArray runtime_array_clear(PyrelArray* a) { pyrel_array_check(a); a->len = 0; return *a; }\n"
-    ^ "static PYREL_UNUSED void runtime_array_free(PyrelArray* a) { if (!a) pyrel_panic(4); if (a->data) { if (pyrel_find(a->data) == (size_t)-1) pyrel_panic(2); pyrel_release(a->data); } a->data = NULL; a->len = 0; a->cap = 0; }\n"
-    ^ "static PYREL_UNUSED void* runtime_array_get_raw(PyrelArray* a, int index, size_t elem_size) { pyrel_array_check(a); if (index < 0 || index >= a->len) pyrel_panic(3); return (char*)a->data + pyrel_checked_bytes(index, elem_size); }\n"
     ^ "static PYREL_UNUSED char* runtime_string_concat(const char* a, const char* b) {\n"
     ^ "  size_t na, nb, total; char* p; if (!a || !b) pyrel_panic(4); na = strlen(a); nb = strlen(b); if (na > (size_t)-1 - nb - 1) pyrel_panic(1); total = na + nb + 1; p = (char*)malloc(total); if (!p) pyrel_panic(5); memcpy(p, a, na); memcpy(p + na, b, nb); p[na + nb] = 0; return (char*)pyrel_track(p);\n}\n"
     ^ "static PYREL_UNUSED int write_int(int* handle, int value) {\n"
@@ -725,8 +664,8 @@ static PYREL_UNUSED void pyrel_include_reset_session(void){pyrel_inc_active_n=0;
       | TArray (inner, n), _ ->
           compile_typ inner ^ " " ^ c_symbol_name x ^ "[" ^ string_of_int n ^ "];\n"
        | (TNamed _ | TGeneric _), Int 0 -> compile_decl t (c_symbol_name x) ^ " = {0};\n"
-               | TDynArray inner, Call ("array_make", [capacity; _]) -> compile_decl t x ^ " = runtime_array_make(" ^ compile_expr emit_env capacity ^ ", sizeof(" ^ c_type_of_element inner ^ "));\n"
-        | TDynArray inner, Call ("array_make", [capacity]) -> compile_decl t x ^ " = runtime_array_make(" ^ compile_expr emit_env capacity ^ ", sizeof(" ^ c_type_of_element inner ^ "));\n"
+
+
 
        | _ -> compile_decl t (c_symbol_name x) ^ " = " ^ compile_expr emit_env e ^ ";\n"
     ) (program.globals @ program.consts) |> String.concat "" in

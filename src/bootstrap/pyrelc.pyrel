@@ -570,26 +570,6 @@ func gen_array_value_ptr(kind: int, name: int, value: int): void {
   code_emit(C_PUNCT, 25);
 }
 
-func gen_array_make_expr(capacity: int, kind: int, name: int, witness: int): void {
-  if witness != 0 then {
-    code_emit(C_PUNCT, 6);
-    code_emit(C_PUNCT, 6);
-    code_emit(C_KW, 4);
-    code_emit(C_PUNCT, 8);
-    code_emit(C_PUNCT, 6);
-    gen_expr(witness);
-    code_emit(C_PUNCT, 8);
-    code_emit(C_PUNCT, 7);
-  }
-  code_emit(C_IDENT, 1004);
-  code_emit(C_PUNCT, 6);
-  gen_expr(capacity);
-  code_emit(C_PUNCT, 7);
-  gen_array_sizeof(kind, name);
-  code_emit(C_PUNCT, 8);
-  if witness != 0 then code_emit(C_PUNCT, 5);
-}
-
 func gen_memory_sizeof(arg: int): void {
   let ty: int = tc_emit_arg_type(arg);
   if ty != 0 then ty = gen_substitute_type(ty);
@@ -680,105 +660,6 @@ func gen_memory_builtin(id: int): void {
   }
 }
 
-func gen_array_checked_get(arr: int, pos: int, kind: int, name: int): void {
-  code_emit(C_PUNCT, 9);
-  code_emit(C_PUNCT, 6);
-  code_emit(C_PUNCT, 6);
-  gen_array_elem_type(kind, name);
-  code_emit(C_PUNCT, 1);
-  code_emit(C_PUNCT, 5);
-  code_emit(C_IDENT, 1014);
-  code_emit(C_PUNCT, 6);
-  code_emit(C_PUNCT, 10);
-  code_emit(C_PUNCT, 6);
-  gen_expr(arr);
-  code_emit(C_PUNCT, 5);
-  code_emit(C_PUNCT, 7);
-  gen_expr(pos);
-  code_emit(C_PUNCT, 7);
-  gen_array_sizeof(kind, name);
-  code_emit(C_PUNCT, 8);
-  code_emit(C_PUNCT, 5);
-}
-
-func gen_array_builtin(id: int): void {
-
-  let call_name: int = node_value[id];
-  let call_len: int = sym_len[call_name];
-  let call_hash: int = sym_hash[call_name];
-  let a: int = node_a[id];
-  let ek: int = gen_array_elem_kind(a);
-  let en: int = gen_array_elem_name(a);
-  if call_len == 10 && call_hash == 790299 && node_next[a] != 0 then {
-    let witness: int = node_next[a];
-    let wt: int = tc_emit_arg_type(witness);
-    if wt != 0 then wt = gen_substitute_type(wt);
-    let wk: int = TY_INT;
-    let wn: int = 0;
-    if wt != 0 then { wk = node_kind[wt]; wn = node_value[wt]; }
-    gen_array_make_expr(a, wk, wn, witness);
-  } else if call_len == 10 && call_hash == 790299 then {
-    code_emit(C_IDENT, 1004);
-    code_emit(C_PUNCT, 6);
-    gen_expr(a);
-    code_emit(C_PUNCT, 7);
-    gen_array_sizeof(ek, en);
-    code_emit(C_PUNCT, 8);
-  } else if call_len == 13 && call_hash == 333999 then {
-    code_emit(C_IDENT, 1008);
-    code_emit(C_PUNCT, 6);
-    code_emit(C_PUNCT, 10);
-    gen_expr(a);
-    code_emit(C_PUNCT, 7);
-    gen_expr(node_next[a]);
-    code_emit(C_PUNCT, 7);
-    gen_array_sizeof(ek, en);
-    code_emit(C_PUNCT, 8);
-  } else if call_len == 10 && call_hash == 899143 then {
-    code_emit(C_IDENT, 1005);
-    code_emit(C_PUNCT, 6);
-    code_emit(C_PUNCT, 10);
-    gen_expr(a);
-    code_emit(C_PUNCT, 7);
-    gen_array_value_ptr(ek, en, node_next[a]);
-    code_emit(C_PUNCT, 7);
-    gen_array_sizeof(ek, en);
-    code_emit(C_PUNCT, 8);
-  } else if call_len == 9 && call_hash == 890825 then {
-    gen_array_checked_get(a, node_next[a], ek, en);
-  } else if call_len == 9 && call_hash == 902357 then {
-    code_emit(C_IDENT, 1007);
-    code_emit(C_PUNCT, 6);
-    code_emit(C_PUNCT, 10);
-    gen_expr(a);
-    code_emit(C_PUNCT, 7);
-    gen_expr(node_next[a]);
-    code_emit(C_PUNCT, 7);
-    gen_array_value_ptr(ek, en, node_next[node_next[a]]);
-    code_emit(C_PUNCT, 7);
-    gen_array_sizeof(ek, en);
-    code_emit(C_PUNCT, 8);
-  } else if call_len == 11 && call_hash == 585984 then {
-    code_emit(C_IDENT, 1009);
-    code_emit(C_PUNCT, 6);
-    code_emit(C_PUNCT, 10);
-    gen_expr(a);
-    code_emit(C_PUNCT, 8);
-  } else if call_len == 10 && call_hash == 597913 then {
-    code_emit(C_IDENT, 1010);
-    code_emit(C_PUNCT, 6);
-    code_emit(C_PUNCT, 10);
-    gen_expr(a);
-    code_emit(C_PUNCT, 8);
-  } else {
-    code_emit(C_IDENT, sym_c_symbol(call_name));
-    code_emit(C_PUNCT, 6);
-    let arg: int = a;
-    while arg != 0 { gen_expr(arg); if node_next[arg] != 0 then code_emit(C_PUNCT, 7); arg = node_next[arg]; }
-    code_emit(C_PUNCT, 8);
-  }
-}
-
 func gen_call_name(id: int): int {
   let f: int = tc_find_function_ctx(node_value[id], node_scope[id]);
   if f == 0 then return sym_c_symbol(node_value[id]);
@@ -837,14 +718,11 @@ func gen_expr(id: int): void {
     let call_len: int = sym_len[call_name];
     let call_hash: int = sym_hash[call_name];
     if (call_len == 12 && call_hash == 334590) || (call_len == 13 && call_hash == 806795) || (call_len == 11 && call_hash == 649155) then gen_memory_builtin(id);
-    else if (call_len == 10 && call_hash == 790299) || (call_len == 13 && call_hash == 333999) || (call_len == 10 && call_hash == 899143) || (call_len == 9 && call_hash == 890825) || (call_len == 9 && call_hash == 902357) || (call_len == 11 && call_hash == 585984) || (call_len == 10 && call_hash == 597913) then gen_array_builtin(id);
     else { code_emit(C_IDENT, gen_call_name(id)); code_emit(C_PUNCT, 6); let arg: int = node_a[id]; while arg != 0 { gen_expr(arg); if node_next[arg] != 0 then code_emit(C_PUNCT, 7); arg = node_next[arg]; } code_emit(C_PUNCT, 8); }
   } else if k == N_DEREF then { code_emit(C_PUNCT, 9); gen_expr(node_a[id]); }
   else if k == N_ADDRESS then { code_emit(C_PUNCT, 10); gen_expr(node_a[id]); }
   else if k == N_INDEX then {
-    let base_kind: int = gen_expr_kind(node_a[id]);
-    if base_kind == TY_DYN_ARRAY then gen_array_checked_get(node_a[id], node_b[id], gen_array_elem_kind(node_a[id]), gen_array_elem_name(node_a[id]));
-    else { gen_expr(node_a[id]); code_emit(C_PUNCT, 2); gen_expr(node_b[id]); code_emit(C_PUNCT, 3); }
+    gen_expr(node_a[id]); code_emit(C_PUNCT, 2); gen_expr(node_b[id]); code_emit(C_PUNCT, 3);
   }
   else if k == N_FIELD_ACCESS then { gen_expr(node_a[id]); code_emit(C_PUNCT, 17); code_emit(C_IDENT, node_value[id]); }
 }
@@ -873,11 +751,7 @@ func gen_expr_kind(id: int): int {
   }
   if k == N_DEREF then return TY_INT;
   if k == N_FIELD_ACCESS then return TY_INT;
-  if k == N_CALL then {
-    let call_name: int = node_value[id];
-    if sym_len[call_name] == 9 && sym_hash[call_name] == 890825 then return gen_array_elem_kind(node_a[id]);
-    return tc_expr_kind_for_emit(id);
-  }
+  if k == N_CALL then return tc_expr_kind_for_emit(id);
   if k == N_BINOP then {
     if node_value[id] == OP_CONCAT then return TY_STRING;
     if node_value[id] == OP_EQ || node_value[id] == OP_NEQ || node_value[id] == OP_LT || node_value[id] == OP_GT || node_value[id] == OP_AND || node_value[id] == OP_OR then return TY_BOOL;
@@ -909,12 +783,7 @@ func gen_for_clause(id: int): void {
 func gen_initializer(ty: int, expr: int): void {
   let st: int = gen_substitute_type(ty);
   if (node_kind[st] == TY_NAMED || node_kind[st] == TY_GENERIC) && node_kind[expr] == N_INT && node_value[expr] == 0 then code_emit(C_PUNCT, 19);
-  else if node_kind[st] == TY_DYN_ARRAY && node_kind[expr] == N_CALL && sym_len[node_value[expr]] == 10 && sym_hash[node_value[expr]] == 790299 then {
-    let elem: int = node_a[st];
-    let witness: int = 0;
-    if node_a[expr] != 0 then witness = node_next[node_a[expr]];
-    gen_array_make_expr(node_a[expr], node_kind[elem], node_value[elem], witness);
-  } else gen_expr(expr);
+  else gen_expr(expr);
 }
 
 func gen_fun_decl(ty: int, name: int): void {
@@ -1435,12 +1304,6 @@ func ast_type(): int {
       if input_take(T_GT) == 0 then return 0;
       ty = ast_node(TY_GENERIC, args, 0, 0, named_type, 0);
     } else ty = ast_node(TY_NAMED, 0, 0, 0, named_type, 0);
-  } else if input_take(T_ARRAY) == 1 then {
-    if input_take(T_LT) == 0 then return 0;
-    let elem: int = ast_type();
-    if elem == 0 then return 0;
-    if input_take(T_GT) == 0 then return 0;
-    ty = ast_node(TY_DYN_ARRAY, elem, 0, 0, 0, 0);
   } else {
     if input_take(T_TINT) == 1 then base = TY_INT;
     else if input_take(T_TBOOL) == 1 then base = TY_BOOL;
@@ -1552,6 +1415,12 @@ func ast_primary(): int {
 }
 
 func ast_unary(): int {
+  if input_take(T_MINUS) == 1 then {
+    let e: int = ast_unary();
+    if e < 0 then return (0 - 1);
+    let zero: int = ast_node(N_INT, 0, 0, 0, 0, 0);
+    return ast_node(N_BINOP, zero, e, 0, OP_SUB, 0);
+  }
   if input_take(T_BITNOT) == 1 then { let e: int = ast_unary(); if e < 0 then return (0 - 1); let allbits: int = ast_node(N_INT, 0, 0, 0, (0 - 1), 0); return ast_node(N_BINOP, e, allbits, 0, OP_BITXOR, 0); }
   if input_take(T_STAR) == 1 then {
     let e: int = ast_unary();
@@ -2994,27 +2863,19 @@ func tc_cycle_type(ty: int): int {
   return 0;
 }
 
-func tc_name_is_array_free(name: int): int {
-  if sym_len[name] != 10 then return 0;
-  let s: int = sym_start[name];
-  if source[s] != 97 || source[s + 1] != 114 || source[s + 2] != 114 || source[s + 3] != 97 then return 0;
-  if source[s + 4] != 121 || source[s + 5] != 95 || source[s + 6] != 102 || source[s + 7] != 114 then return 0;
-  if source[s + 8] != 101 || source[s + 9] != 101 then return 0;
-  return 1;
-}
+
 func tc_release_name(name: int): int {
   if sym_len[name] == 11 && sym_hash[name] == 649155 then return 1;
   if sym_len[name] == 9 && sym_hash[name] == 340336 then return 1;
   if sym_len[name] == 10 && sym_hash[name] == 327082 then return 1;
-  if tc_name_is_array_free(name) == 1 then return 1;
   return 0;
 }
 
 func tc_owned_initializer(id: int): int {
   if id == 0 || node_kind[id] != N_CALL then return 0;
-  if sym_len[node_value[id]] == 10 && sym_hash[node_value[id]] == 984821 then return 1;
   if sym_len[node_value[id]] == 12 && sym_hash[node_value[id]] == 334590 then return 1;
   if sym_len[node_value[id]] == 13 && sym_hash[node_value[id]] == 806795 then return 1;
+  if sym_len[node_value[id]] == 10 && sym_hash[node_value[id]] == 984821 then return 1;
   if sym_len[node_value[id]] == 9 && sym_hash[node_value[id]] == 17002 then return 1;
   if sym_len[node_value[id]] == 21 && sym_hash[node_value[id]] == 375664 then return 1;
   if sym_len[node_value[id]] == 21 && sym_hash[node_value[id]] == 191106 then return 1;
@@ -3265,98 +3126,6 @@ func tc_expr(id: int): void {
       if tc_kind != TY_PTR then { tc_fail(8); return; }
       tc_kind = TY_VOID; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0; tc_result_type = 0; return;
     }
-    if call_len == 10 && call_hash == 790299 then {
-      let aa: int = node_a[id];
-      if aa == 0 then { tc_fail(13); return; }
-      if node_next[aa] != 0 then {
-        let witness: int = node_next[aa];
-        if node_next[witness] != 0 then { tc_fail(13); return; }
-        tc_expr(aa);
-        if tc_kind != TY_INT && tc_kind != TY_BOOL && tc_kind != TY_CHAR then { tc_fail(17); return; }
-        tc_expr(witness);
-        let ek_make: int = tc_kind; let en_make: int = tc_name;
-        let eek_make: int = tc_elem_kind; let een_make: int = tc_elem_name;
-        if ek_make == TY_VOID then { tc_fail(17); return; }
-        let witness_ty: int = tc_result_type;
-        if witness_ty == 0 then witness_ty = tc_type_node_from_summary(ek_make, en_make, eek_make, een_make);
-        tc_kind = TY_DYN_ARRAY; tc_name = 0; tc_elem_kind = ek_make; tc_elem_name = en_make;
-        tc_result_type = ast_node(TY_DYN_ARRAY, witness_ty, 0, 0, 0, 0);
-        return;
-      }
-      tc_expr(aa);
-      if tc_kind != TY_INT && tc_kind != TY_BOOL && tc_kind != TY_CHAR then tc_fail(17);
-      tc_kind = TY_DYN_ARRAY; tc_name = 0; tc_elem_kind = TY_INT; tc_elem_name = 0;
-      tc_result_type = ast_node(TY_DYN_ARRAY, ast_node(TY_INT, 0, 0, 0, 0, 0), 0, 0, 0, 0);
-      return;
-    }
-    if call_len == 13 && call_hash == 333999 then {
-      let aa: int = node_a[id];
-      if aa == 0 || node_next[aa] == 0 || node_next[node_next[aa]] != 0 then { tc_fail(13); return; }
-      tc_expr(aa);
-      if tc_kind != TY_DYN_ARRAY then { tc_fail(8); return; }
-      tc_require_mutable(aa);
-      let ek: int = tc_elem_kind; let en: int = tc_elem_name;
-      aa = node_next[aa]; tc_expr(aa);
-      if tc_kind != TY_INT && tc_kind != TY_BOOL && tc_kind != TY_CHAR && tc_kind != TY_FLOAT && tc_kind != TY_DOUBLE && tc_kind != TY_STRING && tc_kind != TY_PTR && tc_kind != TY_NAMED && tc_kind != TY_PARAM then tc_fail(17);
-      tc_kind = TY_DYN_ARRAY; tc_name = 0; tc_elem_kind = ek; tc_elem_name = en; return;
-    }
-    if call_len == 10 && call_hash == 899143 then {
-      let aa: int = node_a[id];
-      if aa == 0 || node_next[aa] == 0 || node_next[node_next[aa]] != 0 then { tc_fail(13); return; }
-      tc_expr(aa);
-      if tc_kind != TY_DYN_ARRAY then { tc_fail(8); return; }
-      tc_require_mutable(aa);
-      let ek: int = tc_elem_kind; let en: int = tc_elem_name;
-      aa = node_next[aa]; tc_expr(aa);
-      if tc_array_elem_same(ek, en, tc_kind, tc_name) == 0 then tc_fail(36);
-      tc_kind = TY_DYN_ARRAY; tc_name = 0; tc_elem_kind = ek; tc_elem_name = en; return;
-    }
-    if call_len == 9 && call_hash == 890825 then {
-      let aa: int = node_a[id];
-      if aa == 0 || node_next[aa] == 0 || node_next[node_next[aa]] != 0 then { tc_fail(13); return; }
-      tc_expr(aa);
-      if tc_kind != TY_DYN_ARRAY then { tc_fail(8); return; }
-      let ek: int = tc_elem_kind; let en: int = tc_elem_name;
-      aa = node_next[aa]; tc_expr(aa);
-      if tc_kind != TY_INT && tc_kind != TY_BOOL && tc_kind != TY_CHAR && tc_kind != TY_FLOAT && tc_kind != TY_DOUBLE && tc_kind != TY_STRING && tc_kind != TY_PTR && tc_kind != TY_NAMED && tc_kind != TY_PARAM then tc_fail(17);
-      tc_kind = ek; tc_name = en; tc_elem_kind = 0; tc_elem_name = 0;
-      if ek == TY_PTR && tc_last_var_type != 0 && node_a[tc_last_var_type] != 0 && node_a[node_a[tc_last_var_type]] != 0 then {
-        let pointee: int = node_a[node_a[tc_last_var_type]];
-        tc_elem_kind = node_kind[pointee];
-        if tc_elem_kind == TY_NAMED then tc_elem_name = node_value[pointee];
-      }
-      return;
-    }
-    if call_len == 9 && call_hash == 902357 then {
-      let aa: int = node_a[id];
-      if aa == 0 || node_next[aa] == 0 || node_next[node_next[aa]] == 0 || node_next[node_next[node_next[aa]]] != 0 then { tc_fail(13); return; }
-      tc_expr(aa);
-      if tc_kind != TY_DYN_ARRAY then { tc_fail(8); return; }
-      tc_require_mutable(aa);
-      let ek: int = tc_elem_kind; let en: int = tc_elem_name;
-      aa = node_next[aa]; tc_expr(aa);
-      if tc_kind != TY_INT && tc_kind != TY_BOOL && tc_kind != TY_CHAR && tc_kind != TY_FLOAT && tc_kind != TY_DOUBLE && tc_kind != TY_STRING && tc_kind != TY_PTR && tc_kind != TY_NAMED && tc_kind != TY_PARAM then { tc_fail(17); return; }
-      aa = node_next[aa]; tc_expr(aa);
-      if tc_array_elem_same(ek, en, tc_kind, tc_name) == 0 then tc_fail(36);
-      tc_kind = TY_VOID; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0; return;
-    }
-    if call_len == 11 && call_hash == 585984 then {
-      let aa: int = node_a[id];
-      if aa == 0 || node_next[aa] != 0 then { tc_fail(13); return; }
-      tc_expr(aa);
-      if tc_kind != TY_DYN_ARRAY then { tc_fail(8); return; }
-      tc_require_mutable(aa);
-      let ek: int = tc_elem_kind; let en: int = tc_elem_name;
-      tc_kind = TY_DYN_ARRAY; tc_name = 0; tc_elem_kind = ek; tc_elem_name = en; return;
-    }
-    if call_len == 10 && call_hash == 597913 then {
-      let aa: int = node_a[id];
-      if aa == 0 || node_next[aa] != 0 then { tc_fail(13); return; }
-      tc_expr(aa);
-      if tc_kind != TY_DYN_ARRAY then tc_fail(8);
-      tc_require_mutable(aa);
-      tc_kind = TY_VOID; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0; return;
-    }
     let fun_node: int = tc_find_function_ctx(node_value[id], node_scope[id]);
     if fun_node == 0 then {
       if tc_lookup_var(node_value[id]) == 1 && tc_kind == TY_FUN then {
@@ -3411,6 +3180,7 @@ func tc_expr(id: int): void {
       if ga != 0 || gp != 0 then tc_fail(13);
       let generic_ret: int = tc_substitute_type(node_b[fun_node]);
       tc_type_node(generic_ret);
+      node_aux[id] = tc_result_type;
       return;
     }
     let arg: int = node_a[id]; let p: int = node_c[fun_node];
@@ -3547,6 +3317,7 @@ func tc_emit_arg_type(id: int): int {
 }
 
 func tc_expr_kind_for_emit(id: int): int {
+  if id != 0 && node_kind[id] == N_CALL && node_aux[id] != 0 then return node_kind[node_aux[id]];
   let f: int = tc_find_function_ctx(node_value[id], node_scope[id]);
   if f != 0 then {
     if node_kind[f] == N_GENERIC_FUNC then {
@@ -3598,9 +3369,7 @@ func tc_stmt(id: int, expected_kind: int, expected_name: int): void {
     if tc_is_owner_kind(dk) == 1 && node_kind[node_c[id]] == N_VAR then tc_fail(40);
 
     if tc_same_full(dk, dn, de, den, ek, en, ee, een) == 0 then {
-      let polymorphic_make: int = 0;
-      if node_kind[node_c[id]] == N_CALL && sym_len[node_value[node_c[id]]] == 10 && sym_hash[node_value[node_c[id]]] == 790299 then polymorphic_make = 1;
-      if polymorphic_make == 0 && (node_kind[node_c[id]] != N_INT || node_value[node_c[id]] != 0) && node_kind[node_c[id]] != N_NULL then tc_fail(20);
+      if (node_kind[node_c[id]] != N_INT || node_value[node_c[id]] != 0) && node_kind[node_c[id]] != N_NULL then tc_fail(20);
     }
     if dk == TY_DYN_ARRAY && node_kind[node_c[id]] == N_VAR then tc_move_value(node_c[id]);
     tc_add_var(node_a[id], dk, dn, de, den, node_b[id]);
@@ -3686,7 +3455,7 @@ func tc_program(root: int): int {
   let item: int = node_a[root];
   while item != 0 { if node_kind[item] == N_STRUCT then { let f: int = node_a[item]; while f != 0 { tc_check_type(node_b[f]); f = node_next[f]; } if tc_cycle_struct(node_value[item]) == 1 then tc_fail(28); } item = node_next[item]; }
   item = node_a[root];
-    while item != 0 { if node_kind[item] == N_GLOBAL || node_kind[item] == N_CONST then { tc_type_node(node_b[item]); let gk: int = tc_kind; let gn: int = tc_name; let ge: int = tc_elem_kind; let gen: int = tc_elem_name; tc_add_var(node_a[item], gk, gn, ge, gen, node_b[item]); if node_kind[item] == N_CONST then sym_type[node_a[item]] = gk + 100; tc_expr(node_c[item]);     if tc_same_full(gk, gn, ge, gen, tc_kind, tc_name, tc_elem_kind, tc_elem_name) == 0 then { let polymorphic_make: int = 0; if node_kind[node_c[item]] == N_CALL && sym_len[node_value[node_c[item]]] == 10 && sym_hash[node_value[node_c[item]]] == 790299 then polymorphic_make = 1; if polymorphic_make == 0 && (node_kind[node_c[item]] != N_INT || node_value[node_c[item]] != 0) && node_kind[node_c[item]] != N_NULL then tc_fail(29); } } item = node_next[item]; }
+    while item != 0 { if node_kind[item] == N_GLOBAL || node_kind[item] == N_CONST then { tc_type_node(node_b[item]); let gk: int = tc_kind; let gn: int = tc_name; let ge: int = tc_elem_kind; let gen: int = tc_elem_name; tc_add_var(node_a[item], gk, gn, ge, gen, node_b[item]); if node_kind[item] == N_CONST then sym_type[node_a[item]] = gk + 100; tc_expr(node_c[item]);     if tc_same_full(gk, gn, ge, gen, tc_kind, tc_name, tc_elem_kind, tc_elem_name) == 0 && (node_kind[node_c[item]] != N_INT || node_value[node_c[item]] != 0) && node_kind[node_c[item]] != N_NULL then tc_fail(29); } item = node_next[item]; }
 
     tc_global_count = tc_var_count;
   item = node_a[root];
@@ -3789,18 +3558,9 @@ func emit_c_token(out: int*, kind: int, value: int): void {
   } else if kind == C_IDENT then {
     if value == 1001 then write_string(out, "printf");
     else if value == 1002 then write_string(out, "runtime_string_concat");
-    else if value == 1003 then write_string(out, "PyrelArray");
-    else if value == 1004 then write_string(out, "runtime_array_make");
-    else if value == 1005 then write_string(out, "runtime_array_push");
-    else if value == 1006 then write_string(out, "runtime_array_get");
-    else if value == 1007 then write_string(out, "runtime_array_set");
-    else if value == 1008 then write_string(out, "runtime_array_reserve");
-    else if value == 1009 then write_string(out, "runtime_array_clear");
-    else if value == 1010 then write_string(out, "runtime_array_free");
     else if value == 1011 then write_string(out, "sizeof");
     else if value == 1012 then write_string(out, "len");
     else if value == 1013 then write_string(out, "cap");
-    else if value == 1014 then write_string(out, "runtime_array_get_raw");
     else if value == 1015 then write_string(out, "data");
     else if value == 1016 then write_string(out, "pyrel_memory_alloc");
     else if value == 1017 then write_string(out, "pyrel_memory_resize");
@@ -3894,15 +3654,6 @@ func emit_runtime(out: int*): void {
   write_string(out, "static PYREL_UNUSED void* pyrel_memory_resize(void* old,int old_count,int new_count,size_t elem_size){size_t slot=(size_t)-1;size_t old_bytes;size_t new_bytes;void*p;if(old_count<0||new_count<0||new_count<old_count)pyrel_panic(1);if(old){slot=pyrel_find(old);if(slot==(size_t)-1)pyrel_panic(2);}old_bytes=pyrel_checked_bytes(old_count,elem_size);new_bytes=pyrel_checked_bytes(new_count,elem_size);p=realloc(old,new_bytes?new_bytes:1);if(!p)pyrel_panic(6);if(slot==(size_t)-1)pyrel_track(p);else pyrel_live[slot]=p;if(new_bytes>old_bytes)memset((char*)p+old_bytes,0,new_bytes-old_bytes);return p;}\n");
   write_string(out, "static PYREL_UNUSED void pyrel_memory_free(void*p){pyrel_release(p);}\n");
   write_string(out, "static PYREL_UNUSED char* runtime_string_concat(const char* a,const char* b){size_t na,nb,total;char* p;if(!a||!b)pyrel_panic(4);na=strlen(a);nb=strlen(b);if(na>(size_t)-1-nb-1)pyrel_panic(1);total=na+nb+1;p=(char*)malloc(total);if(!p)pyrel_panic(5);memcpy(p,a,na);memcpy(p+na,b,nb);p[na+nb]=0;return(char*)pyrel_track(p);}\n");
-  write_string(out, "typedef struct PyrelArray { void* data; int len; int cap; } PyrelArray;\n");
-  write_string(out, "static PYREL_UNUSED void pyrel_array_check(const PyrelArray* a){if(!a)pyrel_panic(4);if(a->len<0||a->cap<0||a->len>a->cap)pyrel_panic(3);if(a->cap>0&&(!a->data||pyrel_find(a->data)==(size_t)-1))pyrel_panic(2);}\n");
-  write_string(out, "static PYREL_UNUSED PyrelArray runtime_array_make(int capacity,size_t elem_size){PyrelArray a;if(capacity<0)pyrel_panic(1);if(capacity<1)capacity=4;pyrel_checked_bytes(capacity,elem_size);a.data=calloc((size_t)capacity,elem_size);if(!a.data)pyrel_panic(5);a.len=0;a.cap=capacity;a.data=pyrel_track(a.data);return a;}\n");
-  write_string(out, "static PYREL_UNUSED PyrelArray runtime_array_reserve(PyrelArray* a,int minimum,size_t elem_size){void*p;pyrel_array_check(a);if(minimum<0)pyrel_panic(1);if(minimum<=a->cap)return *a;pyrel_checked_bytes(minimum,elem_size);p=calloc((size_t)minimum,elem_size);if(!p)pyrel_panic(5);if(a->data){memcpy(p,a->data,pyrel_checked_bytes(a->len,elem_size));pyrel_release(a->data);}a->data=pyrel_track(p);a->cap=minimum;return *a;}\n");
-  write_string(out, "static PYREL_UNUSED PyrelArray runtime_array_push(PyrelArray* a,const void* value,size_t elem_size){int next;pyrel_array_check(a);if(!value)pyrel_panic(4);if(a->len>=a->cap){if(a->cap>2147483647/2)pyrel_panic(1);next=a->cap>0?a->cap*2:4;runtime_array_reserve(a,next,elem_size);}memcpy((char*)a->data+(size_t)a->len*elem_size,value,elem_size);a->len+=1;return *a;}\n");
-  write_string(out, "static PYREL_UNUSED void runtime_array_set(PyrelArray* a,int index,const void* value,size_t elem_size){pyrel_array_check(a);if(index<0||index>=a->len)pyrel_panic(3);if(!value)pyrel_panic(4);memcpy((char*)a->data+pyrel_checked_bytes(index,elem_size),value,elem_size);}\n");
-  write_string(out, "static PYREL_UNUSED PyrelArray runtime_array_clear(PyrelArray* a){pyrel_array_check(a);a->len=0;return *a;}\n");
-  write_string(out, "static PYREL_UNUSED void runtime_array_free(PyrelArray* a){if(!a)pyrel_panic(4);if(a->data){if(pyrel_find(a->data)==(size_t)-1)pyrel_panic(2);pyrel_release(a->data);}a->data=NULL;a->len=0;a->cap=0;}\n");
-  write_string(out, "static PYREL_UNUSED void* runtime_array_get_raw(PyrelArray* a,int index,size_t elem_size){pyrel_array_check(a);if(index<0||index>=a->len)pyrel_panic(3);return(char*)a->data+pyrel_checked_bytes(index,elem_size);}\n");
   write_string(out, "static PYREL_UNUSED int* alloc_ints(int n){int* p;if(n<0)pyrel_panic(1);if(n<1)n=1;pyrel_checked_bytes(n,sizeof(int));p=(int*)calloc((size_t)n,sizeof(int));if(!p)pyrel_panic(5);return(int*)pyrel_track(p);}\n");
   write_string(out, "static PYREL_UNUSED void free_ints(int* p){pyrel_release(p);}\n");
   write_string(out, "static PYREL_UNUSED int* grow_ints(int* p,int old,int n){size_t slot=(size_t)-1;int* q;if(old<0||n<0)pyrel_panic(1);if(n<=old)return p;if(p){slot=pyrel_find(p);if(slot==(size_t)-1)pyrel_panic(2);}pyrel_checked_bytes(n,sizeof(int));q=(int*)realloc(p,(size_t)n*sizeof(int));if(!q)pyrel_panic(6);if(p)pyrel_live[slot]=q;else pyrel_track(q);memset(q+old,0,(size_t)(n-old)*sizeof(int));return q;}\n");

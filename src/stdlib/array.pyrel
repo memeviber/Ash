@@ -42,6 +42,26 @@ namespace array {
     return a.data[index];
   }
 
+  func in_bounds<T>(a: Array<T>, index: int): bool {
+    if index < 0 then return false;
+    return index < a.len;
+  }
+
+  func get_or<T>(a: Array<T>, index: int, fallback: T): T {
+    if index < 0 then return fallback;
+    if index < a.len then return array::get(a, index);
+    return fallback;
+  }
+
+  func set_if_in_bounds<T>(a: Array<T>, index: int, value: T): bool {
+    if index < 0 then return false;
+    if index < a.len then {
+      a = array::set(a, index, value);
+      return 1;
+    }
+    return 0;
+  }
+
   func set<T>(a: Array<T>, index: int, value: T): Array<T> {
     a.data[index] = value;
     return a;
