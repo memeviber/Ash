@@ -164,23 +164,7 @@ let check program =
         (fun m f -> if SMap.mem f.name m then m else SMap.add f.name (List.map snd f.params, f.return_type) m)
         user_funcs program.externs
     in
-    let builtins = [
-      ("alloc_ints", ([TInt], TPtr TInt));
-      ("free_ints", ([TPtr TInt], TVoid));
-      ("grow_ints", ([TPtr TInt; TInt; TInt], TPtr TInt));
-      ("open_file", ([TString; TString], TPtr TVoid));
-      ("read_char", ([TPtr TVoid], TInt));
-      ("close_file", ([TPtr TVoid], TInt));
-      ("write_char", ([TPtr TVoid; TInt], TInt));
-      ("write_string", ([TPtr TVoid; TString], TInt));
-      ("basalt_include_open_root", ([TString], TPtr TVoid));
-      ("basalt_include_open_line", ([TPtr TInt; TInt; TInt], TPtr TVoid));
-      ("basalt_include_last_status", ([], TInt));
-      ("basalt_include_close", ([], TVoid));
-      ("basalt_include_reset_session", ([], TVoid));
-      ("basalt_include_line_mode", ([TPtr TInt; TInt], TInt));
-      ("basalt_inc_realpath", ([TString], TString))
-    ] in
+    let builtins = Ast.builtin_funcs in
     List.fold_left (fun m (name, sig_) -> if SMap.mem name m then m else SMap.add name sig_ m) declared_externs builtins
   in
   let structs =

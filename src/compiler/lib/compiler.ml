@@ -77,7 +77,7 @@ let rec unify_generic formal actual params subst =
 
 let infer_generic_args params formal actual =
   let subst = List.fold_left2 (fun m f a -> unify_generic f a params m) SMap.empty formal actual in
-  List.map (fun p -> match SMap.find_opt p subst with Some t -> t | None -> TInt) params
+  List.map (fun p -> match SMap.find_opt p subst with Some t -> t | None -> failwith ("internal: cannot infer generic argument " ^ p)) params
 
 let rec emit_expr_type env = function
   | Int _ -> TInt
@@ -89,9 +89,19 @@ let rec emit_expr_type env = function
   | Var x ->
       (match SMap.find_opt x env.vars with
        | Some t -> t
-       | None -> (match SMap.find_opt x env.funcs with Some (ps, r) -> TFunPtr (ps, r) | None -> TInt))
-  | Deref e -> (match emit_expr_type env e with TPtr t -> t | _ -> TInt)
-  | Index (e, _) -> (match emit_expr_type env e with TArray (t, _) | TPtr t | TDynArray t -> t | _ -> TInt)
+       | None ->
+           (match SMap.find_opt x env.funcs with
+            | Some (ps, r) -> TFunPtr (ps, r)
+            | None -> failwith ("internal: unknown variable or function " ^ x)))
+  | Deref e ->
+      (match emit_expr_type env e with
+       | TPtr t -> t
+       | t -> failwith ("internal: cannot dereference " ^ generic_type_name t))
+  | Index (e, _) ->
+      (match emit_expr_type env e with
+       | TArray (t, _) | TPtr t | TDynArray t -> t
+       | TString -> TChar
+       | t -> failwith ("internal: cannot index " ^ generic_type_name t))
   | AddressOf (Var f) when SMap.mem f env.funcs ->
       let (ps, r) = SMap.find f env.funcs in TFunPtr (ps, r)
   | AddressOf e -> TPtr (emit_expr_type env e)
@@ -107,18 +117,21 @@ let rec emit_expr_type env = function
                  (match List.assoc_opt f fields with Some t -> Some (substitute_typ subst t) | None -> None)
              | _ -> None)
       in
+      let struct_field n =
+        match SMap.find_opt n env.fields with
+        | Some fs -> (match SMap.find_opt f fs with Some t -> Some t | None -> None)
+        | None -> None
+      in
       (match emit_expr_type env e with
-       | TNamed n ->
-           (match SMap.find_opt n env.fields with
-            | Some fs -> (match SMap.find_opt f fs with Some t -> t | None -> TInt)
-            | None -> TInt)
-       | TPtr (TNamed n) ->
-           (match SMap.find_opt n env.fields with
-            | Some fs -> (match SMap.find_opt f fs with Some t -> t | None -> TInt)
-            | None -> TInt)
+       | TNamed n | TPtr (TNamed n) ->
+           (match struct_field n with
+            | Some t -> t
+            | None -> failwith ("internal: unknown field " ^ n ^ "." ^ f))
        | TGeneric (n, args) | TPtr (TGeneric (n, args)) ->
-           (match lookup_generic_field n args with Some t -> t | None -> TInt)
-       | _ -> TInt)
+           (match lookup_generic_field n args with
+            | Some t -> t
+            | None -> failwith ("internal: unknown field " ^ n ^ "." ^ f))
+       | t -> failwith ("internal: cannot access field " ^ f ^ " on " ^ generic_type_name t))
   | Binop (op, a, b) ->
       let ta = emit_expr_type env a and tb = emit_expr_type env b in
       let numeric t = match t with TInt | TBool | TChar | TFloat | TDouble -> true | _ -> false in
@@ -133,17 +146,22 @@ let rec emit_expr_type env = function
            | TPtr t, x when integer x -> TPtr t
            | x, TPtr t when integer x -> TPtr t
            | _ when numeric ta && numeric tb && (real ta || real tb) -> TDouble
-           | _ -> TInt)
+           | _ when numeric ta && numeric tb -> TInt
+           | _ -> failwith "internal: addition of incompatible operands")
       | Sub ->
           (match ta, tb with
            | TPtr _, TPtr _ -> TInt
            | TPtr t, x when integer x -> TPtr t
            | _ when numeric ta && numeric tb && (real ta || real tb) -> TDouble
-           | _ -> TInt)
-      | Mul | Div | Mod -> if numeric ta && numeric tb && (real ta || real tb) then TDouble else TInt)
+           | _ when numeric ta && numeric tb -> TInt
+           | _ -> failwith "internal: subtraction of incompatible operands")
+      | Mul | Div | Mod ->
+          if numeric ta && numeric tb && (real ta || real tb) then TDouble
+          else if numeric ta && numeric tb then TInt
+          else failwith "internal: arithmetic on non-numeric operands")
      | Call ("memory_alloc", [_; zero]) -> TPtr (emit_expr_type env zero)
    | Call ("memory_resize", [ptr; _; _; _]) ->
-       (match emit_expr_type env ptr with TPtr t -> TPtr t | _ -> TPtr TVoid)
+       (match emit_expr_type env ptr with TPtr t -> TPtr t | _ -> failwith "internal: memory_resize on non-pointer")
    | Call ("memory_free", _) -> TVoid
 
   | Call (f, args) ->
@@ -153,9 +171,16 @@ let rec emit_expr_type env = function
            let type_args = infer_generic_args params (List.map snd gf.params) actual in
            substitute_typ (List.fold_left2 (fun m p t -> SMap.add p t m) SMap.empty params type_args) gf.return_type
        | None ->
-           (match SMap.find_opt f env.funcs with Some (_, t) -> t | None -> (match SMap.find_opt f env.vars with Some (TFunPtr (_, t)) -> t | _ -> TInt)))
+           (match SMap.find_opt f env.funcs with
+            | Some (_, t) -> t
+            | None ->
+                (match SMap.find_opt f env.vars with
+                 | Some (TFunPtr (_, t)) -> t
+                 | _ -> failwith ("internal: unknown function " ^ f))))
   | IndirectCall (f, _) ->
-      (match emit_expr_type env f with TFunPtr (_, t) -> t | _ -> TInt)
+      (match emit_expr_type env f with
+       | TFunPtr (_, t) -> t
+       | t -> failwith ("internal: cannot call " ^ generic_type_name t))
 
 let c_escape s =
   let b = Buffer.create (String.length s + 2) in
@@ -582,7 +607,9 @@ static BASALT_UNUSED void basalt_include_reset_session(void){basalt_inc_active_n
   let emit_env =
     let funcs =
       List.fold_left (fun m f -> SMap.add f.name (List.map snd f.params, f.return_type) m)
-        (List.fold_left (fun m f -> SMap.add f.name (List.map snd f.params, f.return_type) m) SMap.empty program.externs)
+        (List.fold_left (fun m (name, sig_) -> SMap.add name sig_ m)
+           (List.fold_left (fun m f -> SMap.add f.name (List.map snd f.params, f.return_type) m) SMap.empty program.externs)
+           Ast.builtin_funcs)
         program.functions
     in
     let fields = List.fold_left (fun m (n, fs) -> SMap.add n (List.fold_left (fun fm (x, t) -> SMap.add x t fm) SMap.empty fs) m) SMap.empty program.structs in

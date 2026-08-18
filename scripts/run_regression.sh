@@ -89,5 +89,10 @@ expect_collision_reject "$ROOT/tests/regression/nested_namespace_segment_collisi
 expect_reject "$ROOT/tests/stress/modulo_invalid_string.bsl" modulo_invalid_string
 expect_reject "$ROOT/tests/regression/undefined_function_call.bsl" undefined_function_call
 expect_reject "$ROOT/tests/regression/non_function_value_call.bsl" non_function_value_call
+expect_reject "$ROOT/tests/regression/unknown_variable_use.bsl" unknown_variable_use
+expect_reject "$ROOT/tests/regression/unknown_field_access.bsl" unknown_field_access
+expect_reject "$ROOT/tests/regression/deref_non_pointer.bsl" deref_non_pointer
+expect_reject "$ROOT/tests/regression/index_non_container.bsl" index_non_container
+expect_reject "$ROOT/tests/regression/indirect_call_non_function.bsl" indirect_call_non_function
 expect_reject "$ROOT/tests/regression/reserved_runtime_function.bsl" reserved_runtime_function
 printf 'Regression checks completed successfully.\n'

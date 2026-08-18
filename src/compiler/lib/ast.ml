@@ -65,6 +65,24 @@ let c_symbol_name name =
   loop 0;
   Buffer.contents b
 
+let builtin_funcs = [
+  ("alloc_ints", ([TInt], TPtr TInt));
+  ("free_ints", ([TPtr TInt], TVoid));
+  ("grow_ints", ([TPtr TInt; TInt; TInt], TPtr TInt));
+  ("open_file", ([TString; TString], TPtr TVoid));
+  ("read_char", ([TPtr TVoid], TInt));
+  ("close_file", ([TPtr TVoid], TInt));
+  ("write_char", ([TPtr TVoid; TInt], TInt));
+  ("write_string", ([TPtr TVoid; TString], TInt));
+  ("basalt_include_open_root", ([TString], TPtr TVoid));
+  ("basalt_include_open_line", ([TPtr TInt; TInt; TInt], TPtr TVoid));
+  ("basalt_include_last_status", ([], TInt));
+  ("basalt_include_close", ([], TVoid));
+  ("basalt_include_reset_session", ([], TVoid));
+  ("basalt_include_line_mode", ([TPtr TInt; TInt], TInt));
+  ("basalt_inc_realpath", ([TString], TString))
+]
+
 type program = {
   globals : global_def list;
   consts : global_def list;
