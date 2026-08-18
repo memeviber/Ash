@@ -1,17 +1,17 @@
-include "../../src/stdlib/string.ash"
-include "../../src/stdlib/slice.ash"
-include "../../src/stdlib/map.ash"
+include "../../src/stdlib/string.pyrel"
+include "../../src/stdlib/slice.pyrel"
+include "../../src/stdlib/map.pyrel"
 
 func main(): int {
   let round: int = 0;
   while (round < 120) {
-    let s: string = "Ash";
+    let s: string = "Pyrel";
     let k: int = 0;
     while (k < 24) {
-      s = string_concat(s, "-x");
+      s = str::concat(s, "-x");
       k = k + 1;
     }
-    if (string_byte_len(s) == 51) then {
+    if (str::byte_len(s) == 51) then {
       print 1;
     } else {
       print 0;

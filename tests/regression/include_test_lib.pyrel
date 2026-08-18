@@ -1,4 +1,4 @@
-include "include_test_nested.ash"
+include "include_test_nested.pyrel"
 func imported_value(): int {
   return nested_value() + 1;
 }

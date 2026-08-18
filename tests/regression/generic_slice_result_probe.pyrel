@@ -1,5 +1,5 @@
-include "../../src/stdlib/slice.ash"
-include "../../src/stdlib/result.ash"
+include "../../src/stdlib/slice.pyrel"
+include "../../src/stdlib/result.pyrel"
 
 func main(): int {
   let numbers: slice::Slice<int> = slice::new(0);
@@ -16,7 +16,7 @@ func main(): int {
   print slice::is_empty(empty);
 
   let words: slice::Slice<string> = slice::new("");
-  let words2: slice::Slice<string> = slice::push(words, "ash");
+  let words2: slice::Slice<string> = slice::push(words, "pyrel");
   print slice::get(words2, 0);
 
   let good: result::Result<int, string> = result::ok(42, "zero");

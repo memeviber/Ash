@@ -1,6 +1,6 @@
-// Ash bootstrap v1/v2 driver: AST payload -> C-token IR -> deterministic second pass.
+// Pyrel bootstrap v1/v2 driver: AST payload -> C-token IR -> deterministic second pass.
 //
-// Ash has no records or dynamic allocation yet, so the AST is an arena of
+// Pyrel has no records or dynamic allocation yet, so the AST is an arena of
 // parallel fixed-size arrays. Every node carries a kind, up to three child
 // links, one integer payload, one auxiliary payload, and a linked-list next
 // link. Names and strings are represented by stable payload IDs; the future
@@ -1629,16 +1629,16 @@ func include_process_line(line: int*, length: int): void {
     while i < length { source_put(line[i]); i = i + 1; }
     source_put(10);
   } else {
-    let child: int* = ash_include_open_line(line, length, mode);
+    let child: int* = pyrel_include_open_line(line, length, mode);
           if child == 0 then {
-      if ash_include_last_status() == 1 then include_ok = 0;
+      if pyrel_include_last_status() == 1 then include_ok = 0;
 
     } else if mode == 1 then include_expand_handle(child);
     else {
       let c: int = read_char(child);
       while c != (0 - 1) { c_source_put(c); c = read_char(child); }
       close_file(child);
-      ash_include_close();
+      pyrel_include_close();
     }
   }
 }
@@ -1737,16 +1737,16 @@ func map_token(k: int): int {
 
 func load_tokens_from_file(path: string): void {
   input_reset();
-  ash_include_reset_session();
+  pyrel_include_reset_session();
   source_reset();
   c_source_reset();
   include_ok = 1;
-  let handle: int* = ash_include_open_root(path);
+  let handle: int* = pyrel_include_open_root(path);
   if handle == 0 then include_ok = 0;
   else {
     include_expand_handle(handle);
     close_file(handle);
-    ash_include_close();
+    pyrel_include_close();
   }
   let k: int = lexer_next();
   while k != L_EOF {
@@ -2428,36 +2428,36 @@ func emit_c_token(out: int*, kind: int, value: int): void {
 }
 
 func emit_runtime(out: int*): void {
-  write_string(out, "#if defined(_WIN32)\n#include <direct.h>\n#else\n#define _POSIX_C_SOURCE 200809L\n#define _XOPEN_SOURCE 700\n#endif\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n#include <limits.h>\nstatic void* ash_track(void*);\n");
-  write_string(out, "static char** ash_inc_active=NULL;static size_t ash_inc_active_n=0,ash_inc_active_cap=0;static char** ash_inc_loaded=NULL;static size_t ash_inc_loaded_n=0,ash_inc_loaded_cap=0;static int ash_inc_status=0;\n");
-  write_string(out, "static int ash_inc_eq(const char*a,const char*b){return strcmp(a,b)==0;}\n");
-  write_string(out, "static size_t ash_inc_find(char**v,size_t n,const char*p){size_t i;for(i=0;i<n;i++)if(ash_inc_eq(v[i],p))return i;return (size_t)-1;}\n");
-  write_string(out, "static void ash_inc_add(char***vp,size_t*np,size_t*cp,char*p){size_t c;char**q;if(*np==*cp){c=*cp?*cp*2:16;q=(char**)realloc(*vp,c*sizeof(char*));if(!q)exit(2);*vp=q;*cp=c;}(*vp)[(*np)++]=p;}\n");
-  write_string(out, "static char* ash_inc_strdup(const char*p){size_t n=strlen(p);char*q=(char*)malloc(n+1);if(!q)exit(2);memcpy(q,p,n+1);return(char*)ash_track(q);}\n");
-  write_string(out, "static char* ash_inc_realpath(const char*p){\n#if defined(_WIN32)\nchar*q=_fullpath(NULL,p,0);if(q)return(char*)ash_track(q);\n#else\nchar*q=realpath(p,NULL);if(q)return(char*)ash_track(q);\n#endif\nreturn ash_inc_strdup(p);}\n");
-  write_string(out, "static int ash_inc_begin(char*p){if(ash_inc_find(ash_inc_active,ash_inc_active_n,p)!=(size_t)-1){ash_inc_status=1;return 0;}if(ash_inc_find(ash_inc_loaded,ash_inc_loaded_n,p)!=(size_t)-1){ash_inc_status=2;return 0;}ash_inc_add(&ash_inc_active,&ash_inc_active_n,&ash_inc_active_cap,p);ash_inc_status=0;return 1;}\n");
-  write_string(out, "static void ash_include_close(void){if(ash_inc_active_n){char*p=ash_inc_active[--ash_inc_active_n];if(ash_inc_find(ash_inc_loaded,ash_inc_loaded_n,p)==(size_t)-1)ash_inc_add(&ash_inc_loaded,&ash_inc_loaded_n,&ash_inc_loaded_cap,p);}}\n");
-  write_string(out, "static char* ash_inc_join(const char*base,const char*raw){const char*s=strrchr(base,'/');size_t n=s?(size_t)(s-base+1):0;size_t m=strlen(raw);char*q=(char*)malloc(n+m+1);if(!q)exit(2);if(n)memcpy(q,base,n);memcpy(q+n,raw,m+1);return(char*)ash_track(q);}\n");
-  write_string(out, "static int ash_include_line_mode(int*line,int n){int i=0,j;while(i<n&&(line[i]==' '||line[i]==9))i++;if(i+7<=n&&line[i]=='i'&&line[i+1]=='n'&&line[i+2]=='c'&&line[i+3]=='l'&&line[i+4]=='u'&&line[i+5]=='d'&&line[i+6]=='e'){j=i+7;while(j<n&&(line[j]==' '||line[j]==9))j++;if(j<n&&line[j]==34)return 1;}if(i+8<=n&&line[i]=='i'&&line[i+1]=='n'&&line[i+2]=='c'&&line[i+3]=='l'&&line[i+4]=='u'&&line[i+5]=='d'&&line[i+6]=='e'&&line[i+7]=='c'){j=i+8;while(j<n&&(line[j]==' '||line[j]==9))j++;if(j<n&&line[j]==34)return 2;}return 0;}\n");
-  write_string(out, "static void* ash_include_open_root(const char*path){char*p=ash_inc_realpath(path);FILE*f;if(!ash_inc_begin(p))return NULL;f=fopen(p,(const char[]){114,0});if(!f){ash_inc_status=3;ash_include_close();return NULL;}return(void*)f;}\n");
-  write_string(out, "static void* ash_include_open_line(int*line,int n,int mode){int i=0,a,b,j;char*raw,*joined,*canon;FILE*f;(void)mode;while(i<n&&line[i]!=34)i++;if(i>=n)return NULL;a=++i;while(i<n&&line[i]!=34)i++;if(i>=n)return NULL;b=i;raw=(char*)malloc((size_t)(b-a)+1);if(!raw)exit(2);{int k;for(k=0;k<b-a;k++)raw[k]=(char)line[a+k];}raw[b-a]=0;raw=(char*)ash_track(raw);j=i+1;while(j<n&&(line[j]==32||line[j]==9))j++;if(j<n&&line[j]==59)j++;while(j<n&&(line[j]==32||line[j]==9))j++;if(j!=n)return NULL;joined=ash_inc_join(ash_inc_active[ash_inc_active_n-1],raw);canon=ash_inc_realpath(joined);if(!ash_inc_begin(canon))return NULL;f=fopen(canon,(const char[]){114,0});if(!f){ash_inc_status=3;ash_include_close();return NULL;}return(void*)f;}\n");
-  write_string(out, "static int ash_include_last_status(void){return ash_inc_status;}\n");
-  write_string(out, "static void ash_include_reset_session(void){ash_inc_active_n=0;ash_inc_loaded_n=0;ash_inc_status=0;}\n");
+  write_string(out, "#if defined(_WIN32)\n#include <direct.h>\n#else\n#define _POSIX_C_SOURCE 200809L\n#define _XOPEN_SOURCE 700\n#endif\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n#include <limits.h>\nstatic void* pyrel_track(void*);\n");
+  write_string(out, "static char** pyrel_inc_active=NULL;static size_t pyrel_inc_active_n=0,pyrel_inc_active_cap=0;static char** pyrel_inc_loaded=NULL;static size_t pyrel_inc_loaded_n=0,pyrel_inc_loaded_cap=0;static int pyrel_inc_status=0;\n");
+  write_string(out, "static int pyrel_inc_eq(const char*a,const char*b){return strcmp(a,b)==0;}\n");
+  write_string(out, "static size_t pyrel_inc_find(char**v,size_t n,const char*p){size_t i;for(i=0;i<n;i++)if(pyrel_inc_eq(v[i],p))return i;return (size_t)-1;}\n");
+  write_string(out, "static void pyrel_inc_add(char***vp,size_t*np,size_t*cp,char*p){size_t c;char**q;if(*np==*cp){c=*cp?*cp*2:16;q=(char**)realloc(*vp,c*sizeof(char*));if(!q)exit(2);*vp=q;*cp=c;}(*vp)[(*np)++]=p;}\n");
+  write_string(out, "static char* pyrel_inc_strdup(const char*p){size_t n=strlen(p);char*q=(char*)malloc(n+1);if(!q)exit(2);memcpy(q,p,n+1);return(char*)pyrel_track(q);}\n");
+  write_string(out, "static char* pyrel_inc_realpath(const char*p){\n#if defined(_WIN32)\nchar*q=_fullpath(NULL,p,0);if(q)return(char*)pyrel_track(q);\n#else\nchar*q=realpath(p,NULL);if(q)return(char*)pyrel_track(q);\n#endif\nreturn pyrel_inc_strdup(p);}\n");
+  write_string(out, "static int pyrel_inc_begin(char*p){if(pyrel_inc_find(pyrel_inc_active,pyrel_inc_active_n,p)!=(size_t)-1){pyrel_inc_status=1;return 0;}if(pyrel_inc_find(pyrel_inc_loaded,pyrel_inc_loaded_n,p)!=(size_t)-1){pyrel_inc_status=2;return 0;}pyrel_inc_add(&pyrel_inc_active,&pyrel_inc_active_n,&pyrel_inc_active_cap,p);pyrel_inc_status=0;return 1;}\n");
+  write_string(out, "static void pyrel_include_close(void){if(pyrel_inc_active_n){char*p=pyrel_inc_active[--pyrel_inc_active_n];if(pyrel_inc_find(pyrel_inc_loaded,pyrel_inc_loaded_n,p)==(size_t)-1)pyrel_inc_add(&pyrel_inc_loaded,&pyrel_inc_loaded_n,&pyrel_inc_loaded_cap,p);}}\n");
+  write_string(out, "static char* pyrel_inc_join(const char*base,const char*raw){const char*s=strrchr(base,'/');size_t n=s?(size_t)(s-base+1):0;size_t m=strlen(raw);char*q=(char*)malloc(n+m+1);if(!q)exit(2);if(n)memcpy(q,base,n);memcpy(q+n,raw,m+1);return(char*)pyrel_track(q);}\n");
+  write_string(out, "static int pyrel_include_line_mode(int*line,int n){int i=0,j;while(i<n&&(line[i]==' '||line[i]==9))i++;if(i+7<=n&&line[i]=='i'&&line[i+1]=='n'&&line[i+2]=='c'&&line[i+3]=='l'&&line[i+4]=='u'&&line[i+5]=='d'&&line[i+6]=='e'){j=i+7;while(j<n&&(line[j]==' '||line[j]==9))j++;if(j<n&&line[j]==34)return 1;}if(i+8<=n&&line[i]=='i'&&line[i+1]=='n'&&line[i+2]=='c'&&line[i+3]=='l'&&line[i+4]=='u'&&line[i+5]=='d'&&line[i+6]=='e'&&line[i+7]=='c'){j=i+8;while(j<n&&(line[j]==' '||line[j]==9))j++;if(j<n&&line[j]==34)return 2;}return 0;}\n");
+  write_string(out, "static void* pyrel_include_open_root(const char*path){char*p=pyrel_inc_realpath(path);FILE*f;if(!pyrel_inc_begin(p))return NULL;f=fopen(p,(const char[]){114,0});if(!f){pyrel_inc_status=3;pyrel_include_close();return NULL;}return(void*)f;}\n");
+  write_string(out, "static void* pyrel_include_open_line(int*line,int n,int mode){int i=0,a,b,j;char*raw,*joined,*canon;FILE*f;(void)mode;while(i<n&&line[i]!=34)i++;if(i>=n)return NULL;a=++i;while(i<n&&line[i]!=34)i++;if(i>=n)return NULL;b=i;raw=(char*)malloc((size_t)(b-a)+1);if(!raw)exit(2);{int k;for(k=0;k<b-a;k++)raw[k]=(char)line[a+k];}raw[b-a]=0;raw=(char*)pyrel_track(raw);j=i+1;while(j<n&&(line[j]==32||line[j]==9))j++;if(j<n&&line[j]==59)j++;while(j<n&&(line[j]==32||line[j]==9))j++;if(j!=n)return NULL;joined=pyrel_inc_join(pyrel_inc_active[pyrel_inc_active_n-1],raw);canon=pyrel_inc_realpath(joined);if(!pyrel_inc_begin(canon))return NULL;f=fopen(canon,(const char[]){114,0});if(!f){pyrel_inc_status=3;pyrel_include_close();return NULL;}return(void*)f;}\n");
+  write_string(out, "static int pyrel_include_last_status(void){return pyrel_inc_status;}\n");
+  write_string(out, "static void pyrel_include_reset_session(void){pyrel_inc_active_n=0;pyrel_inc_loaded_n=0;pyrel_inc_status=0;}\n");
   write_string(out, "static void* open_file(const char* p,const char* m){return (void*)fopen(p,m);}\n");
   write_string(out, "static int read_char(void* h){int c=fgetc((FILE*)h);return c==EOF?-1:c;}\n");
   write_string(out, "static int close_file(void* h){return fclose((FILE*)h);}\n");
   write_string(out, "static int write_char(void* h,int c){return fputc(c,(FILE*)h);}\n");
   write_string(out, "static int write_string(void* h,const char* s){return fputs(s,(FILE*)h);}\n");
-  write_string(out, "static void** ash_live=NULL;static size_t ash_live_n=0,ash_live_cap=0;\n");
-  write_string(out, "static size_t ash_find(void* p){size_t i;for(i=0;i<ash_live_n;i++)if(ash_live[i]==p)return i;return (size_t)-1;}\n");
-  write_string(out, "static void ash_validate(void){size_t i,j;for(i=0;i<ash_live_n;i++){if(!ash_live[i])abort();for(j=i+1;j<ash_live_n;j++)if(ash_live[i]==ash_live[j])abort();}}\n");
-  write_string(out, "static void ash_cleanup(void){size_t i;ash_validate();for(i=0;i<ash_live_n;i++)free(ash_live[i]);free(ash_live);ash_live=NULL;ash_live_n=ash_live_cap=0;}\n");
-  write_string(out, "static void* ash_track(void* p){size_t c;void**q;if(!p)return NULL;if(ash_find(p)!=(size_t)-1)abort();if(ash_live_n==ash_live_cap){c=ash_live_cap?ash_live_cap*2:32;q=(void**)realloc(ash_live,c*sizeof(void*));if(!q)exit(2);ash_live=q;ash_live_cap=c;}ash_live[ash_live_n++]=p;atexit(ash_cleanup);return p;}\n");
-  write_string(out, "static void ash_release(void* p){size_t i;if(!p)return;i=ash_find(p);if(i==(size_t)-1)return;free(p);ash_live[i]=ash_live[--ash_live_n];}\n");
-  write_string(out, "static char* string_concat(const char* a,const char* b){size_t na=strlen(a),nb=strlen(b);char* p=(char*)malloc(na+nb+1);if(!p)exit(2);memcpy(p,a,na);memcpy(p+na,b,nb);p[na+nb]=0;return (char*)ash_track(p);}\n");
-  write_string(out, "static int* alloc_ints(int n){if(n<1)n=1;return (int*)ash_track(calloc((size_t)n,sizeof(int)));}\n");
-  write_string(out, "static void free_ints(int* p){ash_release(p);}\n");
-  write_string(out, "static int* grow_ints(int* p,int old,int n){size_t slot=(size_t)-1;int* q;if(n<=old)return p;if(p){slot=ash_find(p);if(slot==(size_t)-1)exit(2);}q=(int*)realloc(p,(size_t)n*sizeof(int));if(!q)exit(2);if(p)ash_live[slot]=q;else ash_track(q);return q;}\n");
+  write_string(out, "static void** pyrel_live=NULL;static size_t pyrel_live_n=0,pyrel_live_cap=0;\n");
+  write_string(out, "static size_t pyrel_find(void* p){size_t i;for(i=0;i<pyrel_live_n;i++)if(pyrel_live[i]==p)return i;return (size_t)-1;}\n");
+  write_string(out, "static void pyrel_validate(void){size_t i,j;for(i=0;i<pyrel_live_n;i++){if(!pyrel_live[i])abort();for(j=i+1;j<pyrel_live_n;j++)if(pyrel_live[i]==pyrel_live[j])abort();}}\n");
+  write_string(out, "static void pyrel_cleanup(void){size_t i;pyrel_validate();for(i=0;i<pyrel_live_n;i++)free(pyrel_live[i]);free(pyrel_live);pyrel_live=NULL;pyrel_live_n=pyrel_live_cap=0;}\n");
+  write_string(out, "static void* pyrel_track(void* p){size_t c;void**q;if(!p)return NULL;if(pyrel_find(p)!=(size_t)-1)abort();if(pyrel_live_n==pyrel_live_cap){c=pyrel_live_cap?pyrel_live_cap*2:32;q=(void**)realloc(pyrel_live,c*sizeof(void*));if(!q)exit(2);pyrel_live=q;pyrel_live_cap=c;}pyrel_live[pyrel_live_n++]=p;atexit(pyrel_cleanup);return p;}\n");
+  write_string(out, "static void pyrel_release(void* p){size_t i;if(!p)return;i=pyrel_find(p);if(i==(size_t)-1)return;free(p);pyrel_live[i]=pyrel_live[--pyrel_live_n];}\n");
+  write_string(out, "static char* string_concat(const char* a,const char* b){size_t na=strlen(a),nb=strlen(b);char* p=(char*)malloc(na+nb+1);if(!p)exit(2);memcpy(p,a,na);memcpy(p+na,b,nb);p[na+nb]=0;return (char*)pyrel_track(p);}\n");
+  write_string(out, "static int* alloc_ints(int n){if(n<1)n=1;return (int*)pyrel_track(calloc((size_t)n,sizeof(int)));}\n");
+  write_string(out, "static void free_ints(int* p){pyrel_release(p);}\n");
+  write_string(out, "static int* grow_ints(int* p,int old,int n){size_t slot=(size_t)-1;int* q;if(n<=old)return p;if(p){slot=pyrel_find(p);if(slot==(size_t)-1)exit(2);}q=(int*)realloc(p,(size_t)n*sizeof(int));if(!q)exit(2);if(p)pyrel_live[slot]=q;else pyrel_track(q);return q;}\n");
   write_string(out, "extern int* payload_int; extern int* payload_name; extern int* payload_string;\n");
   write_string(out, "extern int* code_kind; extern int* code_value; extern int* input_kind; extern int* input_value;\n");
   write_string(out, "extern int* source; extern int* sym_start; extern int* sym_len; extern int* sym_hash; extern int* sym_kind; extern int* sym_type; extern int* sym_scope;\n\n");

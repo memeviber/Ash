@@ -9,7 +9,7 @@ func main(): int {
   let total: int = 0;
   while (i < 1000) {
     total = total + c_abs(0 - i);
-    total = total + c_strlen("Ash-ffi");
+    total = total + c_strlen("Pyrel-ffi");
     total = total + c_mix(i, 3);
     i = i + 1;
   }

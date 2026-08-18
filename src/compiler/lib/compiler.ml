@@ -189,7 +189,7 @@ let rec compile_typ = function
   | TVoid -> "void"
   | TPtr t -> compile_typ t ^ "*"
   | TArray (t, n) -> compile_typ t ^ "[" ^ string_of_int n ^ "]"
-  | TDynArray _ -> "AshArray"
+  | TDynArray _ -> "PyrelArray"
   | TFunPtr (_, r) -> compile_typ r
   | TNamed n -> c_symbol_name n
   | TParam n -> n
@@ -244,7 +244,7 @@ let rec collect_stmt add = function
   | Break | Continue -> ()
 
 let c_type_of_element = function
-  | TDynArray _ -> "AshArray"
+  | TDynArray _ -> "PyrelArray"
   | t -> compile_typ t
 
 let rec compile_decl t name =
@@ -552,70 +552,70 @@ let compile program =
 #include <string.h>
 #include <limits.h>
 #if defined(__GNUC__) || defined(__clang__)
-#define ASH_UNUSED __attribute__((unused))
+#define PYREL_UNUSED __attribute__((unused))
 #else
-#define ASH_UNUSED
+#define PYREL_UNUSED
 #endif
-static void* ash_track(void*);
-static char** ash_inc_active=NULL;static size_t ash_inc_active_n=0,ash_inc_active_cap=0;static char** ash_inc_loaded=NULL;static size_t ash_inc_loaded_n=0,ash_inc_loaded_cap=0;static int ash_inc_status=0;
-static ASH_UNUSED size_t ash_inc_find(char**v,size_t n,const char*p){size_t i;for(i=0;i<n;i++)if(strcmp(v[i],p)==0)return i;return (size_t)-1;}
-static ASH_UNUSED void ash_inc_add(char***vp,size_t*np,size_t*cp,char*p){size_t c;char**q;if(*np==*cp){c=*cp?*cp*2:16;q=(char**)realloc(*vp,c*sizeof(char*));if(!q)exit(2);*vp=q;*cp=c;}(*vp)[(*np)++]=p;}
-static ASH_UNUSED char* ash_inc_strdup(const char*p){size_t n=strlen(p);char*q=(char*)malloc(n+1);if(!q)exit(2);memcpy(q,p,n+1);return(char*)ash_track(q);}
-static ASH_UNUSED char* ash_inc_realpath(const char*p){
+static void* pyrel_track(void*);
+static char** pyrel_inc_active=NULL;static size_t pyrel_inc_active_n=0,pyrel_inc_active_cap=0;static char** pyrel_inc_loaded=NULL;static size_t pyrel_inc_loaded_n=0,pyrel_inc_loaded_cap=0;static int pyrel_inc_status=0;
+static PYREL_UNUSED size_t pyrel_inc_find(char**v,size_t n,const char*p){size_t i;for(i=0;i<n;i++)if(strcmp(v[i],p)==0)return i;return (size_t)-1;}
+static PYREL_UNUSED void pyrel_inc_add(char***vp,size_t*np,size_t*cp,char*p){size_t c;char**q;if(*np==*cp){c=*cp?*cp*2:16;q=(char**)realloc(*vp,c*sizeof(char*));if(!q)exit(2);*vp=q;*cp=c;}(*vp)[(*np)++]=p;}
+static PYREL_UNUSED char* pyrel_inc_strdup(const char*p){size_t n=strlen(p);char*q=(char*)malloc(n+1);if(!q)exit(2);memcpy(q,p,n+1);return(char*)pyrel_track(q);}
+static PYREL_UNUSED char* pyrel_inc_realpath(const char*p){
 #if defined(_WIN32)
- char*q=_fullpath(NULL,p,0);if(q)return(char*)ash_track(q);
+ char*q=_fullpath(NULL,p,0);if(q)return(char*)pyrel_track(q);
 #else
- char*q=realpath(p,NULL);if(q)return(char*)ash_track(q);
+ char*q=realpath(p,NULL);if(q)return(char*)pyrel_track(q);
 #endif
- return ash_inc_strdup(p);
+ return pyrel_inc_strdup(p);
 }
-static ASH_UNUSED int ash_inc_begin(char*p){if(ash_inc_find(ash_inc_active,ash_inc_active_n,p)!=(size_t)-1){ash_inc_status=1;return 0;}if(ash_inc_find(ash_inc_loaded,ash_inc_loaded_n,p)!=(size_t)-1){ash_inc_status=2;return 0;}ash_inc_add(&ash_inc_active,&ash_inc_active_n,&ash_inc_active_cap,p);ash_inc_status=0;return 1;}
-static ASH_UNUSED void ash_include_close(void){if(ash_inc_active_n){char*p=ash_inc_active[--ash_inc_active_n];if(ash_inc_find(ash_inc_loaded,ash_inc_loaded_n,p)==(size_t)-1)ash_inc_add(&ash_inc_loaded,&ash_inc_loaded_n,&ash_inc_loaded_cap,p);}}
-static ASH_UNUSED char* ash_inc_join(const char*base,const char*raw){const char*s=strrchr(base,'/');size_t n=s?(size_t)(s-base+1):0;size_t m=strlen(raw);char*q=(char*)malloc(n+m+1);if(!q)exit(2);if(n)memcpy(q,base,n);memcpy(q+n,raw,m+1);return(char*)ash_track(q);}
-static ASH_UNUSED int ash_include_line_mode(int*line,int n){int i=0,j;while(i<n&&(line[i]==' '||line[i]=='\t'))i++;if(i+7<=n&&!memcmp(line+i,"include",7)){j=i+7;while(j<n&&(line[j]==' '||line[j]=='\t'))j++;if(j<n&&line[j]=='\"')return 1;}if(i+8<=n&&!memcmp(line+i,"includec",8)){j=i+8;while(j<n&&(line[j]==' '||line[j]=='\t'))j++;if(j<n&&line[j]=='\"')return 2;}return 0;}
-static ASH_UNUSED void* ash_include_open_root(const char*path){char*p=ash_inc_realpath(path);FILE*f;if(!ash_inc_begin(p))return NULL;f=fopen(p,"r");if(!f){ash_inc_status=3;ash_include_close();return NULL;}return(void*)f;}
-static ASH_UNUSED void* ash_include_open_line(int*line,int n,int mode){int i=0,a,b,j;char*raw,*joined,*canon;FILE*f;(void)mode;while(i<n&&line[i]!='"')i++;if(i>=n)return NULL;a=++i;while(i<n&&line[i]!='"')i++;if(i>=n)return NULL;b=i;raw=(char*)malloc((size_t)(b-a)+1);if(!raw)exit(2);{int k;for(k=0;k<b-a;k++)raw[k]=(char)line[a+k];}raw[b-a]=0;raw=(char*)ash_track(raw);j=i+1;while(j<n&&(line[j]==' '||line[j]=='\t'))j++;if(j<n&&line[j]==';')j++;while(j<n&&(line[j]==' '||line[j]=='\t'))j++;if(j!=n)return NULL;joined=ash_inc_join(ash_inc_active[ash_inc_active_n-1],raw);canon=ash_inc_realpath(joined);if(!ash_inc_begin(canon))return NULL;f=fopen(canon,"r");if(!f){ash_inc_status=3;ash_include_close();return NULL;}return(void*)f;}
-static ASH_UNUSED int ash_include_last_status(void){return ash_inc_status;}
-static ASH_UNUSED void ash_include_reset_session(void){ash_inc_active_n=0;ash_inc_loaded_n=0;ash_inc_status=0;}
+static PYREL_UNUSED int pyrel_inc_begin(char*p){if(pyrel_inc_find(pyrel_inc_active,pyrel_inc_active_n,p)!=(size_t)-1){pyrel_inc_status=1;return 0;}if(pyrel_inc_find(pyrel_inc_loaded,pyrel_inc_loaded_n,p)!=(size_t)-1){pyrel_inc_status=2;return 0;}pyrel_inc_add(&pyrel_inc_active,&pyrel_inc_active_n,&pyrel_inc_active_cap,p);pyrel_inc_status=0;return 1;}
+static PYREL_UNUSED void pyrel_include_close(void){if(pyrel_inc_active_n){char*p=pyrel_inc_active[--pyrel_inc_active_n];if(pyrel_inc_find(pyrel_inc_loaded,pyrel_inc_loaded_n,p)==(size_t)-1)pyrel_inc_add(&pyrel_inc_loaded,&pyrel_inc_loaded_n,&pyrel_inc_loaded_cap,p);}}
+static PYREL_UNUSED char* pyrel_inc_join(const char*base,const char*raw){const char*s=strrchr(base,'/');size_t n=s?(size_t)(s-base+1):0;size_t m=strlen(raw);char*q=(char*)malloc(n+m+1);if(!q)exit(2);if(n)memcpy(q,base,n);memcpy(q+n,raw,m+1);return(char*)pyrel_track(q);}
+static PYREL_UNUSED int pyrel_include_line_mode(int*line,int n){int i=0,j;while(i<n&&(line[i]==' '||line[i]=='\t'))i++;if(i+7<=n&&!memcmp(line+i,"include",7)){j=i+7;while(j<n&&(line[j]==' '||line[j]=='\t'))j++;if(j<n&&line[j]=='\"')return 1;}if(i+8<=n&&!memcmp(line+i,"includec",8)){j=i+8;while(j<n&&(line[j]==' '||line[j]=='\t'))j++;if(j<n&&line[j]=='\"')return 2;}return 0;}
+static PYREL_UNUSED void* pyrel_include_open_root(const char*path){char*p=pyrel_inc_realpath(path);FILE*f;if(!pyrel_inc_begin(p))return NULL;f=fopen(p,"r");if(!f){pyrel_inc_status=3;pyrel_include_close();return NULL;}return(void*)f;}
+static PYREL_UNUSED void* pyrel_include_open_line(int*line,int n,int mode){int i=0,a,b,j;char*raw,*joined,*canon;FILE*f;(void)mode;while(i<n&&line[i]!='"')i++;if(i>=n)return NULL;a=++i;while(i<n&&line[i]!='"')i++;if(i>=n)return NULL;b=i;raw=(char*)malloc((size_t)(b-a)+1);if(!raw)exit(2);{int k;for(k=0;k<b-a;k++)raw[k]=(char)line[a+k];}raw[b-a]=0;raw=(char*)pyrel_track(raw);j=i+1;while(j<n&&(line[j]==' '||line[j]=='\t'))j++;if(j<n&&line[j]==';')j++;while(j<n&&(line[j]==' '||line[j]=='\t'))j++;if(j!=n)return NULL;joined=pyrel_inc_join(pyrel_inc_active[pyrel_inc_active_n-1],raw);canon=pyrel_inc_realpath(joined);if(!pyrel_inc_begin(canon))return NULL;f=fopen(canon,"r");if(!f){pyrel_inc_status=3;pyrel_include_close();return NULL;}return(void*)f;}
+static PYREL_UNUSED int pyrel_include_last_status(void){return pyrel_inc_status;}
+static PYREL_UNUSED void pyrel_include_reset_session(void){pyrel_inc_active_n=0;pyrel_inc_loaded_n=0;pyrel_inc_status=0;}
 |} in
   let header =
     include_runtime ^
     "#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n\n"
-    ^ "static ASH_UNUSED void* open_file(const char* path, const char* mode) {\n"
+    ^ "static PYREL_UNUSED void* open_file(const char* path, const char* mode) {\n"
     ^ "  return (void*)fopen(path, mode);\n}\n"
-    ^ "static ASH_UNUSED int read_char(void* handle) {\n"
+    ^ "static PYREL_UNUSED int read_char(void* handle) {\n"
     ^ "  int c = fgetc((FILE*)handle);\n"
     ^ "  return c == EOF ? -1 : c;\n}\n"
-    ^ "static ASH_UNUSED int close_file(void* handle) {\n"
+    ^ "static PYREL_UNUSED int close_file(void* handle) {\n"
     ^ "  return fclose((FILE*)handle);\n}\n"
-    ^ "static ASH_UNUSED int write_char(void* handle, int c) {\n"
+    ^ "static PYREL_UNUSED int write_char(void* handle, int c) {\n"
     ^ "  return fputc(c, (FILE*)handle);\n}\n"
-    ^ "static ASH_UNUSED int write_string(void* handle, const char* s) {\n"
+    ^ "static PYREL_UNUSED int write_string(void* handle, const char* s) {\n"
     ^ "  return fputs(s, (FILE*)handle);\n}\n"
-    ^ "static void** ash_live = NULL; static size_t ash_live_n = 0, ash_live_cap = 0;\n"
-    ^ "static ASH_UNUSED void ash_panic(int code) { fprintf(stderr, \"Ash memory error %d\\n\", code); exit(2); }\n"
-    ^ "static ASH_UNUSED size_t ash_checked_bytes(int count, size_t elem_size) { if (count < 0) ash_panic(1); if (elem_size != 0 && (size_t)count > (size_t)-1 / elem_size) ash_panic(1); return (size_t)count * elem_size; }\n"
-    ^ "static ASH_UNUSED size_t ash_find(void* p) { size_t i; for (i = 0; i < ash_live_n; ++i) if (ash_live[i] == p) return i; return (size_t)-1; }\n"
-    ^ "static ASH_UNUSED void ash_validate(void) { size_t i, j; for (i = 0; i < ash_live_n; ++i) { if (!ash_live[i]) ash_panic(2); for (j = i + 1; j < ash_live_n; ++j) if (ash_live[i] == ash_live[j]) ash_panic(2); } }\n"
-    ^ "static ASH_UNUSED void ash_cleanup(void) { size_t i; ash_validate(); for (i = 0; i < ash_live_n; ++i) free(ash_live[i]); free(ash_live); ash_live = NULL; ash_live_n = ash_live_cap = 0; }\n"
-    ^ "static ASH_UNUSED void* ash_track(void* p) { size_t c; void** q; if (!p) return NULL; if (ash_find(p) != (size_t)-1) ash_panic(2); if (ash_live_n == ash_live_cap) { if (ash_live_cap > (size_t)-1 / 2) ash_panic(2); c = ash_live_cap ? ash_live_cap * 2 : 32; if (c > (size_t)-1 / sizeof(void*)) ash_panic(2); q = (void**)realloc(ash_live, c * sizeof(void*)); if (!q) ash_panic(2); ash_live = q; ash_live_cap = c; } ash_live[ash_live_n++] = p; atexit(ash_cleanup); return p; }\n"
-    ^ "static ASH_UNUSED void ash_release(void* p) { size_t i; if (!p) return; i = ash_find(p); if (i == (size_t)-1) ash_panic(2); free(p); ash_live[i] = ash_live[--ash_live_n]; }\n"
-    ^ "typedef struct AshArray { void* data; int len; int cap; } AshArray;\n"
-    ^ "static ASH_UNUSED void ash_array_check(const AshArray* a) { if (!a) ash_panic(4); if (a->len < 0 || a->cap < 0 || a->len > a->cap) ash_panic(3); if (a->cap > 0 && (!a->data || ash_find(a->data) == (size_t)-1)) ash_panic(2); }\n"
-    ^ "static ASH_UNUSED AshArray runtime_array_make(int capacity, size_t elem_size) { AshArray a; if (capacity < 0) ash_panic(1); if (capacity < 1) capacity = 4; ash_checked_bytes(capacity, elem_size); a.data = calloc((size_t)capacity, elem_size); if (!a.data) ash_panic(5); a.len = 0; a.cap = capacity; a.data = ash_track(a.data); return a; }\n"
-    ^ "static ASH_UNUSED AshArray runtime_array_reserve(AshArray* a, int minimum, size_t elem_size) { void* p; ash_array_check(a); if (minimum < 0) ash_panic(1); if (minimum <= a->cap) return *a; ash_checked_bytes(minimum, elem_size); p = calloc((size_t)minimum, elem_size); if (!p) ash_panic(5); if (a->data) { memcpy(p, a->data, ash_checked_bytes(a->len, elem_size)); ash_release(a->data); } a->data = ash_track(p); a->cap = minimum; return *a; }\n"
-    ^ "static ASH_UNUSED AshArray runtime_array_push(AshArray* a, const void* value, size_t elem_size) { int next; ash_array_check(a); if (!value) ash_panic(4); if (a->len >= a->cap) { if (a->cap > 2147483647 / 2) ash_panic(1); next = a->cap > 0 ? a->cap * 2 : 4; runtime_array_reserve(a, next, elem_size); } memcpy((char*)a->data + ash_checked_bytes(a->len, elem_size), value, elem_size); a->len += 1; return *a; }\n"
-    ^ "static ASH_UNUSED void runtime_array_set(AshArray* a, int index, const void* value, size_t elem_size) { ash_array_check(a); if (index < 0 || index >= a->len) ash_panic(3); if (!value) ash_panic(4); memcpy((char*)a->data + ash_checked_bytes(index, elem_size), value, elem_size); }\n"
-    ^ "static ASH_UNUSED AshArray runtime_array_clear(AshArray* a) { ash_array_check(a); a->len = 0; return *a; }\n"
-    ^ "static ASH_UNUSED void runtime_array_free(AshArray* a) { if (!a) ash_panic(4); if (a->data) { if (ash_find(a->data) == (size_t)-1) ash_panic(2); ash_release(a->data); } a->data = NULL; a->len = 0; a->cap = 0; }\n"
-    ^ "static ASH_UNUSED void* runtime_array_get_raw(AshArray* a, int index, size_t elem_size) { ash_array_check(a); if (index < 0 || index >= a->len) ash_panic(3); return (char*)a->data + ash_checked_bytes(index, elem_size); }\n"
-    ^ "static ASH_UNUSED char* runtime_string_concat(const char* a, const char* b) {\n"
-    ^ "  size_t na, nb, total; char* p; if (!a || !b) ash_panic(4); na = strlen(a); nb = strlen(b); if (na > (size_t)-1 - nb - 1) ash_panic(1); total = na + nb + 1; p = (char*)malloc(total); if (!p) ash_panic(5); memcpy(p, a, na); memcpy(p + na, b, nb); p[na + nb] = 0; return (char*)ash_track(p);\n}\n"
-    ^ "static ASH_UNUSED int write_int(int* handle, int value) {\n"
+    ^ "static void** pyrel_live = NULL; static size_t pyrel_live_n = 0, pyrel_live_cap = 0;\n"
+    ^ "static PYREL_UNUSED void pyrel_panic(int code) { fprintf(stderr, \"Pyrel memory error %d\\n\", code); exit(2); }\n"
+    ^ "static PYREL_UNUSED size_t pyrel_checked_bytes(int count, size_t elem_size) { if (count < 0) pyrel_panic(1); if (elem_size != 0 && (size_t)count > (size_t)-1 / elem_size) pyrel_panic(1); return (size_t)count * elem_size; }\n"
+    ^ "static PYREL_UNUSED size_t pyrel_find(void* p) { size_t i; for (i = 0; i < pyrel_live_n; ++i) if (pyrel_live[i] == p) return i; return (size_t)-1; }\n"
+    ^ "static PYREL_UNUSED void pyrel_validate(void) { size_t i, j; for (i = 0; i < pyrel_live_n; ++i) { if (!pyrel_live[i]) pyrel_panic(2); for (j = i + 1; j < pyrel_live_n; ++j) if (pyrel_live[i] == pyrel_live[j]) pyrel_panic(2); } }\n"
+    ^ "static PYREL_UNUSED void pyrel_cleanup(void) { size_t i; pyrel_validate(); for (i = 0; i < pyrel_live_n; ++i) free(pyrel_live[i]); free(pyrel_live); pyrel_live = NULL; pyrel_live_n = pyrel_live_cap = 0; }\n"
+    ^ "static PYREL_UNUSED void* pyrel_track(void* p) { size_t c; void** q; if (!p) return NULL; if (pyrel_find(p) != (size_t)-1) pyrel_panic(2); if (pyrel_live_n == pyrel_live_cap) { if (pyrel_live_cap > (size_t)-1 / 2) pyrel_panic(2); c = pyrel_live_cap ? pyrel_live_cap * 2 : 32; if (c > (size_t)-1 / sizeof(void*)) pyrel_panic(2); q = (void**)realloc(pyrel_live, c * sizeof(void*)); if (!q) pyrel_panic(2); pyrel_live = q; pyrel_live_cap = c; } pyrel_live[pyrel_live_n++] = p; atexit(pyrel_cleanup); return p; }\n"
+    ^ "static PYREL_UNUSED void pyrel_release(void* p) { size_t i; if (!p) return; i = pyrel_find(p); if (i == (size_t)-1) pyrel_panic(2); free(p); pyrel_live[i] = pyrel_live[--pyrel_live_n]; }\n"
+    ^ "typedef struct PyrelArray { void* data; int len; int cap; } PyrelArray;\n"
+    ^ "static PYREL_UNUSED void pyrel_array_check(const PyrelArray* a) { if (!a) pyrel_panic(4); if (a->len < 0 || a->cap < 0 || a->len > a->cap) pyrel_panic(3); if (a->cap > 0 && (!a->data || pyrel_find(a->data) == (size_t)-1)) pyrel_panic(2); }\n"
+    ^ "static PYREL_UNUSED PyrelArray runtime_array_make(int capacity, size_t elem_size) { PyrelArray a; if (capacity < 0) pyrel_panic(1); if (capacity < 1) capacity = 4; pyrel_checked_bytes(capacity, elem_size); a.data = calloc((size_t)capacity, elem_size); if (!a.data) pyrel_panic(5); a.len = 0; a.cap = capacity; a.data = pyrel_track(a.data); return a; }\n"
+    ^ "static PYREL_UNUSED PyrelArray runtime_array_reserve(PyrelArray* a, int minimum, size_t elem_size) { void* p; pyrel_array_check(a); if (minimum < 0) pyrel_panic(1); if (minimum <= a->cap) return *a; pyrel_checked_bytes(minimum, elem_size); p = calloc((size_t)minimum, elem_size); if (!p) pyrel_panic(5); if (a->data) { memcpy(p, a->data, pyrel_checked_bytes(a->len, elem_size)); pyrel_release(a->data); } a->data = pyrel_track(p); a->cap = minimum; return *a; }\n"
+    ^ "static PYREL_UNUSED PyrelArray runtime_array_push(PyrelArray* a, const void* value, size_t elem_size) { int next; pyrel_array_check(a); if (!value) pyrel_panic(4); if (a->len >= a->cap) { if (a->cap > 2147483647 / 2) pyrel_panic(1); next = a->cap > 0 ? a->cap * 2 : 4; runtime_array_reserve(a, next, elem_size); } memcpy((char*)a->data + pyrel_checked_bytes(a->len, elem_size), value, elem_size); a->len += 1; return *a; }\n"
+    ^ "static PYREL_UNUSED void runtime_array_set(PyrelArray* a, int index, const void* value, size_t elem_size) { pyrel_array_check(a); if (index < 0 || index >= a->len) pyrel_panic(3); if (!value) pyrel_panic(4); memcpy((char*)a->data + pyrel_checked_bytes(index, elem_size), value, elem_size); }\n"
+    ^ "static PYREL_UNUSED PyrelArray runtime_array_clear(PyrelArray* a) { pyrel_array_check(a); a->len = 0; return *a; }\n"
+    ^ "static PYREL_UNUSED void runtime_array_free(PyrelArray* a) { if (!a) pyrel_panic(4); if (a->data) { if (pyrel_find(a->data) == (size_t)-1) pyrel_panic(2); pyrel_release(a->data); } a->data = NULL; a->len = 0; a->cap = 0; }\n"
+    ^ "static PYREL_UNUSED void* runtime_array_get_raw(PyrelArray* a, int index, size_t elem_size) { pyrel_array_check(a); if (index < 0 || index >= a->len) pyrel_panic(3); return (char*)a->data + pyrel_checked_bytes(index, elem_size); }\n"
+    ^ "static PYREL_UNUSED char* runtime_string_concat(const char* a, const char* b) {\n"
+    ^ "  size_t na, nb, total; char* p; if (!a || !b) pyrel_panic(4); na = strlen(a); nb = strlen(b); if (na > (size_t)-1 - nb - 1) pyrel_panic(1); total = na + nb + 1; p = (char*)malloc(total); if (!p) pyrel_panic(5); memcpy(p, a, na); memcpy(p + na, b, nb); p[na + nb] = 0; return (char*)pyrel_track(p);\n}\n"
+    ^ "static PYREL_UNUSED int write_int(int* handle, int value) {\n"
     ^ "  return fprintf((FILE*)handle, \"%d\", value);\n}\n"
-    ^ "static ASH_UNUSED int* alloc_ints(int count) { int* p; if (count < 0) ash_panic(1); if (count < 1) count = 1; ash_checked_bytes(count, sizeof(int)); p = (int*)calloc((size_t)count, sizeof(int)); if (!p) ash_panic(5); return (int*)ash_track(p); }\n"
-    ^ "static ASH_UNUSED void free_ints(int* p) { ash_release(p); }\n"
-    ^ "static ASH_UNUSED int* grow_ints(int* old, int old_count, int new_count) { size_t slot = (size_t)-1; int* p; if (old_count < 0 || new_count < 0) ash_panic(1); if (new_count <= old_count) return old; if (old) { slot = ash_find(old); if (slot == (size_t)-1) ash_panic(2); } ash_checked_bytes(new_count, sizeof(int)); p = (int*)realloc(old, (size_t)new_count * sizeof(int)); if (!p) ash_panic(6); if (old) ash_live[slot] = p; else ash_track(p); memset(p + old_count, 0, (size_t)(new_count - old_count) * sizeof(int)); return p; }\n\n"
+    ^ "static PYREL_UNUSED int* alloc_ints(int count) { int* p; if (count < 0) pyrel_panic(1); if (count < 1) count = 1; pyrel_checked_bytes(count, sizeof(int)); p = (int*)calloc((size_t)count, sizeof(int)); if (!p) pyrel_panic(5); return (int*)pyrel_track(p); }\n"
+    ^ "static PYREL_UNUSED void free_ints(int* p) { pyrel_release(p); }\n"
+    ^ "static PYREL_UNUSED int* grow_ints(int* old, int old_count, int new_count) { size_t slot = (size_t)-1; int* p; if (old_count < 0 || new_count < 0) pyrel_panic(1); if (new_count <= old_count) return old; if (old) { slot = pyrel_find(old); if (slot == (size_t)-1) pyrel_panic(2); } pyrel_checked_bytes(new_count, sizeof(int)); p = (int*)realloc(old, (size_t)new_count * sizeof(int)); if (!p) pyrel_panic(6); if (old) pyrel_live[slot] = p; else pyrel_track(p); memset(p + old_count, 0, (size_t)(new_count - old_count) * sizeof(int)); return p; }\n\n"
  in
   let emit_env =
     let funcs =

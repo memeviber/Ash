@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 HOST="$ROOT/src/compiler/_build/default/bin/main.exe"
-BOOT_C_SOURCE="$ROOT/src/bootstrap/ashc.ash.c"
+BOOT_C_SOURCE="$ROOT/src/bootstrap/pyrelc.pyrel.c"
 OUT="$ROOT/.tmp/ownership_stress"
 
 rm -rf "$OUT"
@@ -17,22 +17,22 @@ gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror \
 run_valid() {
   local source=$1
   local name
-  name=$(basename "$source" .ash)
+  name=$(basename "$source" .pyrel)
   local dir="$OUT/$name"
   mkdir -p "$dir"
-  cp "$source" "$dir/$name.ash"
+  cp "$source" "$dir/$name.pyrel"
 
-  if ! (cd "$dir" && "$HOST" "$name.ash") >"$dir/host.compile.out" 2>"$dir/host.compile.err"; then
+  if ! (cd "$dir" && "$HOST" "$name.pyrel") >"$dir/host.compile.out" 2>"$dir/host.compile.err"; then
     printf 'FAIL %s: Host rejected valid fixture\n' "$name" >&2
     return 1
   fi
-  if ! "$OUT/bootstrap.bin" "$dir/$name.ash" "$dir/$name.boot.c" >"$dir/bootstrap.compile.out" 2>"$dir/bootstrap.compile.err"; then
+  if ! "$OUT/bootstrap.bin" "$dir/$name.pyrel" "$dir/$name.boot.c" >"$dir/bootstrap.compile.out" 2>"$dir/bootstrap.compile.err"; then
     printf 'FAIL %s: Bootstrap rejected valid fixture\n' "$name" >&2
     return 1
   fi
 
   gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror \
-    "$dir/$name.ash.c" -o "$dir/host.bin" >"$dir/host.gcc.out" 2>"$dir/host.gcc.err"
+    "$dir/$name.pyrel.c" -o "$dir/host.bin" >"$dir/host.gcc.out" 2>"$dir/host.gcc.err"
   gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror \
     "$dir/$name.boot.c" -o "$dir/bootstrap.bin" >"$dir/bootstrap.gcc.out" 2>"$dir/bootstrap.gcc.err"
   "$dir/host.bin" >"$dir/host.run.out" 2>"$dir/host.run.err"
@@ -46,7 +46,7 @@ run_valid() {
   gcc -std=c11 -O1 -g -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
     -Werror=implicit-function-declaration -Werror=incompatible-pointer-types -Werror=int-conversion \
     -fsanitize=address,undefined -fno-omit-frame-pointer \
-    "$dir/$name.ash.c" -o "$dir/host.san.bin"
+    "$dir/$name.pyrel.c" -o "$dir/host.san.bin"
   gcc -std=c11 -O1 -g -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
     -Werror=implicit-function-declaration -Werror=incompatible-pointer-types -Werror=int-conversion \
     -fsanitize=address,undefined -fno-omit-frame-pointer \
@@ -67,19 +67,19 @@ run_valid() {
 run_invalid() {
   local source=$1
   local name
-  name=$(basename "$source" .ash)
+  name=$(basename "$source" .pyrel)
   local dir="$OUT/$name"
   mkdir -p "$dir"
-  cp "$source" "$dir/$name.ash"
+  cp "$source" "$dir/$name.pyrel"
 
   local host_status=0
-  if (cd "$dir" && "$HOST" "$name.ash") >"$dir/host.compile.out" 2>"$dir/host.compile.err"; then
+  if (cd "$dir" && "$HOST" "$name.pyrel") >"$dir/host.compile.out" 2>"$dir/host.compile.err"; then
     host_status=0
   else
     host_status=$?
   fi
   local bootstrap_status=0
-  if "$OUT/bootstrap.bin" "$dir/$name.ash" "$dir/$name.boot.c" >"$dir/bootstrap.compile.out" 2>"$dir/bootstrap.compile.err"; then
+  if "$OUT/bootstrap.bin" "$dir/$name.pyrel" "$dir/$name.boot.c" >"$dir/bootstrap.compile.out" 2>"$dir/bootstrap.compile.err"; then
     bootstrap_status=0
   else
     bootstrap_status=$?
@@ -92,8 +92,8 @@ run_invalid() {
 }
 
 printf '%s\n' '[2/3] Running ownership fixtures.'
-run_valid "$ROOT/tests/stress/move_borrow_valid.ash"
-for source in "$ROOT"/tests/stress/move_borrow_invalid_*.ash; do
+run_valid "$ROOT/tests/stress/move_borrow_valid.pyrel"
+for source in "$ROOT"/tests/stress/move_borrow_invalid_*.pyrel; do
   run_invalid "$source"
 done
 

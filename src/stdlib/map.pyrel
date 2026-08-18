@@ -1,5 +1,5 @@
 namespace map {
-  // Generic fixed-inline map. It supports any Ash value type and keeps a
+  // Generic fixed-inline map. It supports any Pyrel value type and keeps a
   // predictable bounded representation until generic dynamic storage exists.
   struct HashMap<K, V> {
     key0: K;
@@ -119,7 +119,7 @@ namespace map {
   func length<K, V>(m: HashMap<K, V>): int { return m.len; }
   func capacity<K, V>(m: HashMap<K, V>): int { return m.cap; }
 
-  // Small generic pair map kept for source compatibility with early Ash code.
+  // Small generic pair map kept for source compatibility with early Pyrel code.
   struct Map<T> {
     first: T;
     second: T;

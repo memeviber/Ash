@@ -1,4 +1,4 @@
-include "../../src/stdlib/slice.ash"
+include "../../src/stdlib/slice.pyrel"
 
 func main(): int {
   let slice: slice::IntSlice = slice::new_int(2);

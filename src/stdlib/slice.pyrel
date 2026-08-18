@@ -1,5 +1,5 @@
 namespace slice {
-  // Generic slice with inline storage. It supports every Ash value type and
+  // Generic slice with inline storage. It supports every Pyrel value type and
   // remains allocation-free while generic element allocation is unavailable.
   struct Slice<T> {
     zero: T;

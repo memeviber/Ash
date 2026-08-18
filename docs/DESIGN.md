@@ -1,8 +1,8 @@
-# Ash Design Notes
+# Pyrel Design Notes
 
 ## Architecture
 
-Ash has a reference Host implementation and a self-hosting Bootstrap implementation. The Host compiler is written in OCaml because it provides a concise platform for validating grammar, type rules, and C generation. The Bootstrap compiler is written in Ash and exercises the language's own lexer, parser, AST arena, type checker, symbol table, generic specialization, and C serializer.
+Pyrel has a reference Host implementation and a self-hosting Bootstrap implementation. The Host compiler is written in OCaml because it provides a concise platform for validating grammar, type rules, and C generation. The Bootstrap compiler is written in Pyrel and exercises the language's own lexer, parser, AST arena, type checker, symbol table, generic specialization, and C serializer.
 
 The two implementations are intentionally kept structurally close. A language change is complete only when the Host and Bootstrap paths accept the same valid programs, reject the same invalid programs, generate compilable C11, and produce equivalent runtime behavior.
 

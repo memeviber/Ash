@@ -1,13 +1,13 @@
-include "../../src/stdlib/string.ash"
-include "../../src/stdlib/slice.ash"
-include "../../src/stdlib/map.ash"
+include "../../src/stdlib/string.pyrel"
+include "../../src/stdlib/slice.pyrel"
+include "../../src/stdlib/map.pyrel"
 
 func main(): int {
   let text: string = "Aé";
-  print string_byte_len(text);
-  print string_at(text, 0);
-  print string_eq(text, "Aé");
-  print string_eq(text, "Ax");
+  print str::byte_len(text);
+  print str::at(text, 0);
+  print str::eq(text, "Aé");
+  print str::eq(text, "Ax");
 
   let slice: slice::IntSlice = slice::new_int(2);
   slice = slice::push_int(slice, 10);

@@ -3,8 +3,8 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 COMPILER="$ROOT/src/compiler/_build/default/bin/main.exe"
-BOOT_SOURCE="$ROOT/src/bootstrap/ashc.ash"
-BOOT_C="$ROOT/src/bootstrap/ashc.ash.c"
+BOOT_SOURCE="$ROOT/src/bootstrap/pyrelc.pyrel"
+BOOT_C="$ROOT/src/bootstrap/pyrelc.pyrel.c"
 BOOT_BIN="$ROOT/.tmp/bootstrap.bin"
 OUT="$ROOT/.tmp/regression"
 mkdir -p "$OUT"
@@ -44,6 +44,6 @@ expect_reject() {
   printf 'PASS %s (rejected)\n' "$label"
 }
 
-compile_run "$ROOT/tests/stress/modulo_stress.ash" modulo_stress
-expect_reject "$ROOT/tests/stress/modulo_invalid_string.ash" modulo_invalid_string
+compile_run "$ROOT/tests/stress/modulo_stress.pyrel" modulo_stress
+expect_reject "$ROOT/tests/stress/modulo_invalid_string.pyrel" modulo_invalid_string
 printf 'Regression checks completed successfully.\n'

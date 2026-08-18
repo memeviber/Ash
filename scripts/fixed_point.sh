@@ -2,13 +2,13 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-SRC="$ROOT/src/bootstrap/ashc.ash"
+SRC="$ROOT/src/bootstrap/pyrelc.pyrel"
 OUT="$ROOT/.tmp/fixed-point"
 mkdir -p "$OUT"
 
 (cd "$ROOT/src/compiler" && dune build bin/main.exe)
 (cd "$ROOT/src/compiler" && "$ROOT/src/compiler/_build/default/bin/main.exe" "$SRC")
-gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror "$ROOT/src/bootstrap/ashc.ash.c" -o "$OUT/n1.bin"
+gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror "$ROOT/src/bootstrap/pyrelc.pyrel.c" -o "$OUT/n1.bin"
 "$OUT/n1.bin" "$SRC" "$OUT/n2.c"
 gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror "$OUT/n2.c" -o "$OUT/n2.bin"
 "$OUT/n2.bin" "$SRC" "$OUT/n3.c"

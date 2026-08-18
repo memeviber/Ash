@@ -1,4 +1,4 @@
-include "../../src/stdlib/map.ash"
+include "../../src/stdlib/map.pyrel"
 
 func main(): int {
   let m: map::HashMap<int, int> = map::new(0, 0);

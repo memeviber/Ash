@@ -1,4 +1,4 @@
-include "include_cycle_b.ash"
+include "include_cycle_b.pyrel"
 func main(): void {
   return;
 }

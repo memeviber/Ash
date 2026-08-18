@@ -1,4 +1,4 @@
-open Ash_lib
+open Pyrel_lib
 
 module SSet = Set.Make (String)
 
@@ -46,7 +46,7 @@ let rec expand_file active loaded path =
     let active = SSet.add path active in
     let loaded = SSet.add path loaded in
     let dir = Filename.dirname path in
-    let ash = Buffer.create 256 in
+    let pyrel = Buffer.create 256 in
     let c = Buffer.create 256 in
     let lines = String.split_on_char '\n' (read_all path) in
     let loaded =
@@ -62,20 +62,20 @@ let rec expand_file active loaded path =
               (match directive_path "include" t with
                | Some p ->
                    let a, cc, loaded = expand_file active loaded (Filename.concat dir p) in
-                   Buffer.add_string ash a;
+                   Buffer.add_string pyrel a;
                    Buffer.add_string c cc;
                    loaded
                | None ->
-                   Buffer.add_string ash line;
-                   Buffer.add_char ash '\n';
+                   Buffer.add_string pyrel line;
+                   Buffer.add_char pyrel '\n';
                    loaded))
         loaded lines
     in
-    Buffer.contents ash, Buffer.contents c, SSet.remove path active |> fun _ -> loaded
+    Buffer.contents pyrel, Buffer.contents c, SSet.remove path active |> fun _ -> loaded
 
 let () =
   if Array.length Sys.argv < 2 then begin
-    print_endline "Usage: ash <filename>";
+    print_endline "Usage: pyrel <filename>";
     exit 2
   end else
     let filename = Sys.argv.(1) in
@@ -109,7 +109,7 @@ let () =
           end
     with
     | Parser.Error ->
-        print_endline "Syntax error in Ash source";
+        print_endline "Syntax error in Pyrel source";
         exit 1
     | Sys_error e ->
         Printf.eprintf "I/O error: %s\n" e;

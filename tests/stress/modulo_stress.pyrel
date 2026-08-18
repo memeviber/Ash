@@ -1,4 +1,4 @@
-include "../../src/stdlib/result.ash"
+include "../../src/stdlib/result.pyrel"
 
 func main(): int {
   let failures: int = 0;

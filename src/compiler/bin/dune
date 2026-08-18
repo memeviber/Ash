@@ -1,4 +1,4 @@
 (executable
  (name main)
- (public_name ash)
- (libraries ash_lib unix))
+ (public_name pyrel)
+ (libraries pyrel_lib unix))

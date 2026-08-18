@@ -5,5 +5,5 @@
  (modules lexer))
 
 (library
- (name ash_lib)
+ (name pyrel_lib)
  (modules ast lexer parser compiler typechecker))

@@ -2,18 +2,18 @@
 
 ## Scope
 
-This report records the final validation of the Ash static move/borrow checker in the Host and Bootstrap compilers. The checked owner type is `array<T>`/`TDynArray`; pointer borrows created by address-taking are tracked for scope, mutation, release, move, and return-escape rules.
+This report records the final validation of the Pyrel static move/borrow checker in the Host and Bootstrap compilers. The checked owner type is `array<T>`/`TDynArray`; pointer borrows created by address-taking are tracked for scope, mutation, release, move, and return-escape rules.
 
 ## Ownership corpus
 
 | Case | Host | Bootstrap | Expected |
 | --- | --- | --- | --- |
-| `move_borrow_valid.ash` | Accepted | Accepted | Runtime output must match |
-| `move_borrow_invalid_use_after_move.ash` | Rejected, status 1 | Rejected, status 1 | Compile-time rejection |
-| `move_borrow_invalid_double_free.ash` | Rejected, status 1 | Rejected, status 1 | Compile-time rejection |
-| `move_borrow_invalid_mutate_borrowed.ash` | Rejected, status 1 | Rejected, status 1 | Compile-time rejection |
-| `move_borrow_invalid_borrow_escape.ash` | Rejected, status 1 | Rejected, status 1 | Compile-time rejection |
-| `move_borrow_invalid_owner_copy.ash` | Rejected, status 1 | Rejected, status 1 | Compile-time rejection |
+| `move_borrow_valid.pyrel` | Accepted | Accepted | Runtime output must match |
+| `move_borrow_invalid_use_after_move.pyrel` | Rejected, status 1 | Rejected, status 1 | Compile-time rejection |
+| `move_borrow_invalid_double_free.pyrel` | Rejected, status 1 | Rejected, status 1 | Compile-time rejection |
+| `move_borrow_invalid_mutate_borrowed.pyrel` | Rejected, status 1 | Rejected, status 1 | Compile-time rejection |
+| `move_borrow_invalid_borrow_escape.pyrel` | Rejected, status 1 | Rejected, status 1 | Compile-time rejection |
+| `move_borrow_invalid_owner_copy.pyrel` | Rejected, status 1 | Rejected, status 1 | Compile-time rejection |
 
 The valid fixture prints the identical output `7 8 41 41` through both compiler paths. Its generated C passes strict GCC with `-std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror`.
 
@@ -24,7 +24,7 @@ The valid ownership fixture was rebuilt with AddressSanitizer and UndefinedBehav
 The final command was:
 
 ```sh
-cd ash
+cd pyrel
 ./scripts/run_ownership_stress.sh
 ```
 
@@ -43,7 +43,7 @@ The unified diff is empty. This confirms that the ownership checker changes acce
 
 ## Fixed point
 
-After synchronizing `ashc.ash` with `ashc.ash`, the fixed-point script verified `n2.c == n3.c`. The production checksum recorded in `src/bootstrap/fixed_point_production.sha256` is:
+After synchronizing `pyrelc.pyrel` with `pyrelc.pyrel`, the fixed-point script verified `n2.c == n3.c`. The production checksum recorded in `src/bootstrap/fixed_point_production.sha256` is:
 
 ```text
 5f6c9186e4eb35d60062285d0becae0b13a671e097a9abdb2d32c0fc0866f004
@@ -51,5 +51,5 @@ After synchronizing `ashc.ash` with `ashc.ash`, the fixed-point script verified 
 
 ## Artifacts
 
-The detailed runner logs are generated below `ash/.tmp/ownership_stress/` and are intentionally excluded from the clean ZIP. The repository contains the reproducible runner, fixtures, Bootstrap source and generated artifact, Host checker, audit, release notes, and this report.
+The detailed runner logs are generated below `pyrel/.tmp/ownership_stress/` and are intentionally excluded from the clean ZIP. The repository contains the reproducible runner, fixtures, Bootstrap source and generated artifact, Host checker, audit, release notes, and this report.
 

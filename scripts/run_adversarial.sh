@@ -3,21 +3,21 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 HOST="$ROOT/src/compiler/_build/default/bin/main.exe"
-BOOT_SOURCE="$ROOT/src/bootstrap/ashc.ash"
+BOOT_SOURCE="$ROOT/src/bootstrap/pyrelc.pyrel"
 OUT="$ROOT/.tmp/adversarial"
 rm -rf "$OUT"
 mkdir -p "$OUT"
 
 (cd "$ROOT/src/compiler" && dune build bin/main.exe)
 (cd "$ROOT/src/compiler" && "$HOST" "$BOOT_SOURCE")
-gcc -std=c11 -O1 -g -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror=implicit-function-declaration -Werror=incompatible-pointer-types -Werror=int-conversion -fsanitize=address,undefined -fno-omit-frame-pointer "$ROOT/src/bootstrap/ashc.ash.c" -o "$OUT/bootstrap.bin"
+gcc -std=c11 -O1 -g -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror=implicit-function-declaration -Werror=incompatible-pointer-types -Werror=int-conversion -fsanitize=address,undefined -fno-omit-frame-pointer "$ROOT/src/bootstrap/pyrelc.pyrel.c" -o "$OUT/bootstrap.bin"
 
 for source in \
-  "$ROOT/tests/regression/complex_fnptr_ptrarith.ash" \
-  "$ROOT/tests/regression/macro_pointer_complex.ash" \
-  "$ROOT/tests/regression/stress_memory_loop.ash" \
-  "$ROOT/tests/stress/modulo_stress.ash"; do
-  name=$(basename "$source" .ash)
+  "$ROOT/tests/regression/complex_fnptr_ptrarith.pyrel" \
+  "$ROOT/tests/regression/macro_pointer_complex.pyrel" \
+  "$ROOT/tests/regression/stress_memory_loop.pyrel" \
+  "$ROOT/tests/stress/modulo_stress.pyrel"; do
+  name=$(basename "$source" .pyrel)
   (cd "$(dirname "$source")" && "$HOST" "$(basename "$source")") >"$OUT/${name}.host.log" 2>&1
   cp "${source}.c" "$OUT/${name}.host.c"
   "$OUT/bootstrap.bin" "$source" "$OUT/${name}.boot.c" >"$OUT/${name}.boot.log" 2>&1
@@ -31,7 +31,7 @@ done
 
 # Negative runtime check: both compiler paths must reject an out-of-bounds
 # dynamic-array read deterministically, without sanitizer diagnostics.
-OOB_SOURCE="$ROOT/tests/adversarial/memory_oob_test.ash"
+OOB_SOURCE="$ROOT/tests/adversarial/memory_oob_test.pyrel"
 OOB_OUT="$OUT/memory_oob"
 (
   cd "$(dirname "$OOB_SOURCE")"

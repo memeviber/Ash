@@ -6,7 +6,7 @@ import time
 root = Path(__file__).resolve().parent
 variants = {
     "c": root / "kernel_c.bin",
-    "ash": root / "kernel_ash.bin",
+    "pyrel": root / "kernel_pyrel.bin",
     "nim": root / "kernel_nim",
     "cython": root / "kernel_cython.bin",
 }
