@@ -20,7 +20,7 @@ for source in "$ROOT"/tests/conformance/*.bsl "$ROOT"/tests/conformance/generate
   name=$(basename "$source" .bsl)
   host_c="$OUT/${name}.host.c"; boot_c="$OUT/${name}.boot.c"
   host_bin="$OUT/${name}.host.bin"; boot_bin="$OUT/${name}.boot.bin"
-  if (cd "$(dirname "$source")" && "$HOST" "$(basename "$source")") >"$OUT/${name}.host.log" 2>&1 && cp "${source}.c" "$host_c" && "$OUT/bootstrap.bin" "$source" "$boot_c" >"$OUT/${name}.boot.log" 2>&1 && gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow "$host_c" -o "$host_bin" && gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow "$boot_c" -o "$boot_bin" && "$host_bin" >"$OUT/${name}.host.out" && "$boot_bin" >"$OUT/${name}.boot.out" && cmp -s "$OUT/${name}.host.out" "$OUT/${name}.boot.out"; then
+  if (cd "$(dirname "$source")" && "$HOST" "$(basename "$source")") >"$OUT/${name}.host.log" 2>&1 && cp "${source}.c" "$host_c" && "$OUT/bootstrap.bin" "$source" "$boot_c" >"$OUT/${name}.boot.log" 2>&1 && gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror=shift-negative-value "$host_c" -o "$host_bin" && gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror=shift-negative-value "$boot_c" -o "$boot_bin" && "$host_bin" >"$OUT/${name}.host.out" && "$boot_bin" >"$OUT/${name}.boot.out" && cmp -s "$OUT/${name}.host.out" "$OUT/${name}.boot.out"; then
     pass=$((pass + 1))
   else
     fail=$((fail + 1)); echo "FAIL valid $name" >&2
