@@ -1,8 +1,6 @@
-include "memory.pyrel"
-
 // Owning, growable generic array implemented in Pyrel. The compiler does not
-// provide array-specific operations here: only memory::alloc/resize/free are
-// used as the checked allocation boundary.
+// provide array-specific operations here: only the minimal memory intrinsics
+// are used as the checked allocation boundary.
 namespace array {
   struct Array<T> {
     data: T*;
@@ -14,7 +12,7 @@ namespace array {
     let a: Array<T> = 0;
     let cap: int = capacity;
     if cap < 1 then cap = 4;
-    a.data = memory::alloc(cap, zero);
+    a.data = memory_alloc(cap, zero);
     a.len = 0;
     a.cap = cap;
     return a;
@@ -22,7 +20,7 @@ namespace array {
 
   func reserve<T>(a: Array<T>, minimum: int, zero: T): Array<T> {
     if minimum > a.cap then {
-      a.data = memory::resize(a.data, a.cap, minimum, zero);
+      a.data = memory_resize(a.data, a.cap, minimum, zero);
       a.cap = minimum;
     }
     return a;
@@ -32,7 +30,7 @@ namespace array {
     if a.len == a.cap then {
       let next: int = a.cap * 2;
       if next < 1 then next = 4;
-      a.data = memory::resize(a.data, a.cap, next, zero);
+      a.data = memory_resize(a.data, a.cap, next, zero);
       a.cap = next;
     }
     a.data[a.len] = value;
@@ -71,7 +69,7 @@ namespace array {
   }
 
   func free<T>(a: Array<T>): void {
-    memory::free(a.data);
+    memory_free(a.data);
     a.data = 0;
     a.len = 0;
     a.cap = 0;
