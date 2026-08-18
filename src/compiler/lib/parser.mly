@@ -13,7 +13,6 @@ open Ast
 %token LPAREN RPAREN LBRACE RBRACE SEMI COMMA AMP LBRACK RBRACK DOT
 %token EOF
 
-%nonassoc ELSE
 %left OR_OR
 %left AND_AND
 %left BIT_OR

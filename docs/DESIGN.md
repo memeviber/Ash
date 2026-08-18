@@ -33,3 +33,15 @@ The current model is intentionally pragmatic. It offers runtime safety checks wh
 ## Portability
 
 The C emitter avoids relying on platform-specific runtime behavior where practical. Include path handling uses canonical paths on POSIX and the corresponding Windows path routine. Release builds require strict GCC diagnostics, while the generated C remains ordinary C11 suitable for other conforming compilers.
+
+## Parser conflicts
+
+The grammar in `src/compiler/lib/parser.mly` has a fixed set of 23 states with 45 shift/reduce conflicts, all resolved by menhir's default shift. `scripts/check_parser_conflicts.sh` (run from `scripts/build.sh`) fails the build if the count changes, so any grammar edit that alters conflict behavior must be intentional. The conflicts fall into three classes:
+
+1. **Binary operator followed by postfix** (`expr STAR expr` vs `expr LBRACK expr RBRACK` / `expr DOT ID`). After `expr OP expr`, a following `LBRACK` or `DOT` can either index/select the right operand (shift) or complete the binary expression first (reduce). Default shift makes postfix bind tighter than every binary operator, matching C semantics: `a * b[i]` parses as `a * (b[i])`, and `(a * b)[i]` requires parentheses. This class recurs once per binary operator, which is why the conflict count is large.
+
+2. **Function type return type vs pointer** (`typ STAR`). After `fn(...): T`, a following `STAR` can extend the return type (shift) or complete the function type and wrap it in a pointer (reduce). Default shift gives `fn(...): T*` the C meaning of a function returning `T*`; a pointer-to-function requires the parenthesized form `(fn(...): T)*`.
+
+3. **Dangling else** (`IF c THEN s` vs `IF c THEN s ELSE s`). Default shift attaches `ELSE` to the nearest unmatched `IF`, which is the standard reading. `ELSE` needs no precedence declaration; an earlier `%nonassoc ELSE` was removed after menhir reported its precedence level was never consulted.
+
+All three resolutions are deliberate and match C's binding conventions. A grammar change should first be checked against the count asserted by `check_parser_conflicts.sh` and against `parser.conflicts` (`menhir --explain parser.mly`) when the semantics of any state change.
