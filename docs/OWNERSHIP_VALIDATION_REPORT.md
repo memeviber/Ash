@@ -46,8 +46,10 @@ The unified diff is empty. This confirms that the ownership checker changes acce
 After synchronizing `pyrelc.pyrel` with `pyrelc.pyrel`, the fixed-point script verified `n2.c == n3.c`. The production checksum recorded in `src/bootstrap/fixed_point_production.sha256` is:
 
 ```text
-5f6c9186e4eb35d60062285d0becae0b13a671e097a9abdb2d32c0fc0866f004
+676c81cd21cd96f3fafc89135d55472cb903b33f1e785fab7eb70e2c55d50936
 ```
+
+`scripts/fixed_point.sh` now verifies the regenerated `n2.c` against this committed production checksum, so any change that shifts the generated artifact fails the script instead of silently drifting.
 
 ## Artifacts
 
