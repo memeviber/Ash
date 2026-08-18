@@ -5,7 +5,7 @@ _build/
 
 # Generated C and local compiler binaries
 *.ash.c
-*.ash.c
+!src/bootstrap/ashc.ash.c
 *.bin
 *.out
 *.o
