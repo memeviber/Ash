@@ -1,0 +1,15 @@
+include "../../src/stdlib/map.ash"
+
+func main(): int {
+  let m: map::HashMap<int, int> = map::new(0, 0);
+  m = map::put(m, 3, 42);
+  print map::contains_key(m, 3);
+  print map::get_or(m, 3, 7);
+
+  let a: map::Map<int> = 0;
+  a.len = 1;
+  a.first = 20;
+  let b: map::Map<int> = map::map(a);
+  print b.second;
+  return 0;
+}

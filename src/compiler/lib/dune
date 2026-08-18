@@ -1,0 +1,9 @@
+(menhir
+ (modules parser))
+
+(ocamllex
+ (modules lexer))
+
+(library
+ (name ash_lib)
+ (modules ast lexer parser compiler typechecker))

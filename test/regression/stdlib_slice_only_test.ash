@@ -1,0 +1,14 @@
+include "../../src/stdlib/slice.ash"
+
+func main(): int {
+  let slice: slice::IntSlice = slice::new_int(2);
+  slice = slice::push_int(slice, 10);
+  slice = slice::push_int(slice, 20);
+  slice = slice::push_int(slice, 30);
+  print slice.len;
+  print slice::get_int(slice, 0);
+  print slice::get_int(slice, 2);
+  print slice::get_int(slice, 9);
+  slice::free_int(slice);
+  return 0;
+}

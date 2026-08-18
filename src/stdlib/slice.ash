@@ -1,0 +1,142 @@
+namespace slice {
+  // Generic slice with inline storage. It supports every Ash value type and
+  // remains allocation-free while generic element allocation is unavailable.
+  struct Slice<T> {
+    zero: T;
+    item0: T;
+    item1: T;
+    item2: T;
+    item3: T;
+    item4: T;
+    item5: T;
+    item6: T;
+    item7: T;
+    len: int;
+    cap: int;
+  }
+
+  func new<T>(zero: T): Slice<T> {
+    let s: Slice<T> = 0;
+    s.zero = zero;
+    s.item0 = zero;
+    s.item1 = zero;
+    s.item2 = zero;
+    s.item3 = zero;
+    s.item4 = zero;
+    s.item5 = zero;
+    s.item6 = zero;
+    s.item7 = zero;
+    s.len = 0;
+    s.cap = 8;
+    return s;
+  }
+
+  func push<T>(s: Slice<T>, value: T): Slice<T> {
+    if s.cap < s.len || s.cap == s.len then { return s; }
+    if s.len == 0 then { s.item0 = value; }
+    else if s.len == 1 then { s.item1 = value; }
+    else if s.len == 2 then { s.item2 = value; }
+    else if s.len == 3 then { s.item3 = value; }
+    else if s.len == 4 then { s.item4 = value; }
+    else if s.len == 5 then { s.item5 = value; }
+    else if s.len == 6 then { s.item6 = value; }
+    else { s.item7 = value; }
+    s.len = s.len + 1;
+    return s;
+  }
+
+  func get_or<T>(s: Slice<T>, index: int, fallback: T): T {
+    if index < 0 || index == s.len || index > s.len then { return fallback; }
+    if index == 0 then { return s.item0; }
+    if index == 1 then { return s.item1; }
+    if index == 2 then { return s.item2; }
+    if index == 3 then { return s.item3; }
+    if index == 4 then { return s.item4; }
+    if index == 5 then { return s.item5; }
+    if index == 6 then { return s.item6; }
+    return s.item7;
+  }
+
+  func get<T>(s: Slice<T>, index: int): T { return get_or(s, index, s.zero); }
+
+  func set<T>(s: Slice<T>, index: int, value: T): Slice<T> {
+    if index < 0 || index == s.len || index > s.len then { return s; }
+    if index == 0 then { s.item0 = value; }
+    else if index == 1 then { s.item1 = value; }
+    else if index == 2 then { s.item2 = value; }
+    else if index == 3 then { s.item3 = value; }
+    else if index == 4 then { s.item4 = value; }
+    else if index == 5 then { s.item5 = value; }
+    else if index == 6 then { s.item6 = value; }
+    else { s.item7 = value; }
+    return s;
+  }
+
+  func pop_or<T>(s: Slice<T>, fallback: T): Slice<T> {
+    if s.len < 0 || s.len == 0 then { return s; }
+    s.len = s.len - 1;
+    return s;
+  }
+
+  func last_or<T>(s: Slice<T>, fallback: T): T {
+    if s.len < 0 || s.len == 0 then { return fallback; }
+    return get_or(s, s.len - 1, fallback);
+  }
+
+  func clear<T>(s: Slice<T>): Slice<T> { s.len = 0; return s; }
+  func length<T>(s: Slice<T>): int { return s.len; }
+  func capacity<T>(s: Slice<T>): int { return s.cap; }
+  func is_empty<T>(s: Slice<T>): bool { return s.len == 0; }
+  func is_full<T>(s: Slice<T>): bool { return s.cap < s.len || s.cap == s.len; }
+
+  // Dynamically growing int specialization. This preserves unbounded slice
+  // behavior for the primitive type whose allocator is available today.
+  struct IntSlice {
+    data: int*;
+    len: int;
+    cap: int;
+  }
+
+  func new_int(capacity: int): IntSlice {
+    let s: IntSlice = 0;
+    if capacity < 1 then { capacity = 1; }
+    s.data = alloc_ints(capacity);
+    s.len = 0;
+    s.cap = capacity;
+    return s;
+  }
+
+  func push_int(s: IntSlice, value: int): IntSlice {
+    if s.cap < s.len || s.cap == s.len then {
+      let next: int = s.cap + s.cap;
+      if next < 1 then { next = 1; }
+      s.data = grow_ints(s.data, s.cap, next);
+      s.cap = next;
+    }
+    s.data[s.len] = value;
+    s.len = s.len + 1;
+    return s;
+  }
+
+  func get_int_or(s: IntSlice, index: int, fallback: int): int {
+    if index < 0 || index == s.len || index > s.len then { return fallback; }
+    return s.data[index];
+  }
+
+  func get_int(s: IntSlice, index: int): int { return get_int_or(s, index, 0); }
+
+  func set_int(s: IntSlice, index: int, value: int): IntSlice {
+    if (index == 0 || index > 0) && index < s.len then { s.data[index] = value; }
+    return s;
+  }
+
+  func pop_int(s: IntSlice): IntSlice {
+    if s.len > 0 then { s.len = s.len - 1; }
+    return s;
+  }
+
+  func clear_int(s: IntSlice): IntSlice { s.len = 0; return s; }
+  func length_int(s: IntSlice): int { return s.len; }
+  func capacity_int(s: IntSlice): int { return s.cap; }
+  func free_int(s: IntSlice): void { free_ints(s.data); }
+}

@@ -1,0 +1,18 @@
+includec "stress_ffi_loop.c"
+
+extern func c_abs(x: int): int;
+extern func c_strlen(s: string): int;
+extern func c_mix(x: int, y: int): int;
+
+func main(): int {
+  let i: int = 0;
+  let total: int = 0;
+  while (i < 1000) {
+    total = total + c_abs(0 - i);
+    total = total + c_strlen("Ash-ffi");
+    total = total + c_mix(i, 3);
+    i = i + 1;
+  }
+  print total;
+  return 0;
+}

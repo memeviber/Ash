@@ -1,0 +1,24 @@
+# OCaml/Dune
+_build/
+*.install
+*.merlin
+
+# Generated C and local compiler binaries
+*.ash.c
+*.ash.c
+*.bin
+*.out
+*.o
+*.a
+
+# Test and tool output
+*.log
+results/
+out/
+.tmp/
+
+# Editors and operating-system files
+.DS_Store
+.vscode/
+.idea/
+*.swp

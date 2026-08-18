@@ -1,0 +1,4 @@
+(executable
+ (name main)
+ (public_name ash)
+ (libraries ash_lib unix))

@@ -1,0 +1,9 @@
+// Runtime memory-safety test: out-of-bounds dynamic array access must abort.
+// Expected: process exits with code != 0 (ash_panic(3) calls exit(2)).
+func main(): int {
+  let a: array<int> = array_make(1);
+  a = array_push(a, 42);
+  // index 1 is out of bounds for a length-1 array
+  print a[1];
+  return 0;
+}

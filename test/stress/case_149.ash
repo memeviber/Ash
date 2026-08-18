@@ -1,0 +1,11 @@
+struct Pair149 {
+  left: int;
+  right: int;
+}
+func main(): int {
+  let p: Pair149 = 0;
+  p.left = 149;
+  p.right = (p.left + 2);
+  print p.right;
+  return 0;
+}
