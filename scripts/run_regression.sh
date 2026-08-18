@@ -45,5 +45,6 @@ expect_reject() {
 }
 
 compile_run "$ROOT/tests/stress/modulo_stress.pyrel" modulo_stress
+compile_run "$ROOT/tests/regression/stdlib_growth_test.pyrel" stdlib_growth_test
 expect_reject "$ROOT/tests/stress/modulo_invalid_string.pyrel" modulo_invalid_string
 printf 'Regression checks completed successfully.\n'

@@ -188,6 +188,17 @@ func ast_node(kind: int, a: int, b: int, c: int, value: int, aux: int): int {
 func ast_link(head: int, item: int): int {
   if head == 0 then return item;
   let p: int = head;
+  while p != 0 {
+    if p == item then {
+      let copy: int = ast_node(node_kind[item], node_a[item], node_b[item], node_c[item], node_value[item], node_aux[item]);
+      node_pos[copy] = node_pos[item];
+      node_scope[copy] = node_scope[item];
+      item = copy;
+      break;
+    }
+    p = node_next[p];
+  }
+  p = head;
   while node_next[p] != 0 {
     p = node_next[p];
   }
@@ -385,6 +396,17 @@ func gen_add_struct_spec(ty: int): void {
   ensure_gen_specs(gen_spec_count); gen_spec_kind[gen_spec_count] = 1; gen_spec_decl[gen_spec_count] = decl; gen_spec_type[gen_spec_count] = q; gen_spec_name[gen_spec_count] = name; gen_spec_count = gen_spec_count + 1;
   let a: int = node_a[q]; while a != 0 { gen_collect_type(a); a = node_next[a]; }
 }
+func gen_type_has_param(ty: int): int {
+  if ty == 0 then return 0;
+  if node_kind[ty] == TY_PARAM then return 1;
+  if node_kind[ty] == TY_PTR || node_kind[ty] == TY_ARRAY || node_kind[ty] == TY_DYN_ARRAY then return gen_type_has_param(node_a[ty]);
+  if node_kind[ty] == TY_GENERIC then {
+    let a: int = node_a[ty];
+    while a != 0 { if gen_type_has_param(a) == 1 then return 1; a = node_next[a]; }
+  }
+  return 0;
+}
+
 func gen_add_fun_spec(decl: int, args: int): void {
   let saved_count: int = gen_bind_count;
   ensure_gen_bind(saved_count + saved_count);
@@ -431,7 +453,10 @@ func gen_collect_expr(id: int): void {
     if f != 0 && node_kind[f] == N_GENERIC_FUNC then {
       let aa: int = node_a[id]; let actual: int = 0;
       while aa != 0 { let q: int = tc_emit_arg_type(aa); if q == 0 then { tc_expr(aa); q = tc_result_type; if q == 0 then q = tc_type_node_from_summary(tc_kind, tc_name, tc_elem_kind, tc_elem_name); } if q != 0 then q = gen_substitute_type(q); if actual == 0 then actual = q; else actual = ast_link(actual, q); gen_collect_type(q); aa = node_next[aa]; }
-      gen_add_fun_spec(f, actual);
+      let unresolved: int = 0;
+      let check_actual: int = actual;
+      while check_actual != 0 { if gen_type_has_param(check_actual) == 1 then unresolved = 1; check_actual = node_next[check_actual]; }
+      if unresolved == 0 then gen_add_fun_spec(f, actual);
     } else { let aa: int = node_a[id]; while aa != 0 { gen_collect_expr(aa); aa = node_next[aa]; } }
     return;
   }
@@ -481,6 +506,35 @@ func gen_type(kind: int, child: int, size: int): void {
     else code_emit(C_IDENT, sym_c_symbol(node_value[child]));
     code_emit(C_PUNCT, 18);
   }
+}
+
+func gen_scalar_kind(arg: int): int {
+  if arg != 0 then {
+    let typed: int = tc_emit_arg_type(arg);
+    if typed != 0 then {
+      let resolved: int = gen_substitute_type(typed);
+      if resolved != 0 && node_kind[resolved] != TY_PARAM then return node_kind[resolved];
+    }
+    if node_kind[arg] == N_INT then return TY_INT;
+    if node_kind[arg] == N_BOOL then return TY_BOOL;
+    if node_kind[arg] == N_CHAR then return TY_CHAR;
+    if node_kind[arg] == N_FLOAT then return TY_DOUBLE;
+    if node_kind[arg] == N_STRING then return TY_STRING;
+    if node_kind[arg] == N_VAR then return sym_type[node_value[arg]];
+  }
+  return gen_expr_kind(arg);
+}
+
+func gen_scalar_name(arg: int): int {
+  if arg != 0 then {
+    let typed: int = tc_emit_arg_type(arg);
+    if typed != 0 then {
+      let resolved: int = gen_substitute_type(typed);
+      if resolved != 0 && node_kind[resolved] == TY_NAMED then return node_value[resolved];
+    }
+    if node_kind[arg] == N_VAR then return sym_elem_name[node_value[arg]];
+  }
+  return 0;
 }
 
 func gen_array_elem_kind(arg: int): int {
@@ -587,10 +641,8 @@ func gen_memory_builtin(id: int): void {
   let a: int = node_a[id];
   if call_len == 12 && call_hash == 334590 then {
     let witness: int = node_next[a];
-    let elem_ty: int = tc_emit_arg_type(witness);
-    if elem_ty != 0 then elem_ty = gen_substitute_type(elem_ty);
-    if elem_ty == 0 then elem_ty = ast_node(TY_INT, 0, 0, 0, 0, 0);
-    let ptr_ty: int = ast_node(TY_PTR, elem_ty, 0, 0, 0, 0);
+    let elem_kind: int = gen_scalar_kind(witness);
+    let elem_name: int = gen_scalar_name(witness);
     code_emit(C_PUNCT, 6);
     code_emit(C_PUNCT, 6);
     code_emit(C_KW, 4);
@@ -600,13 +652,14 @@ func gen_memory_builtin(id: int): void {
     code_emit(C_PUNCT, 8);
     code_emit(C_PUNCT, 7);
     code_emit(C_PUNCT, 6);
-    gen_type(node_kind[ptr_ty], ptr_ty, 0);
+    gen_array_elem_type(elem_kind, elem_name);
+    code_emit(C_PUNCT, 1);
     code_emit(C_PUNCT, 8);
     code_emit(C_IDENT, 1016);
     code_emit(C_PUNCT, 6);
     gen_expr(a);
     code_emit(C_PUNCT, 7);
-    gen_memory_sizeof(witness);
+    gen_array_sizeof(elem_kind, elem_name);
     code_emit(C_PUNCT, 8);
     code_emit(C_PUNCT, 8);
   } else if call_len == 13 && call_hash == 806795 then {
@@ -3232,6 +3285,8 @@ func tc_expr(id: int): void {
     } else {
       tc_fail(18);
     }
+    tc_result_type = tc_type_node_from_summary(tc_kind, tc_name, tc_elem_kind, tc_elem_name);
+    node_aux[id] = tc_result_type;
     return;
   }
   tc_fail(19);

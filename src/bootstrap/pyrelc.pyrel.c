@@ -429,11 +429,14 @@ int gen_substitute_type(int ty);
 int gen_active_param_type(int name);
 int gen_spec_exists(int kind, int decl, int name);
 void gen_add_struct_spec(int ty);
+int gen_type_has_param(int ty);
 void gen_add_fun_spec(int decl, int args);
 void gen_collect_type(int ty);
 void gen_collect_expr(int id);
 void gen_collect_stmt(int id);
 void gen_type(int kind, int child, int size);
+int gen_scalar_kind(int arg);
+int gen_scalar_name(int arg);
 int gen_array_elem_kind(int arg);
 int gen_array_elem_name(int arg);
 void gen_array_elem_type(int kind, int name);
@@ -707,6 +710,24 @@ int ast_link(int head, int item) {
     }
   }
   int p = head;
+  while ((p != 0)) {
+    {
+      if ((p == item)) {
+        {
+          int copy = ast_node((node_kind)[item], (node_a)[item], (node_b)[item], (node_c)[item], (node_value)[item], (node_aux)[item]);
+          (node_pos)[copy] = (node_pos)[item];
+          (node_scope)[copy] = (node_scope)[item];
+          item = copy;
+          break;
+        }
+      } else {
+        {
+        }
+      }
+      p = (node_next)[p];
+    }
+  }
+  p = head;
   while (((node_next)[p] != 0)) {
     {
       p = (node_next)[p];
@@ -1162,6 +1183,47 @@ void gen_add_struct_spec(int ty) {
   }
 }
 
+int gen_type_has_param(int ty) {
+  if ((ty == 0)) {
+    return 0;
+  } else {
+    {
+    }
+  }
+  if (((node_kind)[ty] == TY_PARAM)) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  if (((((node_kind)[ty] == TY_PTR) || ((node_kind)[ty] == TY_ARRAY)) || ((node_kind)[ty] == TY_DYN_ARRAY))) {
+    return gen_type_has_param((node_a)[ty]);
+  } else {
+    {
+    }
+  }
+  if (((node_kind)[ty] == TY_GENERIC)) {
+    {
+      int a = (node_a)[ty];
+      while ((a != 0)) {
+        {
+          if ((gen_type_has_param(a) == 1)) {
+            return 1;
+          } else {
+            {
+            }
+          }
+          a = (node_next)[a];
+        }
+      }
+    }
+  } else {
+    {
+    }
+  }
+  return 0;
+}
+
 void gen_add_fun_spec(int decl, int args) {
   int saved_count = gen_bind_count;
   ensure_gen_bind((saved_count + saved_count));
@@ -1312,7 +1374,25 @@ void gen_collect_expr(int id) {
               aa = (node_next)[aa];
             }
           }
-          gen_add_fun_spec(f, actual);
+          int unresolved = 0;
+          int check_actual = actual;
+          while ((check_actual != 0)) {
+            {
+              if ((gen_type_has_param(check_actual) == 1)) {
+                unresolved = 1;
+              } else {
+                {
+                }
+              }
+              check_actual = (node_next)[check_actual];
+            }
+          }
+          if ((unresolved == 0)) {
+            gen_add_fun_spec(f, actual);
+          } else {
+            {
+            }
+          }
         }
       } else {
         {
@@ -1530,6 +1610,100 @@ void gen_type(int kind, int child, int size) {
       }
     }
   }
+}
+
+int gen_scalar_kind(int arg) {
+  if ((arg != 0)) {
+    {
+      int typed = tc_emit_arg_type(arg);
+      if ((typed != 0)) {
+        {
+          int resolved = gen_substitute_type(typed);
+          if (((resolved != 0) && ((node_kind)[resolved] != TY_PARAM))) {
+            return (node_kind)[resolved];
+          } else {
+            {
+            }
+          }
+        }
+      } else {
+        {
+        }
+      }
+      if (((node_kind)[arg] == N_INT)) {
+        return TY_INT;
+      } else {
+        {
+        }
+      }
+      if (((node_kind)[arg] == N_BOOL)) {
+        return TY_BOOL;
+      } else {
+        {
+        }
+      }
+      if (((node_kind)[arg] == N_CHAR)) {
+        return TY_CHAR;
+      } else {
+        {
+        }
+      }
+      if (((node_kind)[arg] == N_FLOAT)) {
+        return TY_DOUBLE;
+      } else {
+        {
+        }
+      }
+      if (((node_kind)[arg] == N_STRING)) {
+        return TY_STRING;
+      } else {
+        {
+        }
+      }
+      if (((node_kind)[arg] == N_VAR)) {
+        return (sym_type)[(node_value)[arg]];
+      } else {
+        {
+        }
+      }
+    }
+  } else {
+    {
+    }
+  }
+  return gen_expr_kind(arg);
+}
+
+int gen_scalar_name(int arg) {
+  if ((arg != 0)) {
+    {
+      int typed = tc_emit_arg_type(arg);
+      if ((typed != 0)) {
+        {
+          int resolved = gen_substitute_type(typed);
+          if (((resolved != 0) && ((node_kind)[resolved] == TY_NAMED))) {
+            return (node_value)[resolved];
+          } else {
+            {
+            }
+          }
+        }
+      } else {
+        {
+        }
+      }
+      if (((node_kind)[arg] == N_VAR)) {
+        return (sym_elem_name)[(node_value)[arg]];
+      } else {
+        {
+        }
+      }
+    }
+  } else {
+    {
+    }
+  }
+  return 0;
 }
 
 int gen_array_elem_kind(int arg) {
@@ -1759,20 +1933,8 @@ void gen_memory_builtin(int id) {
   if (((call_len == 12) && (call_hash == 334590))) {
     {
       int witness = (node_next)[a];
-      int elem_ty = tc_emit_arg_type(witness);
-      if ((elem_ty != 0)) {
-        elem_ty = gen_substitute_type(elem_ty);
-      } else {
-        {
-        }
-      }
-      if ((elem_ty == 0)) {
-        elem_ty = ast_node(TY_INT, 0, 0, 0, 0, 0);
-      } else {
-        {
-        }
-      }
-      int ptr_ty = ast_node(TY_PTR, elem_ty, 0, 0, 0, 0);
+      int elem_kind = gen_scalar_kind(witness);
+      int elem_name = gen_scalar_name(witness);
       code_emit(C_PUNCT, 6);
       code_emit(C_PUNCT, 6);
       code_emit(C_KW, 4);
@@ -1782,13 +1944,14 @@ void gen_memory_builtin(int id) {
       code_emit(C_PUNCT, 8);
       code_emit(C_PUNCT, 7);
       code_emit(C_PUNCT, 6);
-      gen_type((node_kind)[ptr_ty], ptr_ty, 0);
+      gen_array_elem_type(elem_kind, elem_name);
+      code_emit(C_PUNCT, 1);
       code_emit(C_PUNCT, 8);
       code_emit(C_IDENT, 1016);
       code_emit(C_PUNCT, 6);
       gen_expr(a);
       code_emit(C_PUNCT, 7);
-      gen_memory_sizeof(witness);
+      gen_array_sizeof(elem_kind, elem_name);
       code_emit(C_PUNCT, 8);
       code_emit(C_PUNCT, 8);
     }
@@ -9307,6 +9470,8 @@ void tc_expr(int id) {
           }
         }
       }
+      tc_result_type = tc_type_node_from_summary(tc_kind, tc_name, tc_elem_kind, tc_elem_name);
+      (node_aux)[id] = tc_result_type;
       return;
     }
   } else {

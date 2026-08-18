@@ -19,6 +19,7 @@ namespace array {
   }
 
   func reserve<T>(a: Array<T>, minimum: int, zero: T): Array<T> {
+    if minimum < 1 then return a;
     if minimum > a.cap then {
       a.data = memory_resize(a.data, a.cap, minimum, zero);
       a.cap = minimum;
@@ -26,13 +27,23 @@ namespace array {
     return a;
   }
 
-  func push<T>(a: Array<T>, value: T, zero: T): Array<T> {
-    if a.len == a.cap then {
-      let next: int = a.cap * 2;
-      if next < 1 then next = 4;
-      a.data = memory_resize(a.data, a.cap, next, zero);
-      a.cap = next;
+  func ensure_capacity<T>(a: Array<T>, required: int, zero: T): Array<T> {
+    if required < 1 then return a;
+    if required < a.cap then return a;
+    if required == a.cap then return a;
+    let next: int = a.cap;
+    if next < 1 then next = 4;
+    while next < required {
+      let grown: int = next * 2;
+      if grown < next then { grown = required; }
+      if grown == next then { grown = required; }
+      next = grown;
     }
+    return array::reserve(a, next, zero);
+  }
+
+  func push<T>(a: Array<T>, value: T, zero: T): Array<T> {
+    a = array::ensure_capacity(a, a.len + 1, zero);
     a.data[a.len] = value;
     a.len = a.len + 1;
     return a;
@@ -85,7 +96,7 @@ namespace array {
   }
 
   func is_full<T>(a: Array<T>): bool {
-    return a.len == a.cap;
+    return a.cap < a.len || a.cap == a.len;
   }
 
   func free<T>(a: Array<T>): void {
