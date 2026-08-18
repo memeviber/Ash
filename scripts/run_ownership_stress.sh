@@ -44,11 +44,11 @@ run_valid() {
   fi
 
   gcc -std=c11 -O1 -g -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
-    -Werror=implicit-function-declaration -Werror=incompatible-pointer-types -Werror=int-conversion \
+    -Werror \
     -fsanitize=address,undefined -fno-omit-frame-pointer \
     "$dir/$name.bsl.c" -o "$dir/host.san.bin"
   gcc -std=c11 -O1 -g -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
-    -Werror=implicit-function-declaration -Werror=incompatible-pointer-types -Werror=int-conversion \
+    -Werror \
     -fsanitize=address,undefined -fno-omit-frame-pointer \
     "$dir/$name.boot.c" -o "$dir/bootstrap.san.bin"
   ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
