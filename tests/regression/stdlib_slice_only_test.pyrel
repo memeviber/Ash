@@ -9,6 +9,6 @@ func main(): int {
   print slice::get(slice, 0);
   print slice::get(slice, 2);
   print slice::get(slice, 9);
-  slice::free(slice);
+  slice = slice::free(slice);
   return 0;
 }

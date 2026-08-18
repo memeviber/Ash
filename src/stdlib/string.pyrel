@@ -7,7 +7,7 @@ namespace str {
     return i;
   }
 
-  func at(s: string, index: int): int {
+  func byte_at(s: string, index: int): int {
     return s[index] & 255;
   }
 
@@ -24,24 +24,24 @@ namespace str {
     return a ++ b;
   }
 
-  // UTF-8 helpers. byte_len and at remain byte-oriented APIs.
+  // UTF-8 helpers. byte_len and byte_at are byte-oriented; codepoint_* APIs are UTF-8 aware.
 
   func utf8_decode_at(s: string, offset: int): int {
     let n: int = byte_len(s);
     if offset < 0 then { return (0 - 1); }
     if offset > (n - 1) then { return (0 - 1); }
-    let b0: int = at(s, offset);
+    let b0: int = byte_at(s, offset);
     if b0 < 128 then { return b0; }
     if b0 > 193 && b0 < 224 then {
       if offset + 1 > (n - 1) then { return (0 - 1); }
-      let b1: int = at(s, offset + 1);
+      let b1: int = byte_at(s, offset + 1);
       if b1 < 128 || b1 > 191 then { return (0 - 1); }
       return (b0 - 192) * 64 + (b1 - 128);
     }
     if b0 > 223 && b0 < 240 then {
       if offset + 2 > (n - 1) then { return (0 - 1); }
-      let b1: int = at(s, offset + 1);
-      let b2: int = at(s, offset + 2);
+      let b1: int = byte_at(s, offset + 1);
+      let b2: int = byte_at(s, offset + 2);
       if b1 < 128 || b1 > 191 || b2 < 128 || b2 > 191 then { return (0 - 1); }
       let cp: int = (b0 - 224) * 4096 + (b1 - 128) * 64 + (b2 - 128);
       if cp < 2048 then { return (0 - 1); }
@@ -50,9 +50,9 @@ namespace str {
     }
     if b0 > 239 && b0 < 245 then {
       if offset + 3 > (n - 1) then { return (0 - 1); }
-      let b1: int = at(s, offset + 1);
-      let b2: int = at(s, offset + 2);
-      let b3: int = at(s, offset + 3);
+      let b1: int = byte_at(s, offset + 1);
+      let b2: int = byte_at(s, offset + 2);
+      let b3: int = byte_at(s, offset + 3);
       if b1 < 128 || b1 > 191 || b2 < 128 || b2 > 191 || b3 < 128 || b3 > 191 then { return (0 - 1); }
       let cp: int = (b0 - 240) * 262144 + (b1 - 128) * 4096 + (b2 - 128) * 64 + (b3 - 128);
       if cp < 65536 || cp > 1114111 then { return (0 - 1); }
@@ -64,7 +64,7 @@ namespace str {
   func utf8_next(s: string, offset: int): int {
     let cp: int = utf8_decode_at(s, offset);
     if cp < 0 then { return (0 - 1); }
-    let b0: int = at(s, offset);
+    let b0: int = byte_at(s, offset);
     if b0 < 128 then { return offset + 1; }
     if b0 < 224 then { return offset + 2; }
     if b0 < 240 then { return offset + 3; }
@@ -117,8 +117,14 @@ namespace str {
   func self_test(): int {
     let ascii: string = "Pyrel";
     if utf8_validate(ascii) == false then { return 0; }
-    if codepoint_len(ascii) != 3 then { return 0; }
-    if codepoint_at(ascii, 1) != 115 then { return 0; }
+    if byte_len(ascii) != 5 then { return 0; }
+    if byte_at(ascii, 0) != 80 then { return 0; }
+    if codepoint_len(ascii) != 5 then { return 0; }
+    if codepoint_at(ascii, 1) != 121 then { return 0; }
+    if utf8_validate("é") == false then { return 0; }
+    if codepoint_len("é") != 1 then { return 0; }
+    if codepoint_at("é", 0) != 233 then { return 0; }
+    if codepoint_at(ascii, 99) != (0 - 1) then { return 0; }
     return 1;
   }
 }

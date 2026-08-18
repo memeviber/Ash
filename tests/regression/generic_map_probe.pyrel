@@ -10,6 +10,6 @@ func main(): int {
   m = map::put(m, 8, 64);
   m = map::clear(m);
   print map::length(m);
-  map::free(m);
+  m = map::free(m);
   return 0;
 }

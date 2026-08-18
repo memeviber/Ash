@@ -13,6 +13,7 @@ let N_STRING: int = 3;
 let N_VAR: int = 4;
 let N_BINOP: int = 5;
 let N_CALL: int = 6;
+let N_INDIRECT_CALL: int = 37;
 let N_DEREF: int = 7;
 let N_INDEX: int = 8;
 let N_ADDRESS: int = 9;
@@ -73,7 +74,6 @@ let TY_CHAR: int = 8;
 let TY_FLOAT: int = 9;
 let TY_DOUBLE: int = 10;
 let TY_FUN: int = 11;
-let TY_PTRDIFF: int = 12;
 let TY_DYN_ARRAY: int = 13;
 let TY_PARAM: int = 14;
 let TY_GENERIC: int = 15;
@@ -460,6 +460,7 @@ func gen_collect_expr(id: int): void {
     } else { let aa: int = node_a[id]; while aa != 0 { gen_collect_expr(aa); aa = node_next[aa]; } }
     return;
   }
+  if k == N_INDIRECT_CALL then { gen_collect_expr(node_a[id]); let aa: int = node_b[id]; while aa != 0 { gen_collect_expr(aa); aa = node_next[aa]; } return; }
   if k == N_BINOP then { gen_collect_expr(node_a[id]); gen_collect_expr(node_b[id]); return; }
   if k == N_FIELD_ACCESS || k == N_INDEX || k == N_DEREF || k == N_ADDRESS then { gen_collect_expr(node_a[id]); gen_collect_expr(node_b[id]); return; }
 }
@@ -765,6 +766,7 @@ func gen_expr(id: int): void {
   else if k == N_VAR then code_emit(C_IDENT, sym_c_symbol(node_value[id]));
   else if k == N_BINOP then {
     if node_value[id] == OP_CONCAT then { code_emit(C_IDENT, 1002); code_emit(C_PUNCT, 6); gen_expr(node_a[id]); code_emit(C_PUNCT, 7); gen_expr(node_b[id]); code_emit(C_PUNCT, 8); }
+    else if node_value[id] == OP_SUB && gen_expr_kind(node_a[id]) == TY_PTR && gen_expr_kind(node_b[id]) == TY_PTR then { code_emit(C_PUNCT, 4); code_emit(C_KW, 1); code_emit(C_PUNCT, 5); code_emit(C_PUNCT, 4); gen_expr(node_a[id]); code_emit(C_OP, node_value[id]); gen_expr(node_b[id]); code_emit(C_PUNCT, 5); }
     else { code_emit(C_PUNCT, 4); gen_expr(node_a[id]); code_emit(C_OP, node_value[id]); gen_expr(node_b[id]); code_emit(C_PUNCT, 5); }
   } else if k == N_CALL then {
     let call_name: int = node_value[id];
@@ -772,6 +774,10 @@ func gen_expr(id: int): void {
     let call_hash: int = sym_hash[call_name];
     if (call_len == 12 && call_hash == 334590) || (call_len == 13 && call_hash == 806795) || (call_len == 11 && call_hash == 649155) then gen_memory_builtin(id);
     else { code_emit(C_IDENT, gen_call_name(id)); code_emit(C_PUNCT, 6); let arg: int = node_a[id]; while arg != 0 { gen_expr(arg); if node_next[arg] != 0 then code_emit(C_PUNCT, 7); arg = node_next[arg]; } code_emit(C_PUNCT, 8); }
+  } else if k == N_INDIRECT_CALL then {
+    code_emit(C_PUNCT, 4); gen_expr(node_a[id]); code_emit(C_PUNCT, 5); code_emit(C_PUNCT, 6);
+    let arg: int = node_b[id]; while arg != 0 { gen_expr(arg); if node_next[arg] != 0 then code_emit(C_PUNCT, 7); arg = node_next[arg]; }
+    code_emit(C_PUNCT, 8);
   } else if k == N_DEREF then { code_emit(C_PUNCT, 9); gen_expr(node_a[id]); }
   else if k == N_ADDRESS then { code_emit(C_PUNCT, 10); gen_expr(node_a[id]); }
   else if k == N_INDEX then {
@@ -804,11 +810,11 @@ func gen_expr_kind(id: int): int {
   }
   if k == N_DEREF then return TY_INT;
   if k == N_FIELD_ACCESS then return TY_INT;
-  if k == N_CALL then return tc_expr_kind_for_emit(id);
+  if k == N_CALL || k == N_INDIRECT_CALL then return tc_expr_kind_for_emit(id);
   if k == N_BINOP then {
     if node_value[id] == OP_CONCAT then return TY_STRING;
     if node_value[id] == OP_EQ || node_value[id] == OP_NEQ || node_value[id] == OP_LT || node_value[id] == OP_GT || node_value[id] == OP_AND || node_value[id] == OP_OR then return TY_BOOL;
-    if node_value[id] == OP_SUB && gen_expr_kind(node_a[id]) == TY_PTR && gen_expr_kind(node_b[id]) == TY_PTR then return TY_PTRDIFF;
+    if node_value[id] == OP_SUB && gen_expr_kind(node_a[id]) == TY_PTR && gen_expr_kind(node_b[id]) == TY_PTR then return TY_INT;
     if node_value[id] == OP_BITAND || node_value[id] == OP_BITOR || node_value[id] == OP_BITXOR || node_value[id] == OP_SHL || node_value[id] == OP_SHR then return TY_INT;
     let ak: int = gen_expr_kind(node_a[id]); let bk: int = gen_expr_kind(node_b[id]);
     if ak == TY_DOUBLE || bk == TY_DOUBLE then return TY_DOUBLE;
@@ -900,7 +906,6 @@ func gen_stmt(id: int): void {
     let pk: int = gen_expr_kind(node_a[id]);
     if pk == TY_STRING then code_emit(C_PUNCT, 16);
     else if pk == TY_CHAR then code_emit(C_PUNCT, 20);
-    else if pk == TY_PTRDIFF then code_emit(C_PUNCT, 23);
     else if pk == TY_FLOAT || pk == TY_DOUBLE then code_emit(C_PUNCT, 21);
     else code_emit(C_PUNCT, 15);
     gen_expr(node_a[id]);
@@ -1407,6 +1412,22 @@ func ast_type(): int {
   return ty;
 }
 
+func ast_call_args(): int {
+  let args: int = 0;
+  if input_peek() != T_RPAREN then {
+    let arg: int = ast_expr();
+    if arg < 0 then return (0 - 1);
+    args = arg;
+    while input_take(T_COMMA) == 1 {
+      arg = ast_expr();
+      if arg < 0 then return (0 - 1);
+      args = ast_link(args, arg);
+    }
+  }
+  if input_take(T_RPAREN) == 0 then return (0 - 1);
+  return args;
+}
+
 func ast_primary(): int {
   if input_peek() == T_CHAR then {
     let value: int = input_payload(); input_pos = input_pos + 1;
@@ -1435,18 +1456,8 @@ func ast_primary(): int {
       name = sym_qualified(name, rhs);
     }
     if input_take(T_LPAREN) == 1 then {
-      let args: int = 0;
-      if input_peek() != T_RPAREN then {
-        let arg: int = ast_expr();
-        if arg < 0 then return (0 - 1);
-        args = arg;
-        while input_take(T_COMMA) == 1 {
-          arg = ast_expr();
-          if arg < 0 then return (0 - 1);
-          args = ast_link(args, arg);
-        }
-      }
-      if input_take(T_RPAREN) == 0 then return (0 - 1);
+      let args: int = ast_call_args();
+      if args < 0 then return (0 - 1);
       return ast_node(N_CALL, args, 0, 0, name, 0);
     }
     let base: int = ast_node(N_VAR, 0, 0, 0, name, 0);
@@ -1454,7 +1465,13 @@ func ast_primary(): int {
       if input_peek() != T_ID then return (0 - 1);
       let field: int = input_payload();
       input_pos = input_pos + 1;
-      return ast_node(N_FIELD_ACCESS, base, 0, 0, field, 0);
+      let field_expr: int = ast_node(N_FIELD_ACCESS, base, 0, 0, field, 0);
+      if input_take(T_LPAREN) == 1 then {
+        let args: int = ast_call_args();
+        if args < 0 then return (0 - 1);
+        return ast_node(N_INDIRECT_CALL, field_expr, args, 0, 0, 0);
+      }
+      return field_expr;
     }
     return base;
   }
@@ -1462,6 +1479,11 @@ func ast_primary(): int {
     let e: int = ast_expr();
     if e < 0 then return (0 - 1);
     if input_take(T_RPAREN) == 0 then return (0 - 1);
+    if input_take(T_LPAREN) == 1 then {
+      let args: int = ast_call_args();
+      if args < 0 then return (0 - 1);
+      return ast_node(N_INDIRECT_CALL, e, args, 0, 0, 0);
+    }
     return e;
   }
   return (0 - 1);
@@ -3247,6 +3269,20 @@ func tc_expr(id: int): void {
     if arg != 0 || p != 0 then tc_fail(13);
     tc_type_node(node_b[fun_node]); return;
   }
+  if k == N_INDIRECT_CALL then {
+    tc_expr(node_a[id]);
+    if tc_kind != TY_FUN || tc_result_type == 0 || node_kind[tc_result_type] != TY_FUN then { tc_fail(12); return; }
+    let fty: int = tc_result_type;
+    let arg: int = node_b[id]; let param: int = node_a[fty];
+    while arg != 0 && param != 0 {
+      tc_expr(arg); let ak: int = tc_kind; let an: int = tc_name; let aek: int = tc_elem_kind; let aen: int = tc_elem_name;
+      tc_type_node(param); let pk: int = tc_kind; let pn: int = tc_name; let pek: int = tc_elem_kind; let pen: int = tc_elem_name;
+      if tc_same_full(ak, an, aek, aen, pk, pn, pek, pen) == 0 then tc_fail(12);
+      arg = node_next[arg]; param = node_next[param];
+    }
+    if arg != 0 || param != 0 then { tc_fail(13); return; }
+    tc_type_node(node_b[fty]); return;
+  }
   if k == N_BINOP then {
     tc_expr(node_a[id]); let ak: int = tc_kind; let an: int = tc_name; let ae: int = tc_elem_kind; let aen: int = tc_elem_name;
     tc_expr(node_b[id]); let bk: int = tc_kind; let bn: int = tc_name; let be: int = tc_elem_kind; let ben: int = tc_elem_name;
@@ -3373,6 +3409,10 @@ func tc_emit_arg_type(id: int): int {
 
 func tc_expr_kind_for_emit(id: int): int {
   if id != 0 && node_kind[id] == N_CALL && node_aux[id] != 0 then return node_kind[node_aux[id]];
+  if id != 0 && node_kind[id] == N_INDIRECT_CALL then {
+    tc_expr(id);
+    return tc_kind;
+  }
   let f: int = tc_find_function_ctx(node_value[id], node_scope[id]);
   if f != 0 then {
     if node_kind[f] == N_GENERIC_FUNC then {
@@ -3672,7 +3712,7 @@ func emit_c_token(out: int*, kind: int, value: int): void {
     else if value == 18 then write_string(out, " ");
     else if value == 19 then write_string(out, "{0}");
     else if value == 22 then write_char(out, 32);
-    else if value == 23 then { write_char(out, 40); write_char(out, 34); write_string(out, "%td"); write_char(out, 92); write_char(out, 110); write_char(out, 34); write_string(out, ", "); }
+    else if value == 23 then { write_char(out, 40); write_char(out, 34); write_string(out, "%d"); write_char(out, 92); write_char(out, 110); write_char(out, 34); write_string(out, ", "); }
     else if value == 24 then write_string(out, "{");
     else if value == 25 then write_string(out, "}");
   } else if kind == C_NEWLINE then write_char(out, 10);

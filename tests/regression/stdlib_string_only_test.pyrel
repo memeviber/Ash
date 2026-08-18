@@ -3,7 +3,7 @@ include "../../src/stdlib/string.pyrel"
 func main(): int {
   let text: string = "Aé";
   print str::byte_len(text);
-  print str::at(text, 0);
+  print str::byte_at(text, 0);
   print str::eq(text, "Aé");
   print str::eq(text, "Ax");
   return 0;

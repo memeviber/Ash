@@ -49,6 +49,7 @@ compile_run "$ROOT/tests/regression/stdlib_growth_test.pyrel" stdlib_growth_test
 compile_run "$ROOT/tests/regression/stdlib_containers_test.pyrel" stdlib_containers_test
 compile_run "$ROOT/tests/regression/stdlib_slice_only_test.pyrel" stdlib_slice_only_test
 compile_run "$ROOT/tests/regression/stdlib_map_only_test.pyrel" stdlib_map_only_test
+compile_run "$ROOT/tests/regression/stdlib_hashing_test.pyrel" stdlib_hashing_test
 compile_run "$ROOT/tests/regression/stress_containers_loop.pyrel" stress_containers_loop
 compile_run "$ROOT/tests/regression/generic_map_probe.pyrel" generic_map_probe
 expect_reject "$ROOT/tests/stress/modulo_invalid_string.pyrel" modulo_invalid_string

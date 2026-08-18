@@ -66,7 +66,7 @@ namespace array {
   func set_if_in_bounds<T>(a: Array<T>, index: int, value: T): bool {
     if index < 0 then return false;
     if index < a.len then {
-      a = array::set(a, index, value);
+      a.data[index] = value;
       return 1;
     }
     return 0;
@@ -98,11 +98,12 @@ namespace array {
     return a.cap < a.len || a.cap == a.len;
   }
 
-  func free<T>(a: Array<T>): void {
-    memory_free(a.data);
+  func free<T>(a: Array<T>): Array<T> {
+    if a.data != 0 then memory_free(a.data);
     a.data = 0;
     a.len = 0;
     a.cap = 0;
+    return a;
   }
 
   // Return an owning copy of a bounded range. Negative start/count values are

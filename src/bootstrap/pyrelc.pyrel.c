@@ -87,6 +87,7 @@ int N_STRING = 3;
 int N_VAR = 4;
 int N_BINOP = 5;
 int N_CALL = 6;
+int N_INDIRECT_CALL = 37;
 int N_DEREF = 7;
 int N_INDEX = 8;
 int N_ADDRESS = 9;
@@ -145,7 +146,6 @@ int TY_CHAR = 8;
 int TY_FLOAT = 9;
 int TY_DOUBLE = 10;
 int TY_FUN = 11;
-int TY_PTRDIFF = 12;
 int TY_DYN_ARRAY = 13;
 int TY_PARAM = 14;
 int TY_GENERIC = 15;
@@ -473,6 +473,7 @@ int input_take(int kind);
 int ast_generic_param(int name);
 int ast_generic_params(void);
 int ast_type(void);
+int ast_call_args(void);
 int ast_primary(void);
 int ast_unary(void);
 int ast_precedence(int kind);
@@ -1411,6 +1412,22 @@ void gen_collect_expr(int id) {
     {
     }
   }
+  if ((k == N_INDIRECT_CALL)) {
+    {
+      gen_collect_expr((node_a)[id]);
+      int aa = (node_b)[id];
+      while ((aa != 0)) {
+        {
+          gen_collect_expr(aa);
+          aa = (node_next)[aa];
+        }
+      }
+      return;
+    }
+  } else {
+    {
+    }
+  }
   if ((k == N_BINOP)) {
     {
       gen_collect_expr((node_a)[id]);
@@ -2167,12 +2184,25 @@ void gen_expr(int id) {
                         code_emit(C_PUNCT, 8);
                       }
                     } else {
-                      {
-                        code_emit(C_PUNCT, 4);
-                        gen_expr((node_a)[id]);
-                        code_emit(C_OP, (node_value)[id]);
-                        gen_expr((node_b)[id]);
-                        code_emit(C_PUNCT, 5);
+                      if (((((node_value)[id] == OP_SUB) && (gen_expr_kind((node_a)[id]) == TY_PTR)) && (gen_expr_kind((node_b)[id]) == TY_PTR))) {
+                        {
+                          code_emit(C_PUNCT, 4);
+                          code_emit(C_KW, 1);
+                          code_emit(C_PUNCT, 5);
+                          code_emit(C_PUNCT, 4);
+                          gen_expr((node_a)[id]);
+                          code_emit(C_OP, (node_value)[id]);
+                          gen_expr((node_b)[id]);
+                          code_emit(C_PUNCT, 5);
+                        }
+                      } else {
+                        {
+                          code_emit(C_PUNCT, 4);
+                          gen_expr((node_a)[id]);
+                          code_emit(C_OP, (node_value)[id]);
+                          gen_expr((node_b)[id]);
+                          code_emit(C_PUNCT, 5);
+                        }
                       }
                     }
                   }
@@ -2206,34 +2236,57 @@ void gen_expr(int id) {
                       }
                     }
                   } else {
-                    if ((k == N_DEREF)) {
+                    if ((k == N_INDIRECT_CALL)) {
                       {
-                        code_emit(C_PUNCT, 9);
+                        code_emit(C_PUNCT, 4);
                         gen_expr((node_a)[id]);
+                        code_emit(C_PUNCT, 5);
+                        code_emit(C_PUNCT, 6);
+                        int arg = (node_b)[id];
+                        while ((arg != 0)) {
+                          {
+                            gen_expr(arg);
+                            if (((node_next)[arg] != 0)) {
+                              code_emit(C_PUNCT, 7);
+                            } else {
+                              {
+                              }
+                            }
+                            arg = (node_next)[arg];
+                          }
+                        }
+                        code_emit(C_PUNCT, 8);
                       }
                     } else {
-                      if ((k == N_ADDRESS)) {
+                      if ((k == N_DEREF)) {
                         {
-                          code_emit(C_PUNCT, 10);
+                          code_emit(C_PUNCT, 9);
                           gen_expr((node_a)[id]);
                         }
                       } else {
-                        if ((k == N_INDEX)) {
+                        if ((k == N_ADDRESS)) {
                           {
+                            code_emit(C_PUNCT, 10);
                             gen_expr((node_a)[id]);
-                            code_emit(C_PUNCT, 2);
-                            gen_expr((node_b)[id]);
-                            code_emit(C_PUNCT, 3);
                           }
                         } else {
-                          if ((k == N_FIELD_ACCESS)) {
+                          if ((k == N_INDEX)) {
                             {
                               gen_expr((node_a)[id]);
-                              code_emit(C_PUNCT, 17);
-                              code_emit(C_IDENT, (node_value)[id]);
+                              code_emit(C_PUNCT, 2);
+                              gen_expr((node_b)[id]);
+                              code_emit(C_PUNCT, 3);
                             }
                           } else {
-                            {
+                            if ((k == N_FIELD_ACCESS)) {
+                              {
+                                gen_expr((node_a)[id]);
+                                code_emit(C_PUNCT, 17);
+                                code_emit(C_IDENT, (node_value)[id]);
+                              }
+                            } else {
+                              {
+                              }
                             }
                           }
                         }
@@ -2334,7 +2387,7 @@ int gen_expr_kind(int id) {
     {
     }
   }
-  if ((k == N_CALL)) {
+  if (((k == N_CALL) || (k == N_INDIRECT_CALL))) {
     return tc_expr_kind_for_emit(id);
   } else {
     {
@@ -2355,7 +2408,7 @@ int gen_expr_kind(int id) {
         }
       }
       if (((((node_value)[id] == OP_SUB) && (gen_expr_kind((node_a)[id]) == TY_PTR)) && (gen_expr_kind((node_b)[id]) == TY_PTR))) {
-        return TY_PTRDIFF;
+        return TY_INT;
       } else {
         {
         }
@@ -2531,14 +2584,10 @@ void gen_stmt(int id) {
                 if ((pk == TY_CHAR)) {
                   code_emit(C_PUNCT, 20);
                 } else {
-                  if ((pk == TY_PTRDIFF)) {
-                    code_emit(C_PUNCT, 23);
+                  if (((pk == TY_FLOAT) || (pk == TY_DOUBLE))) {
+                    code_emit(C_PUNCT, 21);
                   } else {
-                    if (((pk == TY_FLOAT) || (pk == TY_DOUBLE))) {
-                      code_emit(C_PUNCT, 21);
-                    } else {
-                      code_emit(C_PUNCT, 15);
-                    }
+                    code_emit(C_PUNCT, 15);
                   }
                 }
               }
@@ -3543,6 +3592,44 @@ int ast_type(void) {
   return ty;
 }
 
+int ast_call_args(void) {
+  int args = 0;
+  if ((input_peek() != T_RPAREN)) {
+    {
+      int arg = ast_expr();
+      if ((arg < 0)) {
+        return (0 - 1);
+      } else {
+        {
+        }
+      }
+      args = arg;
+      while ((input_take(T_COMMA) == 1)) {
+        {
+          arg = ast_expr();
+          if ((arg < 0)) {
+            return (0 - 1);
+          } else {
+            {
+            }
+          }
+          args = ast_link(args, arg);
+        }
+      }
+    }
+  } else {
+    {
+    }
+  }
+  if ((input_take(T_RPAREN) == 0)) {
+    return (0 - 1);
+  } else {
+    {
+    }
+  }
+  return args;
+}
+
 int ast_primary(void) {
   if ((input_peek() == T_CHAR)) {
     {
@@ -3621,35 +3708,8 @@ int ast_primary(void) {
       }
       if ((input_take(T_LPAREN) == 1)) {
         {
-          int args = 0;
-          if ((input_peek() != T_RPAREN)) {
-            {
-              int arg = ast_expr();
-              if ((arg < 0)) {
-                return (0 - 1);
-              } else {
-                {
-                }
-              }
-              args = arg;
-              while ((input_take(T_COMMA) == 1)) {
-                {
-                  arg = ast_expr();
-                  if ((arg < 0)) {
-                    return (0 - 1);
-                  } else {
-                    {
-                    }
-                  }
-                  args = ast_link(args, arg);
-                }
-              }
-            }
-          } else {
-            {
-            }
-          }
-          if ((input_take(T_RPAREN) == 0)) {
+          int args = ast_call_args();
+          if ((args < 0)) {
             return (0 - 1);
           } else {
             {
@@ -3672,7 +3732,23 @@ int ast_primary(void) {
           }
           int field = input_payload();
           input_pos = (input_pos + 1);
-          return ast_node(N_FIELD_ACCESS, base, 0, 0, field, 0);
+          int field_expr = ast_node(N_FIELD_ACCESS, base, 0, 0, field, 0);
+          if ((input_take(T_LPAREN) == 1)) {
+            {
+              int args = ast_call_args();
+              if ((args < 0)) {
+                return (0 - 1);
+              } else {
+                {
+                }
+              }
+              return ast_node(N_INDIRECT_CALL, field_expr, args, 0, 0, 0);
+            }
+          } else {
+            {
+            }
+          }
+          return field_expr;
         }
       } else {
         {
@@ -3695,6 +3771,21 @@ int ast_primary(void) {
       }
       if ((input_take(T_RPAREN) == 0)) {
         return (0 - 1);
+      } else {
+        {
+        }
+      }
+      if ((input_take(T_LPAREN) == 1)) {
+        {
+          int args = ast_call_args();
+          if ((args < 0)) {
+            return (0 - 1);
+          } else {
+            {
+            }
+          }
+          return ast_node(N_INDIRECT_CALL, e, args, 0, 0, 0);
+        }
       } else {
         {
         }
@@ -9270,6 +9361,59 @@ void tc_expr(int id) {
     {
     }
   }
+  if ((k == N_INDIRECT_CALL)) {
+    {
+      tc_expr((node_a)[id]);
+      if ((((tc_kind != TY_FUN) || (tc_result_type == 0)) || ((node_kind)[tc_result_type] != TY_FUN))) {
+        {
+          tc_fail(12);
+          return;
+        }
+      } else {
+        {
+        }
+      }
+      int fty = tc_result_type;
+      int arg = (node_b)[id];
+      int param = (node_a)[fty];
+      while (((arg != 0) && (param != 0))) {
+        {
+          tc_expr(arg);
+          int ak = tc_kind;
+          int an = tc_name;
+          int aek = tc_elem_kind;
+          int aen = tc_elem_name;
+          tc_type_node(param);
+          int pk = tc_kind;
+          int pn = tc_name;
+          int pek = tc_elem_kind;
+          int pen = tc_elem_name;
+          if ((tc_same_full(ak, an, aek, aen, pk, pn, pek, pen) == 0)) {
+            tc_fail(12);
+          } else {
+            {
+            }
+          }
+          arg = (node_next)[arg];
+          param = (node_next)[param];
+        }
+      }
+      if (((arg != 0) || (param != 0))) {
+        {
+          tc_fail(13);
+          return;
+        }
+      } else {
+        {
+        }
+      }
+      tc_type_node((node_b)[fty]);
+      return;
+    }
+  } else {
+    {
+    }
+  }
   if ((k == N_BINOP)) {
     {
       tc_expr((node_a)[id]);
@@ -9712,6 +9856,15 @@ int tc_emit_arg_type(int id) {
 int tc_expr_kind_for_emit(int id) {
   if ((((id != 0) && ((node_kind)[id] == N_CALL)) && ((node_aux)[id] != 0))) {
     return (node_kind)[(node_aux)[id]];
+  } else {
+    {
+    }
+  }
+  if (((id != 0) && ((node_kind)[id] == N_INDIRECT_CALL))) {
+    {
+      tc_expr(id);
+      return tc_kind;
+    }
   } else {
     {
     }
@@ -10786,7 +10939,7 @@ void emit_c_token(int* out, int kind, int value) {
                                                               {
                                                                 write_char(out, 40);
                                                                 write_char(out, 34);
-                                                                write_string(out, "%td");
+                                                                write_string(out, "%d");
                                                                 write_char(out, 92);
                                                                 write_char(out, 110);
                                                                 write_char(out, 34);

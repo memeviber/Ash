@@ -87,10 +87,11 @@ namespace slice {
   func is_empty<T>(s: Slice<T>): bool { return s.len == 0; }
   func is_full<T>(s: Slice<T>): bool { return s.cap < s.len || s.cap == s.len; }
 
-  func free<T>(s: Slice<T>): void {
-    memory_free(s.data);
+  func free<T>(s: Slice<T>): Slice<T> {
+    if s.data != 0 then memory_free(s.data);
     s.data = 0;
     s.len = 0;
     s.cap = 0;
+    return s;
   }
 }

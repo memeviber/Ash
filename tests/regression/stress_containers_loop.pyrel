@@ -25,7 +25,7 @@ func main(): int {
     }
     print slice::get(slice, 31);
     print slice::get(slice, 32);
-    slice::free(slice);
+    slice = slice::free(slice);
 
     let map: map::HashMap<int, int> = map::with_capacity(2, 0, 0);
     let m: int = 0;
@@ -35,7 +35,7 @@ func main(): int {
     }
     print map::get_or(map, round + 17, (0 - 1));
     print map::get_or(map, 99999, (0 - 1));
-    map::free(map);
+    map = map::free(map);
     round = round + 1;
   }
   return 0;

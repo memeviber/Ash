@@ -308,7 +308,11 @@ let rec compile_expr env = function
       in
       if op = Concat then
         "runtime_string_concat(" ^ compile_expr env e1 ^ ", " ^ compile_expr env e2 ^ ")"
-      else "(" ^ compile_expr env e1 ^ " " ^ sop ^ " " ^ compile_expr env e2 ^ ")"
+      else (
+        let rendered = "(" ^ compile_expr env e1 ^ " " ^ sop ^ " " ^ compile_expr env e2 ^ ")" in
+        match op, emit_expr_type env e1, emit_expr_type env e2 with
+        | Sub, TPtr _, TPtr _ -> "(int)" ^ rendered
+        | _ -> rendered)
   | Call ("memory_alloc", [count; zero]) ->
       let et = emit_expr_type env zero in
       let cty = c_type_of_element et in
@@ -357,7 +361,7 @@ let format_for_expr env e =
   match e with
   | Binop (Sub, a, b) ->
       (match emit_expr_type env a, emit_expr_type env b with
-       | TPtr _, TPtr _ -> "%td"
+       | TPtr _, TPtr _ -> "%d"
        | _ -> format_for_type (emit_expr_type env e))
   | _ -> format_for_type (emit_expr_type env e)
 

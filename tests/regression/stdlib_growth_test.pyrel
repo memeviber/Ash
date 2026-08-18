@@ -87,13 +87,13 @@ func main(): int {
   if map::get_or(bool_map, 'a', false) == false then status = 23;
   if map::contains_key(bool_map, 'b') == false then status = 24;
 
-  array::free(ints);
-  array::free(flags);
-  array::free(letters);
-  array::free(decimals);
-  slice::free(chars);
-  slice::free(decimals_slice);
-  map::free(numbers);
-  map::free(bool_map);
+  ints = array::free(ints);
+  flags = array::free(flags);
+  letters = array::free(letters);
+  decimals = array::free(decimals);
+  chars = slice::free(chars);
+  decimals_slice = slice::free(decimals_slice);
+  numbers = map::free(numbers);
+  bool_map = map::free(bool_map);
   return status;
 }
