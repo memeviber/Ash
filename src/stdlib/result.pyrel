@@ -29,10 +29,6 @@ namespace result {
     return fallback;
   }
 
-  func value_or<T, E>(r: Result<T, E>, fallback: T): T {
-    return unwrap_or(r, fallback);
-  }
-
   func error_or<T, E>(r: Result<T, E>, fallback: E): E {
     if r.ok == 0 then { return r.error; }
     return fallback;
@@ -63,9 +59,5 @@ namespace result {
   func unwrap_or_option<T>(o: Option<T>, fallback: T): T {
     if o.present == 1 then { return o.value; }
     return fallback;
-  }
-
-  func value_or_option<T>(o: Option<T>, fallback: T): T {
-    return unwrap_or_option(o, fallback);
   }
 }

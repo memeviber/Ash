@@ -36,7 +36,6 @@ namespace array {
     while next < required {
       let grown: int = next * 2;
       if grown < next then { grown = required; }
-      if grown == next then { grown = required; }
       next = grown;
     }
     return array::reserve(a, next, zero);

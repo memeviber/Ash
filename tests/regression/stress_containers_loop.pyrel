@@ -17,25 +17,25 @@ func main(): int {
       print 0;
     }
 
-    let slice: slice::IntSlice = slice::new_int(1);
+    let slice: slice::Slice<int> = slice::with_capacity(1, 0);
     let i: int = 0;
     while (i < 32) {
-      slice = slice::push_int(slice, round + i);
+      slice = slice::push(slice, round + i);
       i = i + 1;
     }
-    print slice::get_int(slice, 31);
-    print slice::get_int(slice, 32);
-    slice::free_int(slice);
+    print slice::get(slice, 31);
+    print slice::get(slice, 32);
+    slice::free(slice);
 
-    let map: map::IntMap = map::new_int(2);
+    let map: map::HashMap<int, int> = map::with_capacity(2, 0, 0);
     let m: int = 0;
     while (m < 40) {
-      map = map::put_int(map, round + m, m * 3);
+      map = map::put(map, round + m, m * 3);
       m = m + 1;
     }
-    print map::get_int(map, round + 17, (0 - 1));
-    print map::get_int(map, 99999, (0 - 1));
-    map::free_int(map);
+    print map::get_or(map, round + 17, (0 - 1));
+    print map::get_or(map, 99999, (0 - 1));
+    map::free(map);
     round = round + 1;
   }
   return 0;

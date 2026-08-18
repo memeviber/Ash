@@ -41,7 +41,6 @@ namespace slice {
     while next < required {
       let grown: int = next * 2;
       if grown < next then { grown = required; }
-      if grown == next then { grown = required; }
       next = grown;
     }
     return slice::reserve(s, next);
@@ -77,11 +76,6 @@ namespace slice {
     return slice::set_if_in_bounds(s, index, value);
   }
 
-  func pop_or<T>(s: Slice<T>, fallback: T): Slice<T> {
-    if s.len > 0 then s.len = s.len - 1;
-    return s;
-  }
-
   func last_or<T>(s: Slice<T>, fallback: T): T {
     if s.len < 1 then return fallback;
     return slice::get_or(s, s.len - 1, fallback);
@@ -99,54 +93,4 @@ namespace slice {
     s.len = 0;
     s.cap = 0;
   }
-
-  // Compatibility API for code that explicitly uses the int allocator.
-  struct IntSlice {
-    data: int*;
-    len: int;
-    cap: int;
-  }
-
-  func new_int(capacity: int): IntSlice {
-    let s: IntSlice = 0;
-    if capacity < 1 then capacity = 1;
-    s.data = alloc_ints(capacity);
-    s.len = 0;
-    s.cap = capacity;
-    return s;
-  }
-
-  func push_int(s: IntSlice, value: int): IntSlice {
-    if s.cap < s.len || s.cap == s.len then {
-      let next: int = s.cap + s.cap;
-      if next < 1 then next = 1;
-      s.data = grow_ints(s.data, s.cap, next);
-      s.cap = next;
-    }
-    s.data[s.len] = value;
-    s.len = s.len + 1;
-    return s;
-  }
-
-  func get_int_or(s: IntSlice, index: int, fallback: int): int {
-    if index < 0 || index == s.len || index > s.len then return fallback;
-    return s.data[index];
-  }
-
-  func get_int(s: IntSlice, index: int): int { return slice::get_int_or(s, index, 0); }
-
-  func set_int(s: IntSlice, index: int, value: int): IntSlice {
-    if (index == 0 || index > 0) && index < s.len then s.data[index] = value;
-    return s;
-  }
-
-  func pop_int(s: IntSlice): IntSlice {
-    if s.len > 0 then s.len = s.len - 1;
-    return s;
-  }
-
-  func clear_int(s: IntSlice): IntSlice { s.len = 0; return s; }
-  func length_int(s: IntSlice): int { return s.len; }
-  func capacity_int(s: IntSlice): int { return s.cap; }
-  func free_int(s: IntSlice): void { free_ints(s.data); }
 }

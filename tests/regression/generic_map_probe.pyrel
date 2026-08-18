@@ -5,11 +5,11 @@ func main(): int {
   m = map::put(m, 3, 42);
   print map::contains_key(m, 3);
   print map::get_or(m, 3, 7);
-
-  let a: map::Map<int> = 0;
-  a.len = 1;
-  a.first = 20;
-  let b: map::Map<int> = map::map(a);
-  print b.second;
+  m = map::remove(m, 3);
+  print map::contains_key(m, 3);
+  m = map::put(m, 8, 64);
+  m = map::clear(m);
+  print map::length(m);
+  map::free(m);
   return 0;
 }

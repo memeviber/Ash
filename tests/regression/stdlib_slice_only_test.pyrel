@@ -1,14 +1,14 @@
 include "../../src/stdlib/slice.pyrel"
 
 func main(): int {
-  let slice: slice::IntSlice = slice::new_int(2);
-  slice = slice::push_int(slice, 10);
-  slice = slice::push_int(slice, 20);
-  slice = slice::push_int(slice, 30);
+  let slice: slice::Slice<int> = slice::new(0);
+  slice = slice::push(slice, 10);
+  slice = slice::push(slice, 20);
+  slice = slice::push(slice, 30);
   print slice.len;
-  print slice::get_int(slice, 0);
-  print slice::get_int(slice, 2);
-  print slice::get_int(slice, 9);
-  slice::free_int(slice);
+  print slice::get(slice, 0);
+  print slice::get(slice, 2);
+  print slice::get(slice, 9);
+  slice::free(slice);
   return 0;
 }
