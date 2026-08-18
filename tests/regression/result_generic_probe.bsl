@@ -1,0 +1,11 @@
+include "../../src/stdlib/result.bsl"
+
+func main(): int {
+  let ok: result::Result<int, string> = result::ok(42, "unused");
+  let err: result::Result<int, string> = result::err(0, "bad");
+  print result::is_ok(ok);
+  print result::unwrap_or(ok, 7);
+  print result::is_ok(err);
+  print result::error_or(err, "fallback");
+  return 0;
+}

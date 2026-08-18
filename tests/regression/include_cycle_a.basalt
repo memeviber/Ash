@@ -1,4 +1,0 @@
-include "include_cycle_b.basalt"
-func main(): void {
-  return;
-}

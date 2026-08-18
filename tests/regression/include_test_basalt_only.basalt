@@ -1,5 +1,0 @@
-include "include_test_lib.basalt"
-include "./include_test_lib.basalt"
-func main(): void {
-  print imported_value();
-}

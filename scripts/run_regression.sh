@@ -3,8 +3,8 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 COMPILER="$ROOT/src/compiler/_build/default/bin/basaltc.exe"
-BOOT_SOURCE="$ROOT/src/bootstrap/basaltc.basalt"
-BOOT_C="$ROOT/src/bootstrap/basaltc.basalt.c"
+BOOT_SOURCE="$ROOT/src/bootstrap/basaltc.bsl"
+BOOT_C="$ROOT/src/bootstrap/basaltc.bsl.c"
 BOOT_BIN="$ROOT/.tmp/bootstrap.bin"
 OUT="$ROOT/.tmp/regression"
 mkdir -p "$OUT"
@@ -72,22 +72,22 @@ expect_collision_reject() {
   grep -Fq 'distinct functions collide after C mangling' "$OUT/${label}.boot.log"
 }
 
-compile_run "$ROOT/tests/stress/modulo_stress.basalt" modulo_stress
-compile_run "$ROOT/tests/regression/stdlib_growth_test.basalt" stdlib_growth_test
-compile_run "$ROOT/tests/regression/stdlib_containers_test.basalt" stdlib_containers_test
-compile_run "$ROOT/tests/regression/stdlib_slice_only_test.basalt" stdlib_slice_only_test
-compile_run "$ROOT/tests/regression/stdlib_map_only_test.basalt" stdlib_map_only_test
-compile_run "$ROOT/tests/regression/stdlib_hashing_test.basalt" stdlib_hashing_test
-compile_run "$ROOT/tests/regression/stress_containers_loop.basalt" stress_containers_loop
-compile_run "$ROOT/tests/regression/generic_map_probe.basalt" generic_map_probe
-compile_run "$ROOT/tests/regression/include_test_main.basalt" include_test_main
-compile_run "$ROOT/tests/regression/namespace_collision.basalt" namespace_collision
-compile_run "$ROOT/tests/regression/nested_namespace_valid.basalt" nested_namespace_valid
-expect_collision_reject "$ROOT/tests/regression/mangle_collision.basalt" mangle_collision
-expect_collision_reject "$ROOT/tests/regression/nested_namespace_flat_collision.basalt" nested_namespace_flat_collision
-expect_collision_reject "$ROOT/tests/regression/nested_namespace_segment_collision.basalt" nested_namespace_segment_collision
-expect_reject "$ROOT/tests/stress/modulo_invalid_string.basalt" modulo_invalid_string
-expect_reject "$ROOT/tests/regression/undefined_function_call.basalt" undefined_function_call
-expect_reject "$ROOT/tests/regression/non_function_value_call.basalt" non_function_value_call
-expect_reject "$ROOT/tests/regression/reserved_runtime_function.basalt" reserved_runtime_function
+compile_run "$ROOT/tests/stress/modulo_stress.bsl" modulo_stress
+compile_run "$ROOT/tests/regression/stdlib_growth_test.bsl" stdlib_growth_test
+compile_run "$ROOT/tests/regression/stdlib_containers_test.bsl" stdlib_containers_test
+compile_run "$ROOT/tests/regression/stdlib_slice_only_test.bsl" stdlib_slice_only_test
+compile_run "$ROOT/tests/regression/stdlib_map_only_test.bsl" stdlib_map_only_test
+compile_run "$ROOT/tests/regression/stdlib_hashing_test.bsl" stdlib_hashing_test
+compile_run "$ROOT/tests/regression/stress_containers_loop.bsl" stress_containers_loop
+compile_run "$ROOT/tests/regression/generic_map_probe.bsl" generic_map_probe
+compile_run "$ROOT/tests/regression/include_test_main.bsl" include_test_main
+compile_run "$ROOT/tests/regression/namespace_collision.bsl" namespace_collision
+compile_run "$ROOT/tests/regression/nested_namespace_valid.bsl" nested_namespace_valid
+expect_collision_reject "$ROOT/tests/regression/mangle_collision.bsl" mangle_collision
+expect_collision_reject "$ROOT/tests/regression/nested_namespace_flat_collision.bsl" nested_namespace_flat_collision
+expect_collision_reject "$ROOT/tests/regression/nested_namespace_segment_collision.bsl" nested_namespace_segment_collision
+expect_reject "$ROOT/tests/stress/modulo_invalid_string.bsl" modulo_invalid_string
+expect_reject "$ROOT/tests/regression/undefined_function_call.bsl" undefined_function_call
+expect_reject "$ROOT/tests/regression/non_function_value_call.bsl" non_function_value_call
+expect_reject "$ROOT/tests/regression/reserved_runtime_function.bsl" reserved_runtime_function
 printf 'Regression checks completed successfully.\n'

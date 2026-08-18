@@ -2,14 +2,14 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-SRC="$ROOT/src/bootstrap/basaltc.basalt"
+SRC="$ROOT/src/bootstrap/basaltc.bsl"
 CHECKSUM_FILE="$ROOT/src/bootstrap/fixed_point_production.sha256"
 OUT="$ROOT/.tmp/fixed-point"
 mkdir -p "$OUT"
 
 (cd "$ROOT/src/compiler" && dune build bin/basaltc.exe)
 (cd "$ROOT/src/compiler" && "$ROOT/src/compiler/_build/default/bin/basaltc.exe" "$SRC")
-gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror "$ROOT/src/bootstrap/basaltc.basalt.c" -o "$OUT/n1.bin"
+gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror "$ROOT/src/bootstrap/basaltc.bsl.c" -o "$OUT/n1.bin"
 "$OUT/n1.bin" "$SRC" "$OUT/n2.c"
 gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror "$OUT/n2.c" -o "$OUT/n2.bin"
 "$OUT/n2.bin" "$SRC" "$OUT/n3.c"

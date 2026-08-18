@@ -19,8 +19,8 @@ Modulo reduction is performed during the loops to avoid signed-overflow ambiguit
 
 | File | Purpose |
 | --- | --- |
-| `kernel.basalt` | Basalt source implementation |
-| `kernel.basalt.c` | C emitted by Basalt |
+| `kernel.bsl` | Basalt source implementation |
+| `kernel.bsl.c` | C emitted by Basalt |
 | `kernel.c` | Hand-written C baseline |
 | `kernel.nim` | Nim implementation |
 | `kernel_cython.c` | Cython-generated C artifact |

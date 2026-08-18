@@ -1,4 +1,0 @@
-include "include_test_nested.basalt"
-func imported_value(): int {
-  return nested_value() + 1;
-}

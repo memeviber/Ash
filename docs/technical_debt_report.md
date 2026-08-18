@@ -18,7 +18,7 @@ Tuy nhiên, technical debt chưa biến mất hoàn toàn. Ba vùng cần ưu ti
 |---|---|---|
 | Built-in dynamic array legacy như `array_make`, `array_push` | Đã loại bỏ khỏi Host và Bootstrap | Container không còn bị chia đôi giữa compiler runtime và stdlib Basalt [3]. |
 | Wrapper memory stdlib dư thừa | Đã loại bỏ | Giảm một tầng API chỉ chuyển tiếp tới `memory_alloc`, `memory_resize`, `memory_free` [4]. |
-| Array implementation không thuần Basalt | Đã chuyển sang `src/stdlib/array.basalt` | Growth policy, indexing và higher-order operations nằm trong stdlib thay vì OCaml [5]. |
+| Array implementation không thuần Basalt | Đã chuyển sang `src/stdlib/array.bsl` | Growth policy, indexing và higher-order operations nằm trong stdlib thay vì OCaml [5]. |
 | Container chỉ hỗ trợ `int` | Đã thay bằng generic `Array<T>`, `Slice<T>`, `HashMap<K,V>` | Hỗ trợ typed allocation và growth cho các kiểu Basalt được typechecker chấp nhận [2]. |
 | Bootstrap mất binding K/V ở witness local | Đã sửa | Codegen `memory_alloc` hiện có thể giữ đúng kiểu substituted generic, tránh sinh nhầm `(int *)` cho `double*` hoặc `char*` [2]. |
 | `IntSlice` và toàn bộ `*_int` API | Đã xóa | Các test đã chuyển sang `Slice<int>` generic; không còn implementation trùng lặp [1]. |
@@ -51,7 +51,7 @@ Full validation gần nhất đã chạy thành công sau đợt cleanup. Pipeli
 
 ## 4. Module cần chú ý tiếp theo
 
-### 4.1. Bootstrap compiler: `src/bootstrap/basaltc.basalt` — mức độ **Rất cao**
+### 4.1. Bootstrap compiler: `src/bootstrap/basaltc.bsl` — mức độ **Rất cao**
 
 Bootstrap compiler hiện là một file lớn, chứa lexer/parser, AST payload, symbol table, typechecker, generic specialization và C emitter. Bản thân source Bootstrap khoảng **3.745 dòng**, còn canonical C sinh ra khoảng **10.934 dòng**. Việc duy trì cả Basalt source và C generated artifact khiến mọi thay đổi compiler đều có chi phí parity và fixed-point cao [7].
 
@@ -65,15 +65,15 @@ Host typechecker nằm trong `src/compiler/lib/typechecker.ml`, trong khi Bootst
 
 **Khuyến nghị:** xây dựng một nhóm parity tests theo từng lớp type: primitive, pointer, named type, generic parameter, generic field access, nested generic và function pointer. Diagnostic message cũng nên được chuẩn hóa để cùng một lỗi có cấu trúc và vị trí tương đương ở Host/Bootstrap.
 
-### 4.3. `src/stdlib/map.basalt` — mức độ **Cao**
+### 4.3. `src/stdlib/map.bsl` — mức độ **Cao**
 
 Tên module là HashMap, nhưng implementation hiện tại chưa thực hiện hashing theo key. `find` bắt đầu từ slot 0 và quét tuần tự; `insert_raw` cũng tìm slot trống theo thứ tự tuyến tính. Vì vậy, đây là **linear-probing table với full scan**, chưa phải hash map theo nghĩa hiệu năng thông thường [9]. Tombstone state đã tồn tại, nhưng chưa có compaction riêng và hiệu năng xấu nhất vẫn là O(capacity) cho lookup/insertion.
 
-Generic key hiện phụ thuộc vào khả năng so sánh `K == K`, trong khi hash function cho mọi Basalt value type chưa được thiết kế. Đây là ràng buộc kiến trúc, không nên giải quyết bằng cách nhét thêm các nhánh primitive vào `map.basalt`.
+Generic key hiện phụ thuộc vào khả năng so sánh `K == K`, trong khi hash function cho mọi Basalt value type chưa được thiết kế. Đây là ràng buộc kiến trúc, không nên giải quyết bằng cách nhét thêm các nhánh primitive vào `map.bsl`.
 
 **Khuyến nghị:** chọn một trong hai hướng rõ ràng. Hoặc đổi tên/đặc tả thành flat map để phản ánh đúng semantics hiện tại; hoặc thiết kế trait/primitive contract cho `hash(K)` và `eq(K,K)`, sau đó dùng hash seed để chọn vị trí ban đầu và rehash có kiểm soát. Cần bổ sung benchmark collision, tombstone-heavy workload và named/string key tests.
 
-### 4.4. `src/stdlib/array.basalt` và `src/stdlib/slice.basalt` — mức độ **Trung bình đến cao**
+### 4.4. `src/stdlib/array.bsl` và `src/stdlib/slice.bsl` — mức độ **Trung bình đến cao**
 
 Hai module đã generic và cùng hỗ trợ growth, nhưng API vẫn có phần chồng lấn. `Array<T>` có `slice`, `map`, `filter`; `Slice<T>` là owning growable container nhưng có bộ thao tác khác và quy ước return value chưa hoàn toàn thống nhất. Ví dụ, một số mutator trả lại container để hỗ trợ assignment, trong khi một số hàm chỉ mutate backing storage. Điều này làm tăng chi phí học API và tạo thêm bề mặt cần test [10] [11].
 
@@ -81,7 +81,7 @@ Hai module đã generic và cùng hỗ trợ growth, nhưng API vẫn có phần
 
 Coverage cũng nên mở rộng từ `int`, `bool`, `char`, `double` sang `float`, `string` và named/struct type. Đây là các trường hợp dễ làm lộ lỗi witness type, copy semantics và zero-value initialization.
 
-### 4.5. `src/stdlib/string.basalt` — mức độ **Cao**
+### 4.5. `src/stdlib/string.bsl` — mức độ **Cao**
 
 Module đã có UTF-8 helpers, nhưng abstraction cơ bản vẫn byte-oriented: `byte_len` đếm byte và `at` trả byte trong miền 0..255. Các API code point như `codepoint_len` và `codepoint_at` tồn tại song song, nên nếu không có quy ước rõ ràng người dùng dễ nhầm byte index với code point index [12].
 
@@ -133,17 +133,17 @@ Phần cần tránh tiếp theo không phải là thêm nhiều API mới, mà l
 
 [6]: https://github.com/memeviber/Basalt/blob/main/scripts/run_ownership_stress.sh "Full ownership and validation runner"
 
-[7]: https://github.com/memeviber/Basalt/blob/main/src/bootstrap/basaltc.basalt "Basalt Bootstrap compiler source"
+[7]: https://github.com/memeviber/Basalt/blob/main/src/bootstrap/basaltc.bsl "Basalt Bootstrap compiler source"
 
 [8]: https://github.com/memeviber/Basalt/blob/main/src/compiler/lib/typechecker.ml "Host typechecker"
 
-[9]: https://github.com/memeviber/Basalt/blob/main/src/stdlib/map.basalt "Generic HashMap standard-library module"
+[9]: https://github.com/memeviber/Basalt/blob/main/src/stdlib/map.bsl "Generic HashMap standard-library module"
 
-[10]: https://github.com/memeviber/Basalt/blob/main/src/stdlib/array.basalt "Generic Array standard-library module"
+[10]: https://github.com/memeviber/Basalt/blob/main/src/stdlib/array.bsl "Generic Array standard-library module"
 
-[11]: https://github.com/memeviber/Basalt/blob/main/src/stdlib/slice.basalt "Generic Slice standard-library module"
+[11]: https://github.com/memeviber/Basalt/blob/main/src/stdlib/slice.bsl "Generic Slice standard-library module"
 
-[12]: https://github.com/memeviber/Basalt/blob/main/src/stdlib/string.basalt "String and UTF-8 standard-library module"
+[12]: https://github.com/memeviber/Basalt/blob/main/src/stdlib/string.bsl "String and UTF-8 standard-library module"
 
 ## 7. Addendum sau đợt hardening tiếp theo
 

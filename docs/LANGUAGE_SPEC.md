@@ -86,7 +86,7 @@ The standard library provides generic dynamic-array operations and container mod
 
 ## 10. C interoperability and includes
 
-`extern` declares a C-provided function with an Basalt signature. `includec "file.h";` injects or includes raw C material under the compiler's controlled emission path. `include "module.basalt";` loads another Basalt source file. Recursive include processing tracks canonical paths, rejects active include cycles, and avoids duplicate loaded modules.
+`extern` declares a C-provided function with an Basalt signature. `includec "file.h";` injects or includes raw C material under the compiler's controlled emission path. `include "module.bsl";` loads another Basalt source file. Recursive include processing tracks canonical paths, rejects active include cycles, and avoids duplicate loaded modules.
 
 ## 11. Diagnostics
 

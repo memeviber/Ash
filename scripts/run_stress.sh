@@ -3,8 +3,8 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 HOST="$ROOT/src/compiler/_build/default/bin/basaltc.exe"
-BOOT_SOURCE="$ROOT/src/bootstrap/basaltc.basalt"
-BOOT_C="$ROOT/src/bootstrap/basaltc.basalt.c"
+BOOT_SOURCE="$ROOT/src/bootstrap/basaltc.bsl"
+BOOT_C="$ROOT/src/bootstrap/basaltc.bsl.c"
 OUT="$ROOT/.tmp/stress"
 rm -rf "$OUT"
 mkdir -p "$OUT"
@@ -37,16 +37,16 @@ run_negative() {
 }
 
 count=0
-for source in "$ROOT"/tests/stress/case_*.basalt; do
-  name=$(basename "$source" .basalt)
+for source in "$ROOT"/tests/stress/case_*.bsl; do
+  name=$(basename "$source" .bsl)
   run_valid "$source" "$name"
   count=$((count + 1))
 done
-for source in "$ROOT"/tests/stress/bad_*.basalt; do
-  name=$(basename "$source" .basalt)
+for source in "$ROOT"/tests/stress/bad_*.bsl; do
+  name=$(basename "$source" .bsl)
   run_negative "$source" "$name"
   count=$((count + 1))
 done
-run_valid "$ROOT/tests/stress/modulo_stress.basalt" modulo_stress
-run_negative "$ROOT/tests/stress/modulo_invalid_string.basalt" modulo_invalid_string
+run_valid "$ROOT/tests/stress/modulo_stress.bsl" modulo_stress
+run_negative "$ROOT/tests/stress/modulo_invalid_string.bsl" modulo_invalid_string
 printf 'Stress suite passed: %d corpus cases plus modulo coverage.\n' "$count"
