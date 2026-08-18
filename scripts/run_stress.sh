@@ -37,16 +37,16 @@ run_negative() {
 }
 
 count=0
-for source in "$ROOT"/test/stress/case_*.ash; do
+for source in "$ROOT"/tests/stress/case_*.ash; do
   name=$(basename "$source" .ash)
   run_valid "$source" "$name"
   count=$((count + 1))
 done
-for source in "$ROOT"/test/stress/bad_*.ash; do
+for source in "$ROOT"/tests/stress/bad_*.ash; do
   name=$(basename "$source" .ash)
   run_negative "$source" "$name"
   count=$((count + 1))
 done
-run_valid "$ROOT/test/stress/modulo_stress.ash" modulo_stress
-run_negative "$ROOT/test/stress/modulo_invalid_string.ash" modulo_invalid_string
+run_valid "$ROOT/tests/stress/modulo_stress.ash" modulo_stress
+run_negative "$ROOT/tests/stress/modulo_invalid_string.ash" modulo_invalid_string
 printf 'Stress suite passed: %d corpus cases plus modulo coverage.\n' "$count"

@@ -44,6 +44,6 @@ expect_reject() {
   printf 'PASS %s (rejected)\n' "$label"
 }
 
-compile_run "$ROOT/test/stress/modulo_stress.ash" modulo_stress
-expect_reject "$ROOT/test/stress/modulo_invalid_string.ash" modulo_invalid_string
+compile_run "$ROOT/tests/stress/modulo_stress.ash" modulo_stress
+expect_reject "$ROOT/tests/stress/modulo_invalid_string.ash" modulo_invalid_string
 printf 'Regression checks completed successfully.\n'

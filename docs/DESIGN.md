@@ -24,12 +24,6 @@ The pipeline is divided into the following stages:
 
 The emitter uses stable symbol IDs and deterministic traversal order. Generic specialization collection uses a warm-up generation pass, followed by two generation passes whose token counts are compared before the final C source is accepted. The warm-up is necessary because nested namespace-qualified generic calls can discover additional dependent specializations during the first traversal. The fixed-point script then compiles the Bootstrap compiler through successive generations and compares the complete `n2.c` and `n3.c` files byte-for-byte.
 
-## Modulo implementation
-
-The modulo feature crosses the complete compiler boundary. The Host AST defines `Mod`, the Host lexer recognizes `%`, and the parser assigns it multiplicative precedence. The Host type checker applies the arithmetic numeric rule and the C emitter writes `%`.
-
-The Bootstrap implementation mirrors this path with `OP_MOD = 17`, `T_MOD = 62`, and `L_MOD = 64`. The lexer maps byte value 37 to `L_MOD`; `map_token` maps it to `T_MOD`; the precedence and operator tables map it to `OP_MOD`; the type checker handles it with the multiplication and division branch; and `emit_c_token` writes the percent character for operator value 17.
-
 ## Memory model
 
 The generated runtime tracks heap allocations in a registry and releases outstanding allocations at process exit. Explicit container and resource release operations remove entries from the registry. Resizing functions update tracked pointers after `realloc`, and sanitizer-oriented tests exercise duplicate release, untracked release, cycles, nested includes, dynamic arrays, and string concatenation.

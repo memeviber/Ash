@@ -13,10 +13,10 @@ mkdir -p "$OUT"
 gcc -std=c11 -O1 -g -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror=implicit-function-declaration -Werror=incompatible-pointer-types -Werror=int-conversion -fsanitize=address,undefined -fno-omit-frame-pointer "$ROOT/src/bootstrap/ashc.ash.c" -o "$OUT/bootstrap.bin"
 
 for source in \
-  "$ROOT/test/regression/complex_fnptr_ptrarith.ash" \
-  "$ROOT/test/regression/macro_pointer_complex.ash" \
-  "$ROOT/test/regression/stress_memory_loop.ash" \
-  "$ROOT/test/stress/modulo_stress.ash"; do
+  "$ROOT/tests/regression/complex_fnptr_ptrarith.ash" \
+  "$ROOT/tests/regression/macro_pointer_complex.ash" \
+  "$ROOT/tests/regression/stress_memory_loop.ash" \
+  "$ROOT/tests/stress/modulo_stress.ash"; do
   name=$(basename "$source" .ash)
   (cd "$(dirname "$source")" && "$HOST" "$(basename "$source")") >"$OUT/${name}.host.log" 2>&1
   cp "${source}.c" "$OUT/${name}.host.c"
@@ -31,7 +31,7 @@ done
 
 # Negative runtime check: both compiler paths must reject an out-of-bounds
 # dynamic-array read deterministically, without sanitizer diagnostics.
-OOB_SOURCE="$ROOT/test/adversarial/memory_oob_test.ash"
+OOB_SOURCE="$ROOT/tests/adversarial/memory_oob_test.ash"
 OOB_OUT="$OUT/memory_oob"
 (
   cd "$(dirname "$OOB_SOURCE")"

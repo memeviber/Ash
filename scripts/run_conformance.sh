@@ -14,7 +14,7 @@ gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow "$ROOT/src/bootstrap
 
 pass=0
 fail=0
-for source in "$ROOT"/test/conformance/*.ash "$ROOT"/test/conformance/generated/fuzz_*.ash; do
+for source in "$ROOT"/tests/conformance/*.ash "$ROOT"/tests/conformance/generated/fuzz_*.ash; do
   [ -f "$source" ] || continue
   name=$(basename "$source" .ash)
   host_c="$OUT/${name}.host.c"; boot_c="$OUT/${name}.boot.c"
@@ -25,7 +25,7 @@ for source in "$ROOT"/test/conformance/*.ash "$ROOT"/test/conformance/generated/
     fail=$((fail + 1)); echo "FAIL valid $name" >&2
   fi
 done
-for source in "$ROOT"/test/conformance/generated/bad_*.ash; do
+for source in "$ROOT"/tests/conformance/generated/bad_*.ash; do
   [ -f "$source" ] || continue
   name=$(basename "$source" .ash)
   rm -f "${source}.c" "$OUT/${name}.boot.c"

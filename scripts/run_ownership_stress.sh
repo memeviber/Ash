@@ -92,8 +92,8 @@ run_invalid() {
 }
 
 printf '%s\n' '[2/3] Running ownership fixtures.'
-run_valid "$ROOT/test/stress/move_borrow_valid.ash"
-for source in "$ROOT"/test/stress/move_borrow_invalid_*.ash; do
+run_valid "$ROOT/tests/stress/move_borrow_valid.ash"
+for source in "$ROOT"/tests/stress/move_borrow_invalid_*.ash; do
   run_invalid "$source"
 done
 

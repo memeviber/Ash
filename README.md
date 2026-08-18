@@ -2,7 +2,7 @@
 
 Ash is a small, self-hosting programming language and C compiler. The project contains two implementations of the same language pipeline: an OCaml host compiler used as the reference implementation and a Bootstrap compiler written in Ash itself. Both implementations parse Ash source, perform static type checking, and emit portable C11.
 
-The repository is organized for reproducible compiler work rather than for generated build output. Source code lives under `src/`, tests under `test/`, documentation under `docs/`, and repeatable development commands under `scripts/`.
+The repository is organized for reproducible compiler work rather than for generated build output. Source code lives under `src/`, tests under `tests/`, documentation under `docs/`, and repeatable development commands under `scripts/`.
 
 ## Highlights
 
@@ -26,11 +26,11 @@ func main(): int {
 | `src/compiler/` | OCaml Host compiler, Dune metadata, lexer, parser, type checker, AST, and C emitter |
 | `src/bootstrap/` | Canonical self-hosting Ash compiler source, generated C bootstrap artefact, and fixed-point checksum |
 | `src/stdlib/` | Generic containers and standard library modules |
-| `test/regression/` | Focused language and compiler regression programs |
-| `test/stress/` | The 164-case corpus plus the dedicated modulo stress and negative tests |
-| `test/conformance/` | Host/Bootstrap conformance programs and runner material |
-| `test/adversarial/` | Sanitizer-oriented and adversarial compiler tests |
-| `test/benchmark/` | Cross-language benchmark source material |
+| `tests/regression/` | Focused language and compiler regression programs |
+| `tests/stress/` | The 164-case corpus plus the dedicated modulo stress and negative tests |
+| `tests/conformance/` | Host/Bootstrap conformance programs and runner material |
+| `tests/adversarial/` | Sanitizer-oriented and adversarial compiler tests |
+| `tests/benchmark/` | Cross-language benchmark source material |
 | `docs/` | Language specification, design notes, naming policy, and release notes |
 | `scripts/` | Build, test, and fixed-point commands |
 

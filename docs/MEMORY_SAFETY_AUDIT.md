@@ -63,8 +63,8 @@ Before the Host emitter hardening, direct dynamic-array indexing could reach raw
 | Check | Result | Evidence |
 | --- | --- | --- |
 | Host Dune build | Passed | `ash/scripts/run_ownership_stress.sh` |
-| Ownership valid fixture | Host and Bootstrap accepted | `test/stress/move_borrow_valid.ash` |
-| Ownership negative corpus | Five fixtures rejected by both compilers | `test/stress/move_borrow_invalid_*.ash` |
+| Ownership valid fixture | Host and Bootstrap accepted | `tests/stress/move_borrow_valid.ash` |
+| Ownership negative corpus | Five fixtures rejected by both compilers | `tests/stress/move_borrow_invalid_*.ash` |
 | Strict generated C | Passed with `-std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror` | Ownership runner and existing suites |
 | Ownership sanitizer run | ASan and UBSan passed with leak detection enabled | `run_ownership_stress.sh` |
 | Existing regression suite | Passed | `run_regression.sh` |
