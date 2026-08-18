@@ -1,5 +1,8 @@
 includec "macro_pointer_runtime.c"
 
+extern func macro_scale(x: int): int;
+extern func macro_bias(x: int, y: int): int;
+
 struct Box {
   value: int;
   next: Box*;

@@ -53,4 +53,6 @@ compile_run "$ROOT/tests/regression/stdlib_hashing_test.pyrel" stdlib_hashing_te
 compile_run "$ROOT/tests/regression/stress_containers_loop.pyrel" stress_containers_loop
 compile_run "$ROOT/tests/regression/generic_map_probe.pyrel" generic_map_probe
 expect_reject "$ROOT/tests/stress/modulo_invalid_string.pyrel" modulo_invalid_string
+expect_reject "$ROOT/tests/regression/undefined_function_call.pyrel" undefined_function_call
+expect_reject "$ROOT/tests/regression/non_function_value_call.pyrel" non_function_value_call
 printf 'Regression checks completed successfully.\n'

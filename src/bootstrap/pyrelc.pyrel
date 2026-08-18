@@ -3205,7 +3205,7 @@ func tc_expr(id: int): void {
     if fun_node == 0 then {
       if tc_lookup_var(node_value[id]) == 1 && tc_kind == TY_FUN then {
         let fty: int = tc_last_var_type;
-        if fty == 0 || node_kind[fty] != TY_FUN then { tc_kind = TY_INT; tc_name = 0; return; }
+        if fty == 0 || node_kind[fty] != TY_FUN then { tc_fail(42); return; }
         let arg_fp: int = node_a[id]; let p_fp: int = node_a[fty];
         while arg_fp != 0 && p_fp != 0 {
           tc_expr(arg_fp); let ak_fp: int = tc_kind; let an_fp: int = tc_name; let aek_fp: int = tc_elem_kind; let aen_fp: int = tc_elem_name;
@@ -3220,24 +3220,19 @@ func tc_expr(id: int): void {
       if sym_len[node_value[id]] == 10 && sym_hash[node_value[id]] == 984821 then { tc_kind = TY_PTR; tc_name = 0; tc_elem_kind = TY_INT; tc_elem_name = 0; return; }
       if sym_len[node_value[id]] == 9 && sym_hash[node_value[id]] == 340336 then { tc_kind = TY_VOID; tc_name = 0; return; }
       if sym_len[node_value[id]] == 9 && sym_hash[node_value[id]] == 739305 then { tc_kind = TY_PTR; tc_name = 0; tc_elem_kind = TY_INT; tc_elem_name = 0; return; }
-      if sym_len[node_value[id]] == 9 && sym_hash[node_value[id]] == 776147 then { tc_kind = TY_STRING; tc_name = 0; return; }
+      if sym_len[node_value[id]] == 12 && sym_hash[node_value[id]] == 904440 then { tc_kind = TY_INT; tc_name = 0; return; }
       if sym_len[node_value[id]] == 9 && sym_hash[node_value[id]] == 17002 then { tc_kind = TY_PTR; tc_name = 0; tc_elem_kind = TY_VOID; tc_elem_name = 0; return; }
       if sym_len[node_value[id]] == 9 && sym_hash[node_value[id]] == 977208 then { tc_kind = TY_INT; tc_name = 0; return; }
       if sym_len[node_value[id]] == 10 && sym_hash[node_value[id]] == 327082 then { tc_kind = TY_INT; tc_name = 0; return; }
       if sym_len[node_value[id]] == 10 && sym_hash[node_value[id]] == 493501 then { tc_kind = TY_INT; tc_name = 0; return; }
-      if sym_len[node_value[id]] == 21 && sym_hash[node_value[id]] == 375664 then { tc_kind = TY_PTR; tc_name = 0; tc_elem_kind = TY_VOID; tc_elem_name = 0; return; }
-      if sym_len[node_value[id]] == 21 && sym_hash[node_value[id]] == 191106 then { tc_kind = TY_PTR; tc_name = 0; tc_elem_kind = TY_VOID; tc_elem_name = 0; return; }
-      if sym_len[node_value[id]] == 23 && sym_hash[node_value[id]] == 702900 then { tc_kind = TY_INT; tc_name = 0; return; }
-      if sym_len[node_value[id]] == 17 && sym_hash[node_value[id]] == 344177 then { tc_kind = TY_VOID; tc_name = 0; return; }
-      if sym_len[node_value[id]] == 25 && sym_hash[node_value[id]] == 522527 then { tc_kind = TY_VOID; tc_name = 0; return; }
-      if sym_len[node_value[id]] == 21 && sym_hash[node_value[id]] == 686023 then { tc_kind = TY_INT; tc_name = 0; return; }
-      if sym_len[node_value[id]] == 16 && sym_hash[node_value[id]] == 904440 then { tc_kind = TY_STRING; tc_name = 0; return; }
+      if sym_len[node_value[id]] == 23 && sym_hash[node_value[id]] == 354113 then { tc_kind = TY_INT; tc_name = 0; return; }
+      if sym_len[node_value[id]] == 18 && sym_hash[node_value[id]] == 58426 then { tc_kind = TY_STRING; tc_name = 0; return; }
       if sym_len[node_value[id]] == 23 && sym_hash[node_value[id]] == 859196 then { tc_kind = TY_PTR; tc_name = 0; tc_elem_kind = TY_INT; tc_elem_name = 0; return; }
       if sym_len[node_value[id]] == 23 && sym_hash[node_value[id]] == 43754 then { tc_kind = TY_PTR; tc_name = 0; tc_elem_kind = TY_INT; tc_elem_name = 0; return; }
       if sym_len[node_value[id]] == 25 && sym_hash[node_value[id]] == 737390 then { tc_kind = TY_INT; tc_name = 0; return; }
       if sym_len[node_value[id]] == 19 && sym_hash[node_value[id]] == 551467 then { tc_kind = TY_VOID; tc_name = 0; return; }
       if sym_len[node_value[id]] == 27 && sym_hash[node_value[id]] == 667417 then { tc_kind = TY_VOID; tc_name = 0; return; }
-      tc_kind = TY_INT; tc_name = 0; return;
+      tc_fail(41); return;
     }
     if node_kind[fun_node] == N_GENERIC_FUNC then {
       tc_bind_clear();
@@ -3540,6 +3535,8 @@ func tc_diag(): void {
   else if tc_error_code == 37 then print "type error: cannot mutate or move while borrowed";
   else if tc_error_code == 38 then print "type error: borrowed reference escapes its owner";
   else if tc_error_code == 40 then print "type error: owned value copy requires an explicit move";
+  else if tc_error_code == 41 then print "type error: unknown function";
+  else if tc_error_code == 42 then print "type error: cannot call non-function value";
   else print "type error: invalid expression";
   print tc_diag_line(tc_error_pos);
   print tc_diag_col(tc_error_pos);

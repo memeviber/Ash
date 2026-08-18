@@ -127,6 +127,7 @@ let check program =
       ("read_char", ([TPtr TVoid], TInt));
       ("close_file", ([TPtr TVoid], TInt));
       ("write_char", ([TPtr TVoid; TInt], TInt));
+      ("write_string", ([TPtr TVoid; TString], TInt));
       ("pyrel_include_open_root", ([TString], TPtr TVoid));
       ("pyrel_include_open_line", ([TPtr TInt; TInt; TInt], TPtr TVoid));
       ("pyrel_include_last_status", ([], TInt));
@@ -335,18 +336,21 @@ let check program =
                  | true -> Ok (substitute_typ subst formal_return))
          | None ->
         (match SMap.find_opt name env.funcs with
-         | None -> (match SMap.find_opt name env.vars with Some (TFunPtr (ps, r)) ->
-             if List.length ps <> List.length args then Error ("wrong argument count for " ^ name)
-             else
-               let rec args_ok ps args =
-                 match ps, args with
-                 | [], [] -> Ok r
-                 | p :: ps, a :: rest ->
-                     Result.bind (expr env a) (fun ta ->
-                       if compatible_typ p ta then args_ok ps rest
-                       else Error ("argument type mismatch in " ^ name))
-                 | _ -> Error "internal argument mismatch"
-               in args_ok ps args | _ -> Ok TInt)
+         | None -> (match SMap.find_opt name env.vars with
+             | Some (TFunPtr (ps, r)) ->
+                 if List.length ps <> List.length args then Error ("wrong argument count for " ^ name)
+                 else
+                   let rec args_ok ps args =
+                     match ps, args with
+                     | [], [] -> Ok r
+                     | p :: ps, a :: rest ->
+                         Result.bind (expr env a) (fun ta ->
+                           if compatible_typ p ta then args_ok ps rest
+                           else Error ("argument type mismatch in " ^ name))
+                     | _ -> Error "internal argument mismatch"
+                   in args_ok ps args
+             | Some _ -> Error ("cannot call non-function value " ^ name)
+             | None -> Error ("unknown function " ^ name))
          | Some (ps, r) ->
              if List.length ps <> List.length args then Error ("wrong argument count for " ^ name)
              else

@@ -1,5 +1,7 @@
 includec "asymmetric_deep_macro_runtime.c"
 
+extern func deep_macro(x: int): int;
+
 struct Leaf {
   value: int;
 }

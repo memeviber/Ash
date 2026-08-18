@@ -9002,8 +9002,7 @@ void tc_expr(int id) {
               int fty = tc_last_var_type;
               if (((fty == 0) || ((node_kind)[fty] != TY_FUN))) {
                 {
-                  tc_kind = TY_INT;
-                  tc_name = 0;
+                  tc_fail(42);
                   return;
                 }
               } else {
@@ -9087,9 +9086,9 @@ void tc_expr(int id) {
             {
             }
           }
-          if ((((sym_len)[(node_value)[id]] == 9) && ((sym_hash)[(node_value)[id]] == 776147))) {
+          if ((((sym_len)[(node_value)[id]] == 12) && ((sym_hash)[(node_value)[id]] == 904440))) {
             {
-              tc_kind = TY_STRING;
+              tc_kind = TY_INT;
               tc_name = 0;
               return;
             }
@@ -9139,31 +9138,7 @@ void tc_expr(int id) {
             {
             }
           }
-          if ((((sym_len)[(node_value)[id]] == 21) && ((sym_hash)[(node_value)[id]] == 375664))) {
-            {
-              tc_kind = TY_PTR;
-              tc_name = 0;
-              tc_elem_kind = TY_VOID;
-              tc_elem_name = 0;
-              return;
-            }
-          } else {
-            {
-            }
-          }
-          if ((((sym_len)[(node_value)[id]] == 21) && ((sym_hash)[(node_value)[id]] == 191106))) {
-            {
-              tc_kind = TY_PTR;
-              tc_name = 0;
-              tc_elem_kind = TY_VOID;
-              tc_elem_name = 0;
-              return;
-            }
-          } else {
-            {
-            }
-          }
-          if ((((sym_len)[(node_value)[id]] == 23) && ((sym_hash)[(node_value)[id]] == 702900))) {
+          if ((((sym_len)[(node_value)[id]] == 23) && ((sym_hash)[(node_value)[id]] == 354113))) {
             {
               tc_kind = TY_INT;
               tc_name = 0;
@@ -9173,37 +9148,7 @@ void tc_expr(int id) {
             {
             }
           }
-          if ((((sym_len)[(node_value)[id]] == 17) && ((sym_hash)[(node_value)[id]] == 344177))) {
-            {
-              tc_kind = TY_VOID;
-              tc_name = 0;
-              return;
-            }
-          } else {
-            {
-            }
-          }
-          if ((((sym_len)[(node_value)[id]] == 25) && ((sym_hash)[(node_value)[id]] == 522527))) {
-            {
-              tc_kind = TY_VOID;
-              tc_name = 0;
-              return;
-            }
-          } else {
-            {
-            }
-          }
-          if ((((sym_len)[(node_value)[id]] == 21) && ((sym_hash)[(node_value)[id]] == 686023))) {
-            {
-              tc_kind = TY_INT;
-              tc_name = 0;
-              return;
-            }
-          } else {
-            {
-            }
-          }
-          if ((((sym_len)[(node_value)[id]] == 16) && ((sym_hash)[(node_value)[id]] == 904440))) {
+          if ((((sym_len)[(node_value)[id]] == 18) && ((sym_hash)[(node_value)[id]] == 58426))) {
             {
               tc_kind = TY_STRING;
               tc_name = 0;
@@ -9267,8 +9212,7 @@ void tc_expr(int id) {
             {
             }
           }
-          tc_kind = TY_INT;
-          tc_name = 0;
+          tc_fail(41);
           return;
         }
       } else {
@@ -10367,7 +10311,15 @@ void tc_diag(void) {
                                   if ((tc_error_code == 40)) {
                                     printf("%s\n", "type error: owned value copy requires an explicit move");
                                   } else {
-                                    printf("%s\n", "type error: invalid expression");
+                                    if ((tc_error_code == 41)) {
+                                      printf("%s\n", "type error: unknown function");
+                                    } else {
+                                      if ((tc_error_code == 42)) {
+                                        printf("%s\n", "type error: cannot call non-function value");
+                                      } else {
+                                        printf("%s\n", "type error: invalid expression");
+                                      }
+                                    }
                                   }
                                 }
                               }
