@@ -1,4 +1,0 @@
-include "include_cycle_b.pyrel"
-func main(): void {
-  return;
-}

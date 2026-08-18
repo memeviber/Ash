@@ -2,14 +2,14 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-HOST="$ROOT/src/compiler/_build/default/bin/main.exe"
-BOOT_SOURCE="$ROOT/src/bootstrap/pyrelc.pyrel"
-BOOT_C="$ROOT/src/bootstrap/pyrelc.pyrel.c"
+HOST="$ROOT/src/compiler/_build/default/bin/basaltc.exe"
+BOOT_SOURCE="$ROOT/src/bootstrap/basaltc.basalt"
+BOOT_C="$ROOT/src/bootstrap/basaltc.basalt.c"
 OUT="$ROOT/.tmp/stress"
 rm -rf "$OUT"
 mkdir -p "$OUT"
 
-(cd "$ROOT/src/compiler" && dune build bin/main.exe)
+(cd "$ROOT/src/compiler" && dune build bin/basaltc.exe)
 (cd "$ROOT/src/compiler" && "$HOST" "$BOOT_SOURCE")
 gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror "$BOOT_C" -o "$OUT/bootstrap.bin"
 
@@ -37,16 +37,16 @@ run_negative() {
 }
 
 count=0
-for source in "$ROOT"/tests/stress/case_*.pyrel; do
-  name=$(basename "$source" .pyrel)
+for source in "$ROOT"/tests/stress/case_*.basalt; do
+  name=$(basename "$source" .basalt)
   run_valid "$source" "$name"
   count=$((count + 1))
 done
-for source in "$ROOT"/tests/stress/bad_*.pyrel; do
-  name=$(basename "$source" .pyrel)
+for source in "$ROOT"/tests/stress/bad_*.basalt; do
+  name=$(basename "$source" .basalt)
   run_negative "$source" "$name"
   count=$((count + 1))
 done
-run_valid "$ROOT/tests/stress/modulo_stress.pyrel" modulo_stress
-run_negative "$ROOT/tests/stress/modulo_invalid_string.pyrel" modulo_invalid_string
+run_valid "$ROOT/tests/stress/modulo_stress.basalt" modulo_stress
+run_negative "$ROOT/tests/stress/modulo_invalid_string.basalt" modulo_invalid_string
 printf 'Stress suite passed: %d corpus cases plus modulo coverage.\n' "$count"

@@ -316,13 +316,13 @@ let rec compile_expr env = function
   | Call ("memory_alloc", [count; zero]) ->
       let et = emit_expr_type env zero in
       let cty = c_type_of_element et in
-      "((void)(" ^ compile_expr env zero ^ "), (" ^ cty ^ "*)pyrel_memory_alloc(" ^ compile_expr env count ^ ", sizeof(" ^ cty ^ ")))"
+      "((void)(" ^ compile_expr env zero ^ "), (" ^ cty ^ "*)basalt_memory_alloc(" ^ compile_expr env count ^ ", sizeof(" ^ cty ^ ")))"
   | Call ("memory_resize", [ptr; old_count; new_count; zero]) ->
       let et = match emit_expr_type env ptr with TPtr t -> t | _ -> TVoid in
       let cty = c_type_of_element et in
-      "((void)(" ^ compile_expr env zero ^ "), (" ^ cty ^ "*)pyrel_memory_resize((void*)" ^ compile_expr env ptr ^ ", " ^ compile_expr env old_count ^ ", " ^ compile_expr env new_count ^ ", sizeof(" ^ cty ^ ")))"
+      "((void)(" ^ compile_expr env zero ^ "), (" ^ cty ^ "*)basalt_memory_resize((void*)" ^ compile_expr env ptr ^ ", " ^ compile_expr env old_count ^ ", " ^ compile_expr env new_count ^ ", sizeof(" ^ cty ^ ")))"
   | Call ("memory_free", [ptr]) ->
-      "pyrel_memory_free((void*)" ^ compile_expr env ptr ^ ")"
+      "basalt_memory_free((void*)" ^ compile_expr env ptr ^ ")"
   | Call (f, args) ->
       let rendered = List.map (compile_expr env) args |> String.concat ", " in
       let target =
@@ -531,64 +531,64 @@ let compile ?(c_includes = "") program =
 #include <string.h>
 #include <limits.h>
 #if defined(__GNUC__) || defined(__clang__)
-#define PYREL_UNUSED __attribute__((unused))
+#define BASALT_UNUSED __attribute__((unused))
 #else
-#define PYREL_UNUSED
+#define BASALT_UNUSED
 #endif
-static void* pyrel_track(void*);
-static char** pyrel_inc_active=NULL;static size_t pyrel_inc_active_n=0,pyrel_inc_active_cap=0;static char** pyrel_inc_loaded=NULL;static size_t pyrel_inc_loaded_n=0,pyrel_inc_loaded_cap=0;static int pyrel_inc_status=0;
-static PYREL_UNUSED size_t pyrel_inc_find(char**v,size_t n,const char*p){size_t i;for(i=0;i<n;i++)if(strcmp(v[i],p)==0)return i;return (size_t)-1;}
-static PYREL_UNUSED void pyrel_inc_add(char***vp,size_t*np,size_t*cp,char*p){size_t c;char**q;if(*np==*cp){c=*cp?*cp*2:16;q=(char**)realloc(*vp,c*sizeof(char*));if(!q)exit(2);*vp=q;*cp=c;}(*vp)[(*np)++]=p;}
-static PYREL_UNUSED char* pyrel_inc_strdup(const char*p){size_t n=strlen(p);char*q=(char*)malloc(n+1);if(!q)exit(2);memcpy(q,p,n+1);return(char*)pyrel_track(q);}
-static PYREL_UNUSED char* pyrel_inc_realpath(const char*p){
+static void* basalt_track(void*);
+static char** basalt_inc_active=NULL;static size_t basalt_inc_active_n=0,basalt_inc_active_cap=0;static char** basalt_inc_loaded=NULL;static size_t basalt_inc_loaded_n=0,basalt_inc_loaded_cap=0;static int basalt_inc_status=0;
+static BASALT_UNUSED size_t basalt_inc_find(char**v,size_t n,const char*p){size_t i;for(i=0;i<n;i++)if(strcmp(v[i],p)==0)return i;return (size_t)-1;}
+static BASALT_UNUSED void basalt_inc_add(char***vp,size_t*np,size_t*cp,char*p){size_t c;char**q;if(*np==*cp){c=*cp?*cp*2:16;q=(char**)realloc(*vp,c*sizeof(char*));if(!q)exit(2);*vp=q;*cp=c;}(*vp)[(*np)++]=p;}
+static BASALT_UNUSED char* basalt_inc_strdup(const char*p){size_t n=strlen(p);char*q=(char*)malloc(n+1);if(!q)exit(2);memcpy(q,p,n+1);return(char*)basalt_track(q);}
+static BASALT_UNUSED char* basalt_inc_realpath(const char*p){
 #if defined(_WIN32)
- char*q=_fullpath(NULL,p,0);if(q)return(char*)pyrel_track(q);
+ char*q=_fullpath(NULL,p,0);if(q)return(char*)basalt_track(q);
 #else
- char*q=realpath(p,NULL);if(q)return(char*)pyrel_track(q);
+ char*q=realpath(p,NULL);if(q)return(char*)basalt_track(q);
 #endif
- return pyrel_inc_strdup(p);
+ return basalt_inc_strdup(p);
 }
-static PYREL_UNUSED int pyrel_inc_begin(char*p){if(pyrel_inc_find(pyrel_inc_active,pyrel_inc_active_n,p)!=(size_t)-1){pyrel_inc_status=1;return 0;}if(pyrel_inc_find(pyrel_inc_loaded,pyrel_inc_loaded_n,p)!=(size_t)-1){pyrel_inc_status=2;return 0;}pyrel_inc_add(&pyrel_inc_active,&pyrel_inc_active_n,&pyrel_inc_active_cap,p);pyrel_inc_status=0;return 1;}
-static PYREL_UNUSED void pyrel_include_close(void){if(pyrel_inc_active_n){char*p=pyrel_inc_active[--pyrel_inc_active_n];if(pyrel_inc_find(pyrel_inc_loaded,pyrel_inc_loaded_n,p)==(size_t)-1)pyrel_inc_add(&pyrel_inc_loaded,&pyrel_inc_loaded_n,&pyrel_inc_loaded_cap,p);}}
-static PYREL_UNUSED char* pyrel_inc_join(const char*base,const char*raw){const char*s=strrchr(base,'/');size_t n=s?(size_t)(s-base+1):0;size_t m=strlen(raw);char*q=(char*)malloc(n+m+1);if(!q)exit(2);if(n)memcpy(q,base,n);memcpy(q+n,raw,m+1);return(char*)pyrel_track(q);}
-static PYREL_UNUSED int pyrel_include_line_mode(int*line,int n){int i=0,j;while(i<n&&(line[i]==' '||line[i]=='\t'))i++;if(i+7<=n&&!memcmp(line+i,"include",7)){j=i+7;while(j<n&&(line[j]==' '||line[j]=='\t'))j++;if(j<n&&line[j]=='\"')return 1;}if(i+8<=n&&!memcmp(line+i,"includec",8)){j=i+8;while(j<n&&(line[j]==' '||line[j]=='\t'))j++;if(j<n&&line[j]=='\"')return 2;}return 0;}
-static PYREL_UNUSED void* pyrel_include_open_root(const char*path){char*p=pyrel_inc_realpath(path);FILE*f;if(!pyrel_inc_begin(p))return NULL;f=fopen(p,"r");if(!f){pyrel_inc_status=3;pyrel_include_close();return NULL;}return(void*)f;}
-static PYREL_UNUSED void* pyrel_include_open_line(int*line,int n,int mode){int i=0,a,b,j;char*raw,*joined,*canon;FILE*f;(void)mode;while(i<n&&line[i]!='"')i++;if(i>=n)return NULL;a=++i;while(i<n&&line[i]!='"')i++;if(i>=n)return NULL;b=i;raw=(char*)malloc((size_t)(b-a)+1);if(!raw)exit(2);{int k;for(k=0;k<b-a;k++)raw[k]=(char)line[a+k];}raw[b-a]=0;raw=(char*)pyrel_track(raw);j=i+1;while(j<n&&(line[j]==' '||line[j]=='\t'))j++;if(j<n&&line[j]==';')j++;while(j<n&&(line[j]==' '||line[j]=='\t'))j++;if(j!=n)return NULL;joined=pyrel_inc_join(pyrel_inc_active[pyrel_inc_active_n-1],raw);canon=pyrel_inc_realpath(joined);if(!pyrel_inc_begin(canon))return NULL;f=fopen(canon,"r");if(!f){pyrel_inc_status=3;pyrel_include_close();return NULL;}return(void*)f;}
-static PYREL_UNUSED int pyrel_include_last_status(void){return pyrel_inc_status;}
-static PYREL_UNUSED void pyrel_include_reset_session(void){pyrel_inc_active_n=0;pyrel_inc_loaded_n=0;pyrel_inc_status=0;}
+static BASALT_UNUSED int basalt_inc_begin(char*p){if(basalt_inc_find(basalt_inc_active,basalt_inc_active_n,p)!=(size_t)-1){basalt_inc_status=1;return 0;}if(basalt_inc_find(basalt_inc_loaded,basalt_inc_loaded_n,p)!=(size_t)-1){basalt_inc_status=2;return 0;}basalt_inc_add(&basalt_inc_active,&basalt_inc_active_n,&basalt_inc_active_cap,p);basalt_inc_status=0;return 1;}
+static BASALT_UNUSED void basalt_include_close(void){if(basalt_inc_active_n){char*p=basalt_inc_active[--basalt_inc_active_n];if(basalt_inc_find(basalt_inc_loaded,basalt_inc_loaded_n,p)==(size_t)-1)basalt_inc_add(&basalt_inc_loaded,&basalt_inc_loaded_n,&basalt_inc_loaded_cap,p);}}
+static BASALT_UNUSED char* basalt_inc_join(const char*base,const char*raw){const char*s=strrchr(base,'/');size_t n=s?(size_t)(s-base+1):0;size_t m=strlen(raw);char*q=(char*)malloc(n+m+1);if(!q)exit(2);if(n)memcpy(q,base,n);memcpy(q+n,raw,m+1);return(char*)basalt_track(q);}
+static BASALT_UNUSED int basalt_include_line_mode(int*line,int n){int i=0,j;while(i<n&&(line[i]==' '||line[i]=='\t'))i++;if(i+7<=n&&!memcmp(line+i,"include",7)){j=i+7;while(j<n&&(line[j]==' '||line[j]=='\t'))j++;if(j<n&&line[j]=='\"')return 1;}if(i+8<=n&&!memcmp(line+i,"includec",8)){j=i+8;while(j<n&&(line[j]==' '||line[j]=='\t'))j++;if(j<n&&line[j]=='\"')return 2;}return 0;}
+static BASALT_UNUSED void* basalt_include_open_root(const char*path){char*p=basalt_inc_realpath(path);FILE*f;if(!basalt_inc_begin(p))return NULL;f=fopen(p,"r");if(!f){basalt_inc_status=3;basalt_include_close();return NULL;}return(void*)f;}
+static BASALT_UNUSED void* basalt_include_open_line(int*line,int n,int mode){int i=0,a,b,j;char*raw,*joined,*canon;FILE*f;(void)mode;while(i<n&&line[i]!='"')i++;if(i>=n)return NULL;a=++i;while(i<n&&line[i]!='"')i++;if(i>=n)return NULL;b=i;raw=(char*)malloc((size_t)(b-a)+1);if(!raw)exit(2);{int k;for(k=0;k<b-a;k++)raw[k]=(char)line[a+k];}raw[b-a]=0;raw=(char*)basalt_track(raw);j=i+1;while(j<n&&(line[j]==' '||line[j]=='\t'))j++;if(j<n&&line[j]==';')j++;while(j<n&&(line[j]==' '||line[j]=='\t'))j++;if(j!=n)return NULL;joined=basalt_inc_join(basalt_inc_active[basalt_inc_active_n-1],raw);canon=basalt_inc_realpath(joined);if(!basalt_inc_begin(canon))return NULL;f=fopen(canon,"r");if(!f){basalt_inc_status=3;basalt_include_close();return NULL;}return(void*)f;}
+static BASALT_UNUSED int basalt_include_last_status(void){return basalt_inc_status;}
+static BASALT_UNUSED void basalt_include_reset_session(void){basalt_inc_active_n=0;basalt_inc_loaded_n=0;basalt_inc_status=0;}
 |} in
   let header =
     include_runtime ^
     (if c_includes = "" then "" else c_includes ^ "\n")
-    ^ "static PYREL_UNUSED void* open_file(const char* path, const char* mode) {\n"
+    ^ "static BASALT_UNUSED void* open_file(const char* path, const char* mode) {\n"
     ^ "  return (void*)fopen(path, mode);\n}\n"
-    ^ "static PYREL_UNUSED int read_char(void* handle) {\n"
+    ^ "static BASALT_UNUSED int read_char(void* handle) {\n"
     ^ "  int c = fgetc((FILE*)handle);\n"
     ^ "  return c == EOF ? -1 : c;\n}\n"
-    ^ "static PYREL_UNUSED int close_file(void* handle) {\n"
+    ^ "static BASALT_UNUSED int close_file(void* handle) {\n"
     ^ "  return fclose((FILE*)handle);\n}\n"
-    ^ "static PYREL_UNUSED int write_char(void* handle, int c) {\n"
+    ^ "static BASALT_UNUSED int write_char(void* handle, int c) {\n"
     ^ "  return fputc(c, (FILE*)handle);\n}\n"
-    ^ "static PYREL_UNUSED int write_string(void* handle, const char* s) {\n"
+    ^ "static BASALT_UNUSED int write_string(void* handle, const char* s) {\n"
     ^ "  return fputs(s, (FILE*)handle);\n}\n"
-    ^ "static void** pyrel_live = NULL; static size_t pyrel_live_n = 0, pyrel_live_cap = 0;\n"
-    ^ "static PYREL_UNUSED void pyrel_panic(int code) { fprintf(stderr, \"Pyrel memory error %d\\n\", code); exit(2); }\n"
-    ^ "static PYREL_UNUSED size_t pyrel_checked_bytes(int count, size_t elem_size) { if (count < 0) pyrel_panic(1); if (elem_size != 0 && (size_t)count > (size_t)-1 / elem_size) pyrel_panic(1); return (size_t)count * elem_size; }\n"
-    ^ "static PYREL_UNUSED size_t pyrel_find(void* p) { size_t i; for (i = 0; i < pyrel_live_n; ++i) if (pyrel_live[i] == p) return i; return (size_t)-1; }\n"
-    ^ "static PYREL_UNUSED void pyrel_validate(void) { size_t i, j; for (i = 0; i < pyrel_live_n; ++i) { if (!pyrel_live[i]) pyrel_panic(2); for (j = i + 1; j < pyrel_live_n; ++j) if (pyrel_live[i] == pyrel_live[j]) pyrel_panic(2); } }\n"
-    ^ "static PYREL_UNUSED void pyrel_cleanup(void) { size_t i; pyrel_validate(); for (i = 0; i < pyrel_live_n; ++i) free(pyrel_live[i]); free(pyrel_live); pyrel_live = NULL; pyrel_live_n = pyrel_live_cap = 0; }\n"
-    ^ "static PYREL_UNUSED void* pyrel_track(void* p) { size_t c; void** q; if (!p) return NULL; if (pyrel_find(p) != (size_t)-1) pyrel_panic(2); if (pyrel_live_n == pyrel_live_cap) { if (pyrel_live_cap > (size_t)-1 / 2) pyrel_panic(2); c = pyrel_live_cap ? pyrel_live_cap * 2 : 32; if (c > (size_t)-1 / sizeof(void*)) pyrel_panic(2); q = (void**)realloc(pyrel_live, c * sizeof(void*)); if (!q) pyrel_panic(2); pyrel_live = q; pyrel_live_cap = c; } pyrel_live[pyrel_live_n++] = p; atexit(pyrel_cleanup); return p; }\n"
-    ^ "static PYREL_UNUSED void pyrel_release(void* p) { size_t i; if (!p) return; i = pyrel_find(p); if (i == (size_t)-1) pyrel_panic(2); free(p); pyrel_live[i] = pyrel_live[--pyrel_live_n]; }\n"
-    ^ "static PYREL_UNUSED void* pyrel_memory_alloc(int count, size_t elem_size) { size_t bytes = pyrel_checked_bytes(count, elem_size); void* p = calloc(1, bytes ? bytes : 1); if (!p) pyrel_panic(5); return pyrel_track(p); }\n"
-    ^ "static PYREL_UNUSED void* pyrel_memory_resize(void* old, int old_count, int new_count, size_t elem_size) { size_t slot = (size_t)-1; size_t old_bytes; size_t new_bytes; void* p; if (old_count < 0 || new_count < 0) pyrel_panic(1); if (new_count < old_count) pyrel_panic(1); if (old) { slot = pyrel_find(old); if (slot == (size_t)-1) pyrel_panic(2); } old_bytes = pyrel_checked_bytes(old_count, elem_size); new_bytes = pyrel_checked_bytes(new_count, elem_size); p = realloc(old, new_bytes ? new_bytes : 1); if (!p) pyrel_panic(6); if (slot == (size_t)-1) pyrel_track(p); else pyrel_live[slot] = p; if (new_bytes > old_bytes) memset((char*)p + old_bytes, 0, new_bytes - old_bytes); return p; }\n"
-    ^ "static PYREL_UNUSED void pyrel_memory_free(void* p) { pyrel_release(p); }\n"
-    ^ "static PYREL_UNUSED char* runtime_string_concat(const char* a, const char* b) {\n"
-    ^ "  size_t na, nb, total; char* p; if (!a || !b) pyrel_panic(4); na = strlen(a); nb = strlen(b); if (na > (size_t)-1 - nb - 1) pyrel_panic(1); total = na + nb + 1; p = (char*)malloc(total); if (!p) pyrel_panic(5); memcpy(p, a, na); memcpy(p + na, b, nb); p[na + nb] = 0; return (char*)pyrel_track(p);\n}\n"
-    ^ "static PYREL_UNUSED int write_int(int* handle, int value) {\n"
+    ^ "static void** basalt_live = NULL; static size_t basalt_live_n = 0, basalt_live_cap = 0;\n"
+    ^ "static BASALT_UNUSED void basalt_panic(int code) { fprintf(stderr, \"Basalt memory error %d\\n\", code); exit(2); }\n"
+    ^ "static BASALT_UNUSED size_t basalt_checked_bytes(int count, size_t elem_size) { if (count < 0) basalt_panic(1); if (elem_size != 0 && (size_t)count > (size_t)-1 / elem_size) basalt_panic(1); return (size_t)count * elem_size; }\n"
+    ^ "static BASALT_UNUSED size_t basalt_find(void* p) { size_t i; for (i = 0; i < basalt_live_n; ++i) if (basalt_live[i] == p) return i; return (size_t)-1; }\n"
+    ^ "static BASALT_UNUSED void basalt_validate(void) { size_t i, j; for (i = 0; i < basalt_live_n; ++i) { if (!basalt_live[i]) basalt_panic(2); for (j = i + 1; j < basalt_live_n; ++j) if (basalt_live[i] == basalt_live[j]) basalt_panic(2); } }\n"
+    ^ "static BASALT_UNUSED void basalt_cleanup(void) { size_t i; basalt_validate(); for (i = 0; i < basalt_live_n; ++i) free(basalt_live[i]); free(basalt_live); basalt_live = NULL; basalt_live_n = basalt_live_cap = 0; }\n"
+    ^ "static BASALT_UNUSED void* basalt_track(void* p) { size_t c; void** q; if (!p) return NULL; if (basalt_find(p) != (size_t)-1) basalt_panic(2); if (basalt_live_n == basalt_live_cap) { if (basalt_live_cap > (size_t)-1 / 2) basalt_panic(2); c = basalt_live_cap ? basalt_live_cap * 2 : 32; if (c > (size_t)-1 / sizeof(void*)) basalt_panic(2); q = (void**)realloc(basalt_live, c * sizeof(void*)); if (!q) basalt_panic(2); basalt_live = q; basalt_live_cap = c; } basalt_live[basalt_live_n++] = p; atexit(basalt_cleanup); return p; }\n"
+    ^ "static BASALT_UNUSED void basalt_release(void* p) { size_t i; if (!p) return; i = basalt_find(p); if (i == (size_t)-1) basalt_panic(2); free(p); basalt_live[i] = basalt_live[--basalt_live_n]; }\n"
+    ^ "static BASALT_UNUSED void* basalt_memory_alloc(int count, size_t elem_size) { size_t bytes = basalt_checked_bytes(count, elem_size); void* p = calloc(1, bytes ? bytes : 1); if (!p) basalt_panic(5); return basalt_track(p); }\n"
+    ^ "static BASALT_UNUSED void* basalt_memory_resize(void* old, int old_count, int new_count, size_t elem_size) { size_t slot = (size_t)-1; size_t old_bytes; size_t new_bytes; void* p; if (old_count < 0 || new_count < 0) basalt_panic(1); if (new_count < old_count) basalt_panic(1); if (old) { slot = basalt_find(old); if (slot == (size_t)-1) basalt_panic(2); } old_bytes = basalt_checked_bytes(old_count, elem_size); new_bytes = basalt_checked_bytes(new_count, elem_size); p = realloc(old, new_bytes ? new_bytes : 1); if (!p) basalt_panic(6); if (slot == (size_t)-1) basalt_track(p); else basalt_live[slot] = p; if (new_bytes > old_bytes) memset((char*)p + old_bytes, 0, new_bytes - old_bytes); return p; }\n"
+    ^ "static BASALT_UNUSED void basalt_memory_free(void* p) { basalt_release(p); }\n"
+    ^ "static BASALT_UNUSED char* runtime_string_concat(const char* a, const char* b) {\n"
+    ^ "  size_t na, nb, total; char* p; if (!a || !b) basalt_panic(4); na = strlen(a); nb = strlen(b); if (na > (size_t)-1 - nb - 1) basalt_panic(1); total = na + nb + 1; p = (char*)malloc(total); if (!p) basalt_panic(5); memcpy(p, a, na); memcpy(p + na, b, nb); p[na + nb] = 0; return (char*)basalt_track(p);\n}\n"
+    ^ "static BASALT_UNUSED int write_int(int* handle, int value) {\n"
     ^ "  return fprintf((FILE*)handle, \"%d\", value);\n}\n"
-    ^ "static PYREL_UNUSED int* alloc_ints(int count) { int* p; if (count < 0) pyrel_panic(1); if (count < 1) count = 1; pyrel_checked_bytes(count, sizeof(int)); p = (int*)calloc((size_t)count, sizeof(int)); if (!p) pyrel_panic(5); return (int*)pyrel_track(p); }\n"
-    ^ "static PYREL_UNUSED void free_ints(int* p) { pyrel_release(p); }\n"
-    ^ "static PYREL_UNUSED int* grow_ints(int* old, int old_count, int new_count) { size_t slot = (size_t)-1; int* p; if (old_count < 0 || new_count < 0) pyrel_panic(1); if (new_count <= old_count) return old; if (old) { slot = pyrel_find(old); if (slot == (size_t)-1) pyrel_panic(2); } pyrel_checked_bytes(new_count, sizeof(int)); p = (int*)realloc(old, (size_t)new_count * sizeof(int)); if (!p) pyrel_panic(6); if (old) pyrel_live[slot] = p; else pyrel_track(p); memset(p + old_count, 0, (size_t)(new_count - old_count) * sizeof(int)); return p; }\n\n"
+    ^ "static BASALT_UNUSED int* alloc_ints(int count) { int* p; if (count < 0) basalt_panic(1); if (count < 1) count = 1; basalt_checked_bytes(count, sizeof(int)); p = (int*)calloc((size_t)count, sizeof(int)); if (!p) basalt_panic(5); return (int*)basalt_track(p); }\n"
+    ^ "static BASALT_UNUSED void free_ints(int* p) { basalt_release(p); }\n"
+    ^ "static BASALT_UNUSED int* grow_ints(int* old, int old_count, int new_count) { size_t slot = (size_t)-1; int* p; if (old_count < 0 || new_count < 0) basalt_panic(1); if (new_count <= old_count) return old; if (old) { slot = basalt_find(old); if (slot == (size_t)-1) basalt_panic(2); } basalt_checked_bytes(new_count, sizeof(int)); p = (int*)realloc(old, (size_t)new_count * sizeof(int)); if (!p) basalt_panic(6); if (old) basalt_live[slot] = p; else basalt_track(p); memset(p + old_count, 0, (size_t)(new_count - old_count) * sizeof(int)); return p; }\n\n"
  in
   let emit_env =
     let funcs =

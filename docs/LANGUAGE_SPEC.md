@@ -1,14 +1,14 @@
-# Pyrel Language Specification
+# Basalt Language Specification
 
 ## 1. Scope
 
-Pyrel is a statically typed, C-emitting language designed for small systems programs, compiler implementation, and data-oriented utilities. Its reference behavior is defined by the Host compiler and checked against the Bootstrap compiler. The language deliberately keeps the core syntax compact while exposing pointers, C interoperability, generics, and explicit container operations.
+Basalt is a statically typed, C-emitting language designed for small systems programs, compiler implementation, and data-oriented utilities. Its reference behavior is defined by the Host compiler and checked against the Bootstrap compiler. The language deliberately keeps the core syntax compact while exposing pointers, C interoperability, generics, and explicit container operations.
 
 ## 2. Program structure
 
 A program is a sequence of type declarations, namespace declarations, external declarations, includes, global declarations, and function definitions. The conventional entry point is:
 
-```pyrel
+```basalt
 func main(): int {
   return 0;
 }
@@ -24,7 +24,7 @@ Identifiers contain letters, digits, and underscores, subject to the usual rule 
 
 The primitive types are `int`, `bool`, `char`, `string`, `float`, `double`, and `void`. Pointers use postfix `*`, fixed arrays use a type and compile-time length, and dynamic arrays use the generic array facilities in the standard library. Named types include structs and enums. Generic types use angle brackets, for example `Result<int, string>`.
 
-Pyrel treats `int` and `bool` as compatible in the current C-oriented type model. Character values are integer-like. `float` and `double` participate in numeric compatibility and array element matching according to the compiler's strict element rules. Pointer compatibility follows C-like rules for compatible pointee types and `void*` conversions.
+Basalt treats `int` and `bool` as compatible in the current C-oriented type model. Character values are integer-like. `float` and `double` participate in numeric compatibility and array element matching according to the compiler's strict element rules. Pointer compatibility follows C-like rules for compatible pointee types and `void*` conversions.
 
 ## 5. Expressions and precedence
 
@@ -59,7 +59,7 @@ The `null` literal represents a null pointer value and is emitted through the C 
 
 Functions declare parameters and a return type:
 
-```pyrel
+```basalt
 func remainder(a: int, b: int): int {
   return a % b;
 }
@@ -71,7 +71,7 @@ Namespaces introduce a separate qualified scope. A declaration in `namespace res
 
 Structs contain typed fields:
 
-```pyrel
+```basalt
 struct Point {
   x: int;
   y: int;
@@ -86,7 +86,7 @@ The standard library provides generic dynamic-array operations and container mod
 
 ## 10. C interoperability and includes
 
-`extern` declares a C-provided function with an Pyrel signature. `includec "file.h";` injects or includes raw C material under the compiler's controlled emission path. `include "module.pyrel";` loads another Pyrel source file. Recursive include processing tracks canonical paths, rejects active include cycles, and avoids duplicate loaded modules.
+`extern` declares a C-provided function with an Basalt signature. `includec "file.h";` injects or includes raw C material under the compiler's controlled emission path. `include "module.basalt";` loads another Basalt source file. Recursive include processing tracks canonical paths, rejects active include cycles, and avoids duplicate loaded modules.
 
 ## 11. Diagnostics
 
@@ -94,7 +94,7 @@ The Host compiler reports human-readable type and parse errors. The Bootstrap co
 
 ## 12. Generated C contract
 
-Pyrel emits portable C11. Release validation uses:
+Basalt emits portable C11. Release validation uses:
 
 ```text
 gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror

@@ -4,8 +4,8 @@ _build/
 *.merlin
 
 # Generated C and local compiler binaries
-*.pyrel.c
-!src/bootstrap/pyrelc.pyrel.c
+*.basalt.c
+!src/bootstrap/basaltc.basalt.c
 *.bin
 *.out
 *.o

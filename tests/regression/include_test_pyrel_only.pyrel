@@ -1,5 +1,0 @@
-include "include_test_lib.pyrel"
-include "./include_test_lib.pyrel"
-func main(): void {
-  print imported_value();
-}

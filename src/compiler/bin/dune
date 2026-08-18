@@ -1,4 +1,4 @@
 (executable
- (name main)
- (public_name pyrel)
- (libraries pyrel_lib unix))
+ (name basaltc)
+ (public_name basaltc)
+ (libraries basalt_lib unix))

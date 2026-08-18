@@ -1,0 +1,15 @@
+include "../../../src/stdlib/slice.basalt"
+func main(): int {
+  let values: slice::Slice<bool> = slice::new(false);
+  let j: int = 0;
+  while j < 21 {
+    values = slice::push(values, true);
+    j = j + 1;
+  }
+  if slice::length(values) != 21 then return 1;
+  if slice::capacity(values) < 21 then return 2;
+  if slice::is_empty(values) then return 3;
+  values = slice::set(values, 9, true);
+  values = slice::free(values);
+  return 0;
+}

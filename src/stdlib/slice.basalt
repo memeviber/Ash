@@ -1,0 +1,97 @@
+namespace slice {
+  // Owning, growable generic slice. The backing storage is typed, so every
+  // Basalt element type uses the same allocation and growth path.
+  struct Slice<T> {
+    zero: T;
+    data: T*;
+    len: int;
+    cap: int;
+  }
+
+  func with_capacity<T>(capacity: int, zero: T): Slice<T> {
+    let s: Slice<T> = 0;
+    let cap: int = capacity;
+    if cap < 1 then cap = 4;
+    s.zero = zero;
+    s.data = memory_alloc(cap, zero);
+    s.len = 0;
+    s.cap = cap;
+    return s;
+  }
+
+  func new<T>(zero: T): Slice<T> {
+    return slice::with_capacity(4, zero);
+  }
+
+  func reserve<T>(s: Slice<T>, minimum: int): Slice<T> {
+    if minimum < 1 then return s;
+    if minimum > s.cap then {
+      s.data = memory_resize(s.data, s.cap, minimum, s.zero);
+      s.cap = minimum;
+    }
+    return s;
+  }
+
+  func ensure_capacity<T>(s: Slice<T>, required: int): Slice<T> {
+    if required < 1 then return s;
+    if required < s.cap then return s;
+    if required == s.cap then return s;
+    let next: int = s.cap;
+    if next < 1 then next = 4;
+    while next < required {
+      let grown: int = next * 2;
+      if grown < next then { grown = required; }
+      next = grown;
+    }
+    return slice::reserve(s, next);
+  }
+
+  func push<T>(s: Slice<T>, value: T): Slice<T> {
+    s = slice::ensure_capacity(s, s.len + 1);
+    s.data[s.len] = value;
+    s.len = s.len + 1;
+    return s;
+  }
+
+  func in_bounds<T>(s: Slice<T>, index: int): bool {
+    if index < 0 then return false;
+    return index < s.len;
+  }
+
+  func get_or<T>(s: Slice<T>, index: int, fallback: T): T {
+    if slice::in_bounds(s, index) then return s.data[index];
+    return fallback;
+  }
+
+  func get<T>(s: Slice<T>, index: int): T {
+    return slice::get_or(s, index, s.zero);
+  }
+
+  func set_if_in_bounds<T>(s: Slice<T>, index: int, value: T): Slice<T> {
+    if slice::in_bounds(s, index) then s.data[index] = value;
+    return s;
+  }
+
+  func set<T>(s: Slice<T>, index: int, value: T): Slice<T> {
+    return slice::set_if_in_bounds(s, index, value);
+  }
+
+  func last_or<T>(s: Slice<T>, fallback: T): T {
+    if s.len < 1 then return fallback;
+    return slice::get_or(s, s.len - 1, fallback);
+  }
+
+  func clear<T>(s: Slice<T>): Slice<T> { s.len = 0; return s; }
+  func length<T>(s: Slice<T>): int { return s.len; }
+  func capacity<T>(s: Slice<T>): int { return s.cap; }
+  func is_empty<T>(s: Slice<T>): bool { return s.len == 0; }
+  func is_full<T>(s: Slice<T>): bool { return s.cap < s.len || s.cap == s.len; }
+
+  func free<T>(s: Slice<T>): Slice<T> {
+    if s.data != 0 then memory_free(s.data);
+    s.data = 0;
+    s.len = 0;
+    s.cap = 0;
+    return s;
+  }
+}

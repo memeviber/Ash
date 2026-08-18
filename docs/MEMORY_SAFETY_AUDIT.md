@@ -1,12 +1,12 @@
-# Pyrel Memory-Safety Audit and Ownership-Checking Status
+# Basalt Memory-Safety Audit and Ownership-Checking Status
 
 ## Executive assessment
 
-Pyrel now provides **static move/borrow checking for dynamic arrays (`TDynArray`) in both the Host and Bootstrap compilers**, in addition to the previously implemented runtime allocation registry and checked dynamic-array operations. The checker follows a deliberately narrow and auditable rule set: dynamic arrays are owning values, ownership moves by default across recognized transfers, address-taking creates a scoped borrow, mutation and release are forbidden while a borrow is active, and a borrow cannot escape through a pointer return.[^1][^2]
+Basalt now provides **static move/borrow checking for dynamic arrays (`TDynArray`) in both the Host and Bootstrap compilers**, in addition to the previously implemented runtime allocation registry and checked dynamic-array operations. The checker follows a deliberately narrow and auditable rule set: dynamic arrays are owning values, ownership moves by default across recognized transfers, address-taking creates a scoped borrow, mutation and release are forbidden while a borrow is active, and a borrow cannot escape through a pointer return.[^1][^2]
 
 This milestone does not make every pointer operation memory-safe. Raw pointers, pointer arithmetic, arbitrary dereference, `extern`, `includec`, and unconstrained C interoperability remain explicit low-level or unsafe boundaries. The ownership guarantee is therefore precise rather than overstated: **the implemented static contract covers dynamic-array ownership and address-derived borrows, while legacy pointer handles remain subject to runtime registry validation and explicit release tracking**.
 
-The implementation obeys the Pyrel dogfooding rule. The Bootstrap checker was modified in Pyrel source, regenerated to C, rebuilt with strict GCC, and used to regenerate the next Bootstrap generation. The Host OCaml checker was kept in parity with the Pyrel implementation and was changed only for compiler-side ownership behavior and previously confirmed platform mismatches.[^3]
+The implementation obeys the Basalt dogfooding rule. The Bootstrap checker was modified in Basalt source, regenerated to C, rebuilt with strict GCC, and used to regenerate the next Bootstrap generation. The Host OCaml checker was kept in parity with the Basalt implementation and was changed only for compiler-side ownership behavior and previously confirmed platform mismatches.[^3]
 
 ## Static ownership model
 
@@ -45,26 +45,26 @@ Both compilers reject every ownership-negative fixture in the new corpus. The ac
 
 | Fixture | Host result | Bootstrap result | Semantic case |
 | --- | --- | --- | --- |
-| `move_borrow_valid.pyrel` | Accepted; output `7 8 41 41` | Accepted; output `7 8 41 41` | Valid move, scoped borrow, and post-borrow mutation |
-| `move_borrow_invalid_use_after_move.pyrel` | Rejected | Rejected | Read after passing owner to an owned parameter |
-| `move_borrow_invalid_double_free.pyrel` | Rejected | Rejected | Release after the first `array_free` consumed the owner |
-| `move_borrow_invalid_mutate_borrowed.pyrel` | Rejected | Rejected | Mutation while an address-derived borrow is active |
-| `move_borrow_invalid_borrow_escape.pyrel` | Rejected | Rejected | Returning a pointer to a local owner |
-| `move_borrow_invalid_owner_copy.pyrel` | Rejected | Rejected | Implicit dynamic-array owner copy |
+| `move_borrow_valid.basalt` | Accepted; output `7 8 41 41` | Accepted; output `7 8 41 41` | Valid move, scoped borrow, and post-borrow mutation |
+| `move_borrow_invalid_use_after_move.basalt` | Rejected | Rejected | Read after passing owner to an owned parameter |
+| `move_borrow_invalid_double_free.basalt` | Rejected | Rejected | Release after the first `array_free` consumed the owner |
+| `move_borrow_invalid_mutate_borrowed.basalt` | Rejected | Rejected | Mutation while an address-derived borrow is active |
+| `move_borrow_invalid_borrow_escape.basalt` | Rejected | Rejected | Returning a pointer to a local owner |
+| `move_borrow_invalid_owner_copy.basalt` | Rejected | Rejected | Implicit dynamic-array owner copy |
 
 The semantic results are identical, while the current human-readable diagnostics are not yet byte-for-byte identical. Host reports, for example, `cannot mutate borrowed value` and `borrow escapes function through return`; Bootstrap reports the equivalent messages `cannot mutate or move while borrowed` and `borrowed reference escapes its owner`. The error classes are aligned, including Bootstrap's explicit mapping for error 33 (`use after ownership move`) and error 40 (`owned value copy requires an explicit move`).
 
 ## Confirmed Host runtime bug and fix
 
-Before the Host emitter hardening, direct dynamic-array indexing could reach raw memory even though Bootstrap rejected the same out-of-bounds access. The Host emitter now routes dynamic-array reads through the checked runtime helper, aligning the two compiler paths. The adversarial fixture `memory_oob_test.pyrel` is compiled through both paths and both generated programs terminate with the same deterministic failure status without AddressSanitizer or UBSan diagnostics.[^5]
+Before the Host emitter hardening, direct dynamic-array indexing could reach raw memory even though Bootstrap rejected the same out-of-bounds access. The Host emitter now routes dynamic-array reads through the checked runtime helper, aligning the two compiler paths. The adversarial fixture `memory_oob_test.basalt` is compiled through both paths and both generated programs terminate with the same deterministic failure status without AddressSanitizer or UBSan diagnostics.[^5]
 
 ## Validation evidence
 
 | Check | Result | Evidence |
 | --- | --- | --- |
-| Host Dune build | Passed | `pyrel/scripts/run_ownership_stress.sh` |
-| Ownership valid fixture | Host and Bootstrap accepted | `tests/stress/move_borrow_valid.pyrel` |
-| Ownership negative corpus | Five fixtures rejected by both compilers | `tests/stress/move_borrow_invalid_*.pyrel` |
+| Host Dune build | Passed | `basalt/scripts/run_ownership_stress.sh` |
+| Ownership valid fixture | Host and Bootstrap accepted | `tests/stress/move_borrow_valid.basalt` |
+| Ownership negative corpus | Five fixtures rejected by both compilers | `tests/stress/move_borrow_invalid_*.basalt` |
 | Strict generated C | Passed with `-std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror` | Ownership runner and existing suites |
 | Ownership sanitizer run | ASan and UBSan passed with leak detection enabled | `run_ownership_stress.sh` |
 | Existing regression suite | Passed | `run_regression.sh` |
@@ -81,11 +81,11 @@ The unchanged C output is expected. Ownership checking is a compile-time accepta
 From the repository root, the complete ownership and compatibility validation is:
 
 ```sh
-cd pyrel
+cd basalt
 ./scripts/run_ownership_stress.sh
 ```
 
-The runner builds the Host compiler, strict-builds the canonical Bootstrap C artifact, checks the valid and invalid ownership fixtures, compiles valid outputs under strict GCC and ASan/UBSan, compares runtime output, and then invokes the regression, stress, adversarial, conformance, and fixed-point suites. Generated logs and binaries are written below `pyrel/.tmp/` and are not part of the clean package.
+The runner builds the Host compiler, strict-builds the canonical Bootstrap C artifact, checks the valid and invalid ownership fixtures, compiles valid outputs under strict GCC and ASan/UBSan, compares runtime output, and then invokes the regression, stress, adversarial, conformance, and fixed-point suites. Generated logs and binaries are written below `basalt/.tmp/` and are not part of the clean package.
 
 ## Remaining limitations
 
@@ -95,7 +95,7 @@ The next language-safety milestones should introduce explicit ownership annotati
 
 ## References
 
-[^1]: [Bootstrap ownership checker source](../src/bootstrap/pyrelc.pyrel)
+[^1]: [Bootstrap ownership checker source](../src/bootstrap/basaltc.basalt)
 [^2]: [Host ownership checker source](../src/compiler/lib/typechecker.ml)
 [^3]: [Bootstrap fixed-point verification script](../scripts/fixed_point.sh)
 [^4]: [Ownership stress runner](../scripts/run_ownership_stress.sh)

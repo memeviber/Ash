@@ -2,22 +2,22 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-HOST="$ROOT/src/compiler/_build/default/bin/main.exe"
-BOOT_SOURCE="$ROOT/src/bootstrap/pyrelc.pyrel"
+HOST="$ROOT/src/compiler/_build/default/bin/basaltc.exe"
+BOOT_SOURCE="$ROOT/src/bootstrap/basaltc.basalt"
 OUT="$ROOT/.tmp/adversarial"
 rm -rf "$OUT"
 mkdir -p "$OUT"
 
-(cd "$ROOT/src/compiler" && dune build bin/main.exe)
+(cd "$ROOT/src/compiler" && dune build bin/basaltc.exe)
 (cd "$ROOT/src/compiler" && "$HOST" "$BOOT_SOURCE")
-gcc -std=c11 -O1 -g -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror=implicit-function-declaration -Werror=incompatible-pointer-types -Werror=int-conversion -fsanitize=address,undefined -fno-omit-frame-pointer "$ROOT/src/bootstrap/pyrelc.pyrel.c" -o "$OUT/bootstrap.bin"
+gcc -std=c11 -O1 -g -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror=implicit-function-declaration -Werror=incompatible-pointer-types -Werror=int-conversion -fsanitize=address,undefined -fno-omit-frame-pointer "$ROOT/src/bootstrap/basaltc.basalt.c" -o "$OUT/bootstrap.bin"
 
 for source in \
-  "$ROOT/tests/regression/complex_fnptr_ptrarith.pyrel" \
-  "$ROOT/tests/regression/macro_pointer_complex.pyrel" \
-  "$ROOT/tests/regression/stress_memory_loop.pyrel" \
-  "$ROOT/tests/stress/modulo_stress.pyrel"; do
-  name=$(basename "$source" .pyrel)
+  "$ROOT/tests/regression/complex_fnptr_ptrarith.basalt" \
+  "$ROOT/tests/regression/macro_pointer_complex.basalt" \
+  "$ROOT/tests/regression/stress_memory_loop.basalt" \
+  "$ROOT/tests/stress/modulo_stress.basalt"; do
+  name=$(basename "$source" .basalt)
   (cd "$(dirname "$source")" && "$HOST" "$(basename "$source")") >"$OUT/${name}.host.log" 2>&1
   cp "${source}.c" "$OUT/${name}.host.c"
   "$OUT/bootstrap.bin" "$source" "$OUT/${name}.boot.c" >"$OUT/${name}.boot.log" 2>&1
@@ -31,7 +31,7 @@ done
 
 # Bounds-safe runtime check: both compiler paths must return the same fallback
 # value and reject an invalid write without sanitizer diagnostics.
-OOB_SOURCE="$ROOT/tests/adversarial/memory_oob_test.pyrel"
+OOB_SOURCE="$ROOT/tests/adversarial/memory_oob_test.basalt"
 OOB_OUT="$OUT/memory_oob"
 (
   cd "$(dirname "$OOB_SOURCE")"

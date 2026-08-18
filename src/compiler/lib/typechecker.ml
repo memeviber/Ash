@@ -128,13 +128,13 @@ let check program =
       ("close_file", ([TPtr TVoid], TInt));
       ("write_char", ([TPtr TVoid; TInt], TInt));
       ("write_string", ([TPtr TVoid; TString], TInt));
-      ("pyrel_include_open_root", ([TString], TPtr TVoid));
-      ("pyrel_include_open_line", ([TPtr TInt; TInt; TInt], TPtr TVoid));
-      ("pyrel_include_last_status", ([], TInt));
-      ("pyrel_include_close", ([], TVoid));
-      ("pyrel_include_reset_session", ([], TVoid));
-      ("pyrel_include_line_mode", ([TPtr TInt; TInt], TInt));
-      ("pyrel_inc_realpath", ([TString], TString))
+      ("basalt_include_open_root", ([TString], TPtr TVoid));
+      ("basalt_include_open_line", ([TPtr TInt; TInt; TInt], TPtr TVoid));
+      ("basalt_include_last_status", ([], TInt));
+      ("basalt_include_close", ([], TVoid));
+      ("basalt_include_reset_session", ([], TVoid));
+      ("basalt_include_line_mode", ([TPtr TInt; TInt], TInt));
+      ("basalt_inc_realpath", ([TString], TString))
     ] in
     List.fold_left (fun m (name, sig_) -> if SMap.mem name m then m else SMap.add name sig_ m) declared_externs builtins
   in
@@ -420,7 +420,7 @@ let check program =
                 else Error "++ operands must be string"))
   in
   let ownership_of_initializer = function
-    | Call ("alloc_ints", _) | Call ("open_file", _) | Call ("pyrel_include_open_root", _) | Call ("pyrel_include_open_line", _) -> true
+    | Call ("alloc_ints", _) | Call ("open_file", _) | Call ("basalt_include_open_root", _) | Call ("basalt_include_open_line", _) -> true
     | _ -> false
   in
   let is_owner_type = function
