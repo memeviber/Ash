@@ -7,6 +7,7 @@ BOOT_SOURCE="$ROOT/src/bootstrap/pyrelc.pyrel"
 OUT="$ROOT/.tmp/conformance"
 rm -rf "$OUT"
 mkdir -p "$OUT"
+python3 "$ROOT/scripts/generate_longterm_tests.py"
 
 (cd "$ROOT/src/compiler" && dune build bin/main.exe)
 (cd "$ROOT/src/compiler" && "$HOST" "$BOOT_SOURCE")
@@ -14,7 +15,7 @@ gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow "$ROOT/src/bootstrap
 
 pass=0
 fail=0
-for source in "$ROOT"/tests/conformance/*.pyrel "$ROOT"/tests/conformance/generated/fuzz_*.pyrel; do
+for source in "$ROOT"/tests/conformance/*.pyrel "$ROOT"/tests/conformance/generated/fuzz_*.pyrel "$ROOT"/tests/conformance/generated/lt_valid_*.pyrel; do
   [ -f "$source" ] || continue
   name=$(basename "$source" .pyrel)
   host_c="$OUT/${name}.host.c"; boot_c="$OUT/${name}.boot.c"

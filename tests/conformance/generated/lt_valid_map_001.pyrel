@@ -1,0 +1,11 @@
+include "../../../src/stdlib/map.pyrel"
+func main(): int {
+  let m: map::HashMap<char, bool> = map::new('?', false);
+  m = map::put(m, 'k', true);
+  if map::length(m) != 1 then return 1;
+  if map::contains_key(m, 'k') == false then return 2;
+  m = map::remove(m, 'k');
+  if map::length(m) != 0 then return 3;
+  m = map::free(m);
+  return 0;
+}

@@ -1,0 +1,15 @@
+include "../../../src/stdlib/array.pyrel"
+func main(): int {
+  let values: array::Array<double> = array::new(1, 0.0);
+  let j: int = 0;
+  while j < 18 {
+    values = array::push(values, 3.5, 0.0);
+    j = j + 1;
+  }
+  if array::length(values) != 18 then return 1;
+  if array::capacity(values) < 18 then return 2;
+  values = array::set(values, 7, 3.5);
+  if array::length(values) != 18 then return 3;
+  values = array::free(values);
+  return 0;
+}
