@@ -9,12 +9,14 @@ type emit_env = {
   vars : typ SMap.t;
   funcs : (typ list * typ) SMap.t;
   fields : (typ SMap.t) SMap.t;
+  enum_values : typ SMap.t;
   generic_structs : generic_struct_info SMap.t;
   generic_functions : generic_func_info SMap.t;
 }
 
 let empty_emit_env = {
   vars = SMap.empty; funcs = SMap.empty; fields = SMap.empty;
+  enum_values = SMap.empty;
   generic_structs = SMap.empty; generic_functions = SMap.empty
 }
 
@@ -92,7 +94,10 @@ let rec emit_expr_type env = function
        | None ->
            (match SMap.find_opt x env.funcs with
             | Some (ps, r) -> TFunPtr (ps, r)
-            | None -> failwith ("internal: unknown variable or function " ^ x)))
+            | None ->
+                (match SMap.find_opt x env.enum_values with
+                 | Some t -> t
+                 | None -> failwith ("internal: unknown variable or function " ^ x))))
   | Deref e ->
       (match emit_expr_type env e with
        | TPtr t -> t
@@ -621,6 +626,12 @@ static BASALT_UNUSED void basalt_include_reset_session(void){basalt_inc_active_n
         program.functions
     in
     let fields = List.fold_left (fun m (n, fs) -> SMap.add n (List.fold_left (fun fm (x, t) -> SMap.add x t fm) SMap.empty fs) m) SMap.empty program.structs in
+    let enum_values =
+      List.fold_left
+        (fun m (name, values) ->
+          List.fold_left (fun vm value -> SMap.add value (TNamed name) vm) m values)
+        SMap.empty program.enums
+    in
     let vars = List.fold_left (fun m (x, t, _) -> SMap.add x t m) SMap.empty (program.globals @ program.consts) in
     let generic_structs =
       List.fold_left (fun m (n, ps, fs) -> SMap.add n (ps, fs) m) SMap.empty program.generic_structs
@@ -628,7 +639,7 @@ static BASALT_UNUSED void basalt_include_reset_session(void){basalt_inc_active_n
     let generic_functions =
       List.fold_left (fun m (n, ps, f) -> SMap.add n (ps, f) m) SMap.empty program.generic_functions
     in
-    { vars; funcs; fields; generic_structs; generic_functions }
+    { vars; funcs; fields; enum_values; generic_structs; generic_functions }
   in
   List.iter (fun (_, t, e) -> collect_typ add_struct t; scan_expr emit_env e) (program.globals @ program.consts);
   List.iter (fun f ->
@@ -659,8 +670,7 @@ static BASALT_UNUSED void basalt_include_reset_session(void){basalt_inc_active_n
       |> String.concat ""
     in
     let enum_forward =
-      List.map (fun (name, _) -> "typedef enum " ^ c_symbol_name name ^ " " ^ c_symbol_name name ^ ";\n") program.enums
-      |> String.concat ""
+      ""
     in
     let struct_defs =
       let ordinary = List.map (fun (name, fields) ->
@@ -681,7 +691,8 @@ static BASALT_UNUSED void basalt_include_reset_session(void){basalt_inc_active_n
     in
     let enum_defs =
       List.map (fun (name, values) ->
-        "enum " ^ c_symbol_name name ^ " { " ^ String.concat ", " values ^ " };\n") program.enums
+        "enum " ^ c_symbol_name name ^ " { " ^ String.concat ", " values ^ " };\n" ^
+        "typedef enum " ^ c_symbol_name name ^ " " ^ c_symbol_name name ^ ";\n") program.enums
       |> String.concat ""
     in
     struct_forward ^ enum_forward ^ struct_defs ^ enum_defs

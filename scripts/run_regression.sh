@@ -108,6 +108,8 @@ compile_run "$ROOT/tests/regression/pointer_struct_field.bsl" pointer_struct_fie
 compile_run "$ROOT/tests/regression/fixed_array_valid.bsl" fixed_array_valid
 expect_reject "$ROOT/tests/regression/fixed_array_oob_literal.bsl" fixed_array_oob_literal
 expect_reject "$ROOT/tests/regression/fixed_array_oob_negative.bsl" fixed_array_oob_negative
+compile_run "$ROOT/tests/regression/enum_typechecker_valid.bsl" enum_typechecker_valid
+expect_reject "$ROOT/tests/regression/enum_typechecker_invalid.bsl" enum_typechecker_invalid
 expect_reject "$ROOT/tests/regression/fixed_array_oob_struct_field.bsl" fixed_array_oob_struct_field
 expect_collision_reject "$ROOT/tests/regression/mangle_collision.bsl" mangle_collision
 expect_collision_reject "$ROOT/tests/regression/nested_namespace_flat_collision.bsl" nested_namespace_flat_collision

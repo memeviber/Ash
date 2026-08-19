@@ -6,7 +6,16 @@ The repository is organized for reproducible compiler work rather than for gener
 
 ## Highlights
 
-Basalt supports integers, booleans, characters, strings, floating-point values, pointers, fixed and dynamic arrays, structs, enums, namespaces, generic types, function pointers, controlled C FFI through `extern`, `include`, and `includec`, ownership checks, scope-aware type checking, and structured standard-library components such as `map` and `result`.
+Basalt supports integers, booleans, characters, strings, floating-point values, pointers, fixed and dynamic arrays, structs, enums, namespaces, generic types, function pointers, controlled C FFI through `extern`, `include`, and `includec`, ownership checks, scope-aware type checking, and structured standard-library components such as `array`, `map`, `option`, and `result`.
+
+Safety is a first-class concern:
+
+- **Compile-time bounds checks for fixed arrays.** Indexing `T[n]` with a constant outside the array is rejected before any C is emitted — including the `0 - 1` form of `-1`.
+- **Move/borrow checking for dynamic arrays.** Values own their buffers; passing them moves them, releasing consumes them, and borrows (`&`) block mutation, moves, and release while live.
+- **Null safety through `option`.** The `option::Option<T>` module (tag + payload) makes absence explicit and total — the only way to read the payload is `unwrap_or`, so there is no panic path.
+- **Runtime fail-closed policy.** Tracked allocations are registry-checked; invalid bounds and double releases terminate deterministically with exit code `2`.
+
+The Bootstrap compiler's built-in function table is data-driven (`bi_register(name, tag, flags)`), so adding a built-in is a two-line change across the two compilers instead of edits to several hardcoded hash lists.
 
 Arithmetic operators include `+`, `-`, `*`, `/`, and the modulo operator `%`. Modulo has multiplicative precedence and is accepted by both the Host and Bootstrap compilers. For example:
 
@@ -62,16 +71,30 @@ gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror
 
 ## Testing
 
-The main commands are:
+The master verification command is:
+
+```sh
+./scripts/run_ownership_stress.sh
+```
+
+It builds both compiler paths, runs the move/borrow valid fixture under ASan/UBSan with leak detection, requires both compilers to reject every ownership-negative fixture, and then runs the regression, stress, adversarial, conformance, and fixed-point suites, plus a guard that no executable may be left under `tests/`.
+
+The individual suites can be run directly:
 
 ```sh
 ./scripts/run_regression.sh
 ./scripts/run_conformance.sh
 ./scripts/run_adversarial.sh
 ./scripts/run_stress.sh
+./scripts/fixed_point.sh
 ```
 
-The modulo-specific checks compile and execute the same Basalt program through both compilers. They cover ordinary residues, zero and one, self-modulo, loop accumulation, precedence, nested expressions, a negative-value simulation, a generic `Result` context, and rejection of string operands. The complete stress corpus currently reports 164/164 passing cases before the dedicated modulo cases are added to the release repository.
+The regression suite compiles and executes every registered fixture through **both** compilers: valid programs must compile with strict GCC and run; `expect_reject` fixtures must be rejected by both. The modulo-specific checks cover ordinary residues, zero and one, self-modulo, loop accumulation, precedence, nested expressions, a negative-value simulation, a generic `Result` context, and rejection of string operands. The complete stress corpus currently reports 164/164 passing cases before the dedicated modulo cases are added to the release repository.
+
+## Guides
+
+- [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md) — how to build Basalt, write programs, and use the standard library, with verified examples
+- [`docs/DEVELOPER_GUIDE.md`](docs/DEVELOPER_GUIDE.md) — how the two compilers cooperate, the verification machinery, and worked examples of adding built-ins, stdlib modules, and compiler features
 
 ## Language documentation
 
