@@ -9,6 +9,16 @@ BOOT_BIN="$ROOT/.tmp/bootstrap.bin"
 OUT="$ROOT/.tmp/regression"
 mkdir -p "$OUT"
 
+GENERATED_SOURCES=()
+track_source() { GENERATED_SOURCES+=("$1"); }
+cleanup_generated() {
+  rm -f "$ROOT/src/bootstrap/basaltc"
+  for source in "${GENERATED_SOURCES[@]}"; do
+    rm -f "${source}.c" "${source%.bsl}"
+  done
+}
+trap cleanup_generated EXIT
+
 (cd "$ROOT/src/compiler" && dune build bin/basaltc.exe)
 (cd "$ROOT/src/compiler" && "$COMPILER" "$BOOT_SOURCE")
 gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror "$BOOT_C" -o "$BOOT_BIN"
@@ -32,6 +42,7 @@ assert_single_runtime_prologue() {
 
 compile_run() {
   local source=$1 label=$2
+  track_source "$source"
   local host_c="$OUT/${label}.host.c" boot_c="$OUT/${label}.boot.c"
   local host_bin="$OUT/${label}.host.bin" boot_bin="$OUT/${label}.boot.bin"
   rm -f "$host_c" "$boot_c" "$host_bin" "$boot_bin" "$ROOT"/$(basename "$source").c
@@ -51,6 +62,7 @@ compile_run() {
 
 expect_reject() {
   local source=$1 label=$2
+  track_source "$source"
   local host_log="$OUT/${label}.host.log" boot_log="$OUT/${label}.boot.log"
   rm -f "${source}.c" "$OUT/${label}.boot.c"
   if (cd "$(dirname "$source")" && "$COMPILER" "$(basename "$source")") >"$host_log" 2>&1; then
@@ -89,6 +101,8 @@ grep -Fq '(void*)' "$OUT/print_pointer_test.boot.c"
 printf 'PASS print_pointer_test format guard\n'
 compile_run "$ROOT/tests/regression/namespace_collision.bsl" namespace_collision
 compile_run "$ROOT/tests/regression/nested_namespace_valid.bsl" nested_namespace_valid
+compile_run "$ROOT/tests/regression/namespace_global.bsl" namespace_global
+compile_run "$ROOT/tests/regression/pointer_struct_field.bsl" pointer_struct_field
 expect_collision_reject "$ROOT/tests/regression/mangle_collision.bsl" mangle_collision
 expect_collision_reject "$ROOT/tests/regression/nested_namespace_flat_collision.bsl" nested_namespace_flat_collision
 expect_collision_reject "$ROOT/tests/regression/nested_namespace_segment_collision.bsl" nested_namespace_segment_collision

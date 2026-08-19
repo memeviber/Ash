@@ -2275,7 +2275,11 @@ void gen_expr(int id) {
                             if ((k == N_FIELD_ACCESS)) {
                               {
                                 gen_expr((node_a)[id]);
-                                code_emit(C_PUNCT, 17);
+                                if ((gen_expr_kind((node_a)[id]) == TY_PTR)) {
+                                  code_emit(C_PUNCT, 27);
+                                } else {
+                                  code_emit(C_PUNCT, 17);
+                                }
                                 code_emit(C_IDENT, (node_value)[id]);
                               }
                             } else {
@@ -5076,6 +5080,7 @@ int ast_decl(void) {
       }
       int name = input_payload();
       input_pos = (input_pos + 1);
+      name = ast_decl_name(name);
       if ((input_take(T_COLON) == 0)) {
         return (0 - 1);
       } else {
@@ -8836,7 +8841,19 @@ void tc_expr(int id) {
         }
       }
       if ((base_kind == TY_PTR)) {
-        base_kind = TY_NAMED;
+        {
+          if ((tc_elem_kind == TY_GENERIC)) {
+            {
+              base_kind = TY_GENERIC;
+              base_name = tc_elem_name;
+            }
+          } else {
+            {
+              base_kind = TY_NAMED;
+              base_name = tc_elem_name;
+            }
+          }
+        }
       } else {
         {
         }
@@ -11351,7 +11368,11 @@ void emit_c_token(int* out, int kind, int value) {
                                                                   if ((value == 25)) {
                                                                     write_string(out, "}");
                                                                   } else {
-                                                                    {
+                                                                    if ((value == 27)) {
+                                                                      write_string(out, "->");
+                                                                    } else {
+                                                                      {
+                                                                      }
                                                                     }
                                                                   }
                                                                 }

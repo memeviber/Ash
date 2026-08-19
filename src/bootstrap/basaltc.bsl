@@ -783,7 +783,11 @@ func gen_expr(id: int): void {
   else if k == N_INDEX then {
     gen_expr(node_a[id]); code_emit(C_PUNCT, 2); gen_expr(node_b[id]); code_emit(C_PUNCT, 3);
   }
-  else if k == N_FIELD_ACCESS then { gen_expr(node_a[id]); code_emit(C_PUNCT, 17); code_emit(C_IDENT, node_value[id]); }
+  else if k == N_FIELD_ACCESS then {
+    gen_expr(node_a[id]);
+    if gen_expr_kind(node_a[id]) == TY_PTR then code_emit(C_PUNCT, 27); else code_emit(C_PUNCT, 17);
+    code_emit(C_IDENT, node_value[id]);
+  }
 }
 
 func gen_expr_kind(id: int): int {
@@ -1880,6 +1884,7 @@ func ast_decl(): int {
     if input_peek() != T_ID then return (0 - 1);
     let name: int = input_payload();
     input_pos = input_pos + 1;
+    name = ast_decl_name(name);
     if input_take(T_COLON) == 0 then return (0 - 1);
     let ty: int = ast_type();
     if ty == 0 then return (0 - 1);
@@ -3178,7 +3183,10 @@ func tc_expr(id: int): void {
       }
       tc_fail(11); return;
     }
-    if base_kind == TY_PTR then base_kind = TY_NAMED;
+    if base_kind == TY_PTR then {
+      if tc_elem_kind == TY_GENERIC then { base_kind = TY_GENERIC; base_name = tc_elem_name; }
+      else { base_kind = TY_NAMED; base_name = tc_elem_name; }
+    }
     if base_kind != TY_NAMED then { tc_fail(9); return; }
     let s: int = tc_find_struct(base_name);
     if s == 0 then { tc_fail(10); return; }
@@ -3820,6 +3828,7 @@ func emit_c_token(out: int*, kind: int, value: int): void {
     else if value == 23 then { write_char(out, 40); write_char(out, 34); write_string(out, "%d"); write_char(out, 92); write_char(out, 110); write_char(out, 34); write_string(out, ", "); }
     else if value == 24 then write_string(out, "{");
     else if value == 25 then write_string(out, "}");
+    else if value == 27 then write_string(out, "->");
   } else if kind == C_NEWLINE then write_char(out, 10);
 }
 

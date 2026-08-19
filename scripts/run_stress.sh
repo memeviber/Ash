@@ -9,12 +9,23 @@ OUT="$ROOT/.tmp/stress"
 rm -rf "$OUT"
 mkdir -p "$OUT"
 
+GENERATED_SOURCES=()
+track_source() { GENERATED_SOURCES+=("$1"); }
+cleanup_generated() {
+  rm -f "$ROOT/src/bootstrap/basaltc"
+  for source in "${GENERATED_SOURCES[@]}"; do
+    rm -f "${source}.c" "${source%.bsl}"
+  done
+}
+trap cleanup_generated EXIT
+
 (cd "$ROOT/src/compiler" && dune build bin/basaltc.exe)
 (cd "$ROOT/src/compiler" && "$HOST" "$BOOT_SOURCE")
 gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror "$BOOT_C" -o "$OUT/bootstrap.bin"
 
 run_valid() {
   local source=$1 name=$2
+  track_source "$source"
   local host_c="$OUT/${name}.host.c" boot_c="$OUT/${name}.boot.c"
   local host_bin="$OUT/${name}.host.bin" boot_bin="$OUT/${name}.boot.bin"
   rm -f "${source}.c" "$host_c" "$boot_c" "$host_bin" "$boot_bin"
@@ -30,6 +41,7 @@ run_valid() {
 
 run_negative() {
   local source=$1 name=$2
+  track_source "$source"
   rm -f "${source}.c" "$OUT/${name}.boot.c"
   if (cd "$(dirname "$source")" && "$HOST" "$(basename "$source")") >"$OUT/${name}.host.log" 2>&1; then return 1; fi
   if "$OUT/bootstrap.bin" "$source" "$OUT/${name}.boot.c" >"$OUT/${name}.boot.log" 2>&1; then return 1; fi

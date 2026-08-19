@@ -73,6 +73,33 @@ let rec expand_file active loaded path =
     in
     Buffer.contents basalt, Buffer.contents c, SSet.remove path active |> fun _ -> loaded
 
+let compile_generated_c out_c out_exe =
+  let argv = [|
+    "gcc";
+    "-std=c11";
+    "-Wall";
+    "-Wextra";
+    "-Wpedantic";
+    "-Wconversion";
+    "-Wshadow";
+    "-Werror";
+    out_c;
+    "-o";
+    out_exe
+  |] in
+  let pid = Unix.create_process "gcc" argv Unix.stdin Unix.stdout Unix.stderr in
+  match Unix.waitpid [] pid with
+  | _, Unix.WEXITED 0 -> ()
+  | _, Unix.WEXITED code ->
+      Printf.eprintf "Error: gcc failed with exit code %d\n" code;
+      exit 1
+  | _, Unix.WSIGNALED signal ->
+      Printf.eprintf "Error: gcc terminated by signal %d\n" signal;
+      exit 1
+  | _, Unix.WSTOPPED signal ->
+      Printf.eprintf "Error: gcc stopped by signal %d\n" signal;
+      exit 1
+
 let () =
   if Array.length Sys.argv < 2 then begin
     print_endline "Usage: basalt <filename>";
@@ -99,13 +126,8 @@ let () =
           let oc = open_out out_c in
           Fun.protect (fun () -> output_string oc c_code) ~finally:(fun () -> close_out_noerr oc);
           let out_exe = Filename.chop_extension filename in
-          let cmd = Printf.sprintf "gcc -std=c11 %s -o %s" out_c out_exe in
-          let exit_code = Sys.command cmd in
-          if exit_code = 0 then Printf.printf "Successfully compiled to %s\n" out_exe
-          else begin
-            Printf.eprintf "Error: gcc failed with exit code %d\n" exit_code;
-            exit 1
-          end
+          compile_generated_c out_c out_exe;
+          Printf.printf "Successfully compiled to %s\n" out_exe
     with
     | Parser.Error ->
         print_endline "Syntax error in Basalt source";

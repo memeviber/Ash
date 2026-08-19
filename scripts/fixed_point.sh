@@ -7,6 +7,8 @@ CHECKSUM_FILE="$ROOT/src/bootstrap/fixed_point_production.sha256"
 OUT="$ROOT/.tmp/fixed-point"
 mkdir -p "$OUT"
 
+trap 'rm -f "$ROOT/src/bootstrap/basaltc"' EXIT
+
 (cd "$ROOT/src/compiler" && dune build bin/basaltc.exe)
 (cd "$ROOT/src/compiler" && "$ROOT/src/compiler/_build/default/bin/basaltc.exe" "$SRC")
 gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror "$ROOT/src/bootstrap/basaltc.bsl.c" -o "$OUT/n1.bin"

@@ -9,6 +9,8 @@ OUT="$ROOT/.tmp/ownership_stress"
 rm -rf "$OUT"
 mkdir -p "$OUT"
 
+trap 'rm -f "$ROOT/src/bootstrap/basaltc"' EXIT
+
 printf '%s\n' '[1/3] Building Host and Bootstrap.'
 (cd "$ROOT/src/compiler" && dune build bin/basaltc.exe)
 gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror \
@@ -23,7 +25,6 @@ check_no_stray_binaries() {
   fi
   printf 'PASS no stray ELF binaries under tests/\n'
 }
-check_no_stray_binaries
 
 run_valid() {
   local source=$1
@@ -123,5 +124,6 @@ run_suite stress run_stress.sh
 run_suite adversarial run_adversarial.sh
 run_suite conformance run_conformance.sh
 run_suite fixed_point fixed_point.sh
+check_no_stray_binaries
 
 printf 'Ownership stress suite completed successfully. Artifacts: %s\n' "$OUT"

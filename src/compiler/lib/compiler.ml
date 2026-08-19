@@ -312,7 +312,7 @@ let rec compile_expr env = function
   | Char c -> "'" ^ c_escape_char c ^ "'"
   | Null -> "NULL"
   | String s -> "\"" ^ c_escape s ^ "\""
-  | Var s -> s
+  | Var s -> c_symbol_name s
   | Binop (op, e1, e2) ->
       let sop = match op with
         | Add -> "+" | Sub -> "-" | Mul -> "*" | Div -> "/" | Mod -> "%"
@@ -363,7 +363,13 @@ let rec compile_expr env = function
   | Deref e -> "*(" ^ compile_expr env e ^ ")"
   | Index (e, idx) -> "(" ^ compile_expr env e ^ ")[" ^ compile_expr env idx ^ "]"
   | AddressOf e -> "&( " ^ compile_expr env e ^ ")"
-  | Field (e, f) -> "(" ^ compile_expr env e ^ ")." ^ f
+  | Field (e, f) ->
+      let access =
+        match emit_expr_type env e with
+        | TPtr (TNamed _) | TPtr (TGeneric _) -> "->"
+        | _ -> "."
+      in
+      "(" ^ compile_expr env e ^ ")" ^ access ^ f
 
 let format_for_type = function
   | TString -> "%s"

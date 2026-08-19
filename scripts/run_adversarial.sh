@@ -8,6 +8,16 @@ OUT="$ROOT/.tmp/adversarial"
 rm -rf "$OUT"
 mkdir -p "$OUT"
 
+GENERATED_SOURCES=()
+track_source() { GENERATED_SOURCES+=("$1"); }
+cleanup_generated() {
+  rm -f "$ROOT/src/bootstrap/basaltc"
+  for source in "${GENERATED_SOURCES[@]}"; do
+    rm -f "${source}.c" "${source%.bsl}"
+  done
+}
+trap cleanup_generated EXIT
+
 (cd "$ROOT/src/compiler" && dune build bin/basaltc.exe)
 (cd "$ROOT/src/compiler" && "$HOST" "$BOOT_SOURCE")
 gcc -std=c11 -O1 -g -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror -fsanitize=address,undefined -fno-omit-frame-pointer "$ROOT/src/bootstrap/basaltc.bsl.c" -o "$OUT/bootstrap.bin"
@@ -18,6 +28,7 @@ for source in \
   "$ROOT/tests/regression/stress_memory_loop.bsl" \
   "$ROOT/tests/stress/modulo_stress.bsl"; do
   name=$(basename "$source" .bsl)
+  track_source "$source"
   (cd "$(dirname "$source")" && "$HOST" "$(basename "$source")") >"$OUT/${name}.host.log" 2>&1
   cp "${source}.c" "$OUT/${name}.host.c"
   "$OUT/bootstrap.bin" "$source" "$OUT/${name}.boot.c" >"$OUT/${name}.boot.log" 2>&1
@@ -32,6 +43,7 @@ done
 # Bounds-safe runtime check: both compiler paths must return the same fallback
 # value and reject an invalid write without sanitizer diagnostics.
 OOB_SOURCE="$ROOT/tests/adversarial/memory_oob_test.bsl"
+track_source "$OOB_SOURCE"
 OOB_OUT="$OUT/memory_oob"
 (
   cd "$(dirname "$OOB_SOURCE")"
