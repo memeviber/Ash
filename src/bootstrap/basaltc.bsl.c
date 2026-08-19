@@ -175,6 +175,9 @@ int* code_kind = 0;
 int* code_value = 0;
 int code_count = 0;
 int emit_for_step = 0;
+int* snapshot_kind = 0;
+int* snapshot_value = 0;
+int snapshot_cap = 0;
 int* gen_bind_name = 0;
 int* gen_bind_type = 0;
 int gen_bind_count = 0;
@@ -419,6 +422,7 @@ int ast_link(int head, int item);
 int payload_make_int(int value);
 int payload_make_name(int name_id);
 int payload_make_string(int string_id);
+void ensure_snapshot(int need);
 void gen_bind_clear(void);
 void ensure_gen_bind(int need);
 int gen_bind_find(int name);
@@ -781,6 +785,19 @@ int payload_make_string(int string_id) {
   (payload_string)[id] = string_id;
   payload_count = (payload_count + 1);
   return id;
+}
+
+void ensure_snapshot(int need) {
+  if ((need < snapshot_cap)) {
+    return;
+  } else {
+    {
+    }
+  }
+  int n = next_capacity(snapshot_cap, need);
+  snapshot_kind = (int*)grow_ints(snapshot_kind, snapshot_cap, n);
+  snapshot_value = (int*)grow_ints(snapshot_value, snapshot_cap, n);
+  snapshot_cap = n;
 }
 
 void gen_bind_clear(void) {
@@ -3281,13 +3298,12 @@ void generator_regression_main(void) {
   int program = build_regression_ast();
   gen_program(program);
   int first_count = code_count;
-  int* first_kind = (int*)alloc_ints(65536);
-  int* first_value = (int*)alloc_ints(65536);
+  ensure_snapshot(first_count);
   int i = 0;
   while ((i < first_count)) {
     {
-      (first_kind)[i] = (code_kind)[i];
-      (first_value)[i] = (code_value)[i];
+      (snapshot_kind)[i] = (code_kind)[i];
+      (snapshot_value)[i] = (code_value)[i];
       i = (i + 1);
     }
   }
@@ -3302,13 +3318,13 @@ void generator_regression_main(void) {
   }
   while ((i < first_count)) {
     {
-      if (((code_kind)[i] != (first_kind)[i])) {
+      if (((code_kind)[i] != (snapshot_kind)[i])) {
         same = 0;
       } else {
         {
         }
       }
-      if (((code_value)[i] != (first_value)[i])) {
+      if (((code_value)[i] != (snapshot_value)[i])) {
         same = 0;
       } else {
         {

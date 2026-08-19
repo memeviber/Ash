@@ -124,6 +124,11 @@ run_suite stress run_stress.sh
 run_suite adversarial run_adversarial.sh
 run_suite conformance run_conformance.sh
 run_suite fixed_point fixed_point.sh
+if ! python3 "$ROOT/scripts/run_code_buffer_v3.py" >"$OUT/code_buffer_v3.log" 2>&1; then
+  printf 'FAIL code_buffer_v3; see %s\n' "$OUT/code_buffer_v3.log" >&2
+  return 1
+fi
+printf 'PASS code_buffer_v3\n'
 check_no_stray_binaries
 
 printf 'Ownership stress suite completed successfully. Artifacts: %s\n' "$OUT"

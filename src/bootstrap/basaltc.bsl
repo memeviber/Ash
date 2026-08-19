@@ -1,10 +1,11 @@
-// Basalt bootstrap v1/v2 driver: AST payload -> C-token IR -> deterministic second pass.
+// Basalt bootstrap v3 driver: AST payload -> growable C-token IR -> deterministic second pass.
 //
-// Basalt has no records or dynamic allocation yet, so the AST is an arena of
-// parallel fixed-size arrays. Every node carries a kind, up to three child
-// links, one integer payload, one auxiliary payload, and a linked-list next
-// link. Names and strings are represented by stable payload IDs; the future
-// character/string runtime can resolve those IDs without changing the AST.
+// The AST and C-token IR use ownership-tracked dynamic arrays. Every node
+// carries a kind, up to three child links, one integer payload, one auxiliary
+// payload, and a linked-list next link. Names and strings are represented by
+// stable payload IDs; the character/string runtime can resolve those IDs
+// without changing the AST or generator. Code emission grows geometrically,
+// so generated programs are not limited by a fixed token-buffer size.
 
 let N_NONE: int = 0;
 let N_INT: int = 1;
@@ -251,6 +252,22 @@ let code_kind: int* = 0;
 let code_value: int* = 0;
 let code_count: int = 0;
 let emit_for_step: int = 0;
+// v3 regression snapshots are growable as well; no fixed 65536-token limit.
+let snapshot_kind: int* = 0;
+let snapshot_value: int* = 0;
+let snapshot_cap: int = 0;
+
+func ensure_snapshot(need: int): void {
+  if need < snapshot_cap then return;
+  let n: int = next_capacity(snapshot_cap, need);
+  snapshot_kind = grow_ints(snapshot_kind, snapshot_cap, n);
+  snapshot_value = grow_ints(snapshot_value, snapshot_cap, n);
+  snapshot_cap = n;
+}
+
+// Snapshot buffers are global runtime-owned allocations. The generated
+// runtime tracker releases them from its atexit cleanup, just like the other
+// compiler arenas; local consuming-style free is intentionally not used here.
 let gen_bind_name: int* = 0;
 let gen_bind_type: int* = 0;
 let gen_bind_count: int = 0;
@@ -1203,12 +1220,11 @@ func generator_regression_main(): void {
   let program: int = build_regression_ast();
   gen_program(program);
   let first_count: int = code_count;
-  let first_kind: int* = alloc_ints(65536);
-  let first_value: int* = alloc_ints(65536);
+  ensure_snapshot(first_count);
   let i: int = 0;
   while i < first_count {
-    first_kind[i] = code_kind[i];
-    first_value[i] = code_value[i];
+    snapshot_kind[i] = code_kind[i];
+    snapshot_value[i] = code_value[i];
     i = i + 1;
   }
   gen_program(program);
@@ -1216,8 +1232,8 @@ func generator_regression_main(): void {
   i = 0;
   if code_count != first_count then same = 0;
   while i < first_count {
-    if code_kind[i] != first_kind[i] then same = 0;
-    if code_value[i] != first_value[i] then same = 0;
+    if code_kind[i] != snapshot_kind[i] then same = 0;
+    if code_value[i] != snapshot_value[i] then same = 0;
     i = i + 1;
   }
   if same == 1 then print 1; else print 0;
