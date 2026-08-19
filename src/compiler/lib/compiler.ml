@@ -402,7 +402,7 @@ let rec compile_stmt env indent = function
   | Let (x, t, e) ->
              (match t with
        | TArray (inner, n) ->
-           indent ^ compile_typ inner ^ " " ^ x ^ "[" ^ string_of_int n ^ "];\n"
+           indent ^ compile_typ inner ^ " " ^ x ^ "[" ^ string_of_int n ^ "] = {0};\n"
        | _ -> indent ^ compile_decl t x ^ " = " ^ compile_initializer env t e ^ ";\n")
   | Const (x, t, e) -> indent ^ "const " ^ compile_decl t x ^ " = " ^ compile_initializer env t e ^ ";\n"
 
@@ -690,7 +690,7 @@ static BASALT_UNUSED void basalt_include_reset_session(void){basalt_inc_active_n
     List.map (fun (x, t, e) ->
       match t, e with
       | TArray (inner, n), _ ->
-          compile_typ inner ^ " " ^ c_symbol_name x ^ "[" ^ string_of_int n ^ "];\n"
+          compile_typ inner ^ " " ^ c_symbol_name x ^ "[" ^ string_of_int n ^ "] = {0};\n"
        | (TNamed _ | TGeneric _), Int 0 -> compile_decl t (c_symbol_name x) ^ " = {0};\n"
 
 

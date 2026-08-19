@@ -846,7 +846,7 @@ func gen_for_clause(id: int): void {
 
 func gen_initializer(ty: int, expr: int): void {
   let st: int = gen_substitute_type(ty);
-  if (node_kind[st] == TY_NAMED || node_kind[st] == TY_GENERIC) && node_kind[expr] == N_INT && node_value[expr] == 0 then code_emit(C_PUNCT, 19);
+  if (node_kind[st] == TY_NAMED || node_kind[st] == TY_GENERIC || node_kind[st] == TY_ARRAY) && node_kind[expr] == N_INT && node_value[expr] == 0 then code_emit(C_PUNCT, 19);
   else gen_expr(expr);
 }
 
@@ -3154,7 +3154,15 @@ func tc_expr(id: int): void {
     if tc_kind != TY_INT then tc_fail(7);
     tc_expr(node_a[id]);
     let index_borrow: int = tc_expr_borrow_source;
-    if tc_kind == TY_ARRAY then { tc_kind = TY_INT; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0; tc_expr_borrow_source = 0 - 1; }
+    if tc_kind == TY_ARRAY then {
+      let ix: int = node_b[id];
+      let ik: int = 0 - 1;
+      let is_const: int = 0;
+      if node_kind[ix] == N_INT then { ik = node_value[ix]; is_const = 1; }
+      else if node_kind[ix] == N_BINOP && node_value[ix] == OP_SUB && node_kind[node_a[ix]] == N_INT && node_value[node_a[ix]] == 0 && node_kind[node_b[ix]] == N_INT then { ik = 0 - node_value[node_b[ix]]; is_const = 1; }
+      if is_const == 1 && tc_result_type != 0 && node_kind[tc_result_type] == TY_ARRAY && (ik < 0 || ik > node_value[tc_result_type] - 1) then tc_fail(45);
+      tc_kind = TY_INT; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0; tc_expr_borrow_source = 0 - 1;
+    }
     else if tc_kind == TY_DYN_ARRAY then { let ek: int = tc_elem_kind; let en: int = tc_elem_name; tc_kind = ek; tc_name = en; tc_elem_kind = 0; tc_elem_name = 0; tc_expr_borrow_source = index_borrow; }
     else if tc_kind == TY_PTR then { tc_kind = tc_elem_kind; tc_name = tc_elem_name; tc_elem_kind = 0; tc_elem_name = 0; tc_expr_borrow_source = index_borrow; }
     else if tc_kind == TY_STRING then { tc_kind = TY_CHAR; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0; tc_expr_borrow_source = 0 - 1; }
@@ -3573,6 +3581,7 @@ func tc_diag(): void {
   else if tc_error_code == 41 then print "type error: unknown function";
   else if tc_error_code == 42 then print "type error: cannot call non-function value";
   else if tc_error_code == 43 then print "type error: function name is reserved by the C runtime";
+  else if tc_error_code == 45 then print "type error: array index out of bounds";
   else if tc_error_code == 44 then print "type error: distinct functions collide after C mangling";
   else print "type error: invalid expression";
   print tc_diag_line(tc_error_pos);

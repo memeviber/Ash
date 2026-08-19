@@ -103,6 +103,10 @@ compile_run "$ROOT/tests/regression/namespace_collision.bsl" namespace_collision
 compile_run "$ROOT/tests/regression/nested_namespace_valid.bsl" nested_namespace_valid
 compile_run "$ROOT/tests/regression/namespace_global.bsl" namespace_global
 compile_run "$ROOT/tests/regression/pointer_struct_field.bsl" pointer_struct_field
+compile_run "$ROOT/tests/regression/fixed_array_valid.bsl" fixed_array_valid
+expect_reject "$ROOT/tests/regression/fixed_array_oob_literal.bsl" fixed_array_oob_literal
+expect_reject "$ROOT/tests/regression/fixed_array_oob_negative.bsl" fixed_array_oob_negative
+expect_reject "$ROOT/tests/regression/fixed_array_oob_struct_field.bsl" fixed_array_oob_struct_field
 expect_collision_reject "$ROOT/tests/regression/mangle_collision.bsl" mangle_collision
 expect_collision_reject "$ROOT/tests/regression/nested_namespace_flat_collision.bsl" nested_namespace_flat_collision
 expect_collision_reject "$ROOT/tests/regression/nested_namespace_segment_collision.bsl" nested_namespace_segment_collision

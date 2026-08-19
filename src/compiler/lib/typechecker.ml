@@ -53,6 +53,11 @@ let compatible_typ a b =
   | TPtr _, TPtr TVoid | TPtr TVoid, TPtr _ -> true
   | _ -> false
 
+let const_int = function
+  | Int k -> Some k
+  | Binop (Sub, Int 0, Int k) -> Some (-k)
+  | _ -> None
+
 let rec substitute_typ subst = function
   | TParam name -> (match SMap.find_opt name subst with Some t -> t | None -> TParam name)
   | TPtr t -> TPtr (substitute_typ subst t)
@@ -317,7 +322,12 @@ let check program =
 
           else
             Result.bind (expr env a) (function
-              | TArray (t, _) | TPtr t | TDynArray t -> Ok t
+              | TArray (t, n) ->
+                  (match const_int i with
+                   | Some k when k < 0 || k >= n ->
+                       Error ("array index " ^ string_of_int k ^ " out of bounds for length " ^ string_of_int n)
+                   | _ -> Ok t)
+              | TPtr t | TDynArray t -> Ok t
                | TString -> Ok TChar
               | t -> Error ("cannot index " ^ string_of_typ t)))
     | Field (e, field) ->
@@ -508,7 +518,7 @@ let check program =
         else
           Result.bind (check_type t) (fun () ->
             Result.bind (expr env e) (fun te ->
-              if compatible_typ t te || (match t, e with TNamed _, Int 0 | TGeneric _, Int 0 | TPtr _, Null | TPtr _, Int 0 -> true | _ -> false) then
+if compatible_typ t te || (match t, e with TNamed _, Int 0 | TGeneric _, Int 0 | TArray _, Int 0 | TPtr _, Null | TPtr _, Int 0 -> true | _ -> false) then
                   let move_result =
                     Ok env
                   in
@@ -628,7 +638,7 @@ let check program =
   let check_global (x, t, e) =
     Result.bind (check_type t) (fun () ->
       Result.bind (expr base_env e) (fun te ->
-        if compatible_typ t te || (match t, e with TNamed _, Int 0 | TGeneric _, Int 0 | TPtr _, Null | TPtr _, Int 0 -> true | _ -> false) then Ok ()
+        if compatible_typ t te || (match t, e with TNamed _, Int 0 | TGeneric _, Int 0 | TArray _, Int 0 | TPtr _, Null | TPtr _, Int 0 -> true | _ -> false) then Ok ()
         else Error ("initializer type mismatch for " ^ x)))
   in
   let semantic_error =

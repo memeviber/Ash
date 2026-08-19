@@ -2486,7 +2486,7 @@ void gen_for_clause(int id) {
 
 void gen_initializer(int ty, int expr) {
   int st = gen_substitute_type(ty);
-  if ((((((node_kind)[st] == TY_NAMED) || ((node_kind)[st] == TY_GENERIC)) && ((node_kind)[expr] == N_INT)) && ((node_value)[expr] == 0))) {
+  if (((((((node_kind)[st] == TY_NAMED) || ((node_kind)[st] == TY_GENERIC)) || ((node_kind)[st] == TY_ARRAY)) && ((node_kind)[expr] == N_INT)) && ((node_value)[expr] == 0))) {
     code_emit(C_PUNCT, 19);
   } else {
     gen_expr(expr);
@@ -8704,6 +8704,31 @@ void tc_expr(int id) {
       int index_borrow = tc_expr_borrow_source;
       if ((tc_kind == TY_ARRAY)) {
         {
+          int ix = (node_b)[id];
+          int ik = (0 - 1);
+          int is_const = 0;
+          if (((node_kind)[ix] == N_INT)) {
+            {
+              ik = (node_value)[ix];
+              is_const = 1;
+            }
+          } else {
+            if (((((((node_kind)[ix] == N_BINOP) && ((node_value)[ix] == OP_SUB)) && ((node_kind)[(node_a)[ix]] == N_INT)) && ((node_value)[(node_a)[ix]] == 0)) && ((node_kind)[(node_b)[ix]] == N_INT))) {
+              {
+                ik = (0 - (node_value)[(node_b)[ix]]);
+                is_const = 1;
+              }
+            } else {
+              {
+              }
+            }
+          }
+          if (((((is_const == 1) && (tc_result_type != 0)) && ((node_kind)[tc_result_type] == TY_ARRAY)) && ((ik < 0) || (ik > ((node_value)[tc_result_type] - 1))))) {
+            tc_fail(45);
+          } else {
+            {
+            }
+          }
           tc_kind = TY_INT;
           tc_name = 0;
           tc_elem_kind = 0;
@@ -10385,10 +10410,14 @@ void tc_diag(void) {
                                         if ((tc_error_code == 43)) {
                                           printf("%s\n", "type error: function name is reserved by the C runtime");
                                         } else {
-                                          if ((tc_error_code == 44)) {
-                                            printf("%s\n", "type error: distinct functions collide after C mangling");
+                                          if ((tc_error_code == 45)) {
+                                            printf("%s\n", "type error: array index out of bounds");
                                           } else {
-                                            printf("%s\n", "type error: invalid expression");
+                                            if ((tc_error_code == 44)) {
+                                              printf("%s\n", "type error: distinct functions collide after C mangling");
+                                            } else {
+                                              printf("%s\n", "type error: invalid expression");
+                                            }
                                           }
                                         }
                                       }
