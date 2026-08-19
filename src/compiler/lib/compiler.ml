@@ -369,6 +369,7 @@ let format_for_type = function
   | TString -> "%s"
   | TChar -> "%c"
   | TFloat | TDouble -> "%g"
+  | TPtr _ -> "%p"
   | _ -> "%d"
 
 let format_for_expr env e =
@@ -402,7 +403,8 @@ let rec compile_stmt env indent = function
   | Assign (lv, rv) -> indent ^ compile_expr env lv ^ " = " ^ compile_expr env rv ^ ";\n"
   | Print e ->
       let fmt = format_for_expr env e in
-      indent ^ "printf(\"" ^ fmt ^ "\\n\", " ^ compile_expr env e ^ ");\n"
+      let arg = if fmt = "%p" then "(void*)" ^ compile_expr env e else compile_expr env e in
+      indent ^ "printf(\"" ^ fmt ^ "\\n\", " ^ arg ^ ");\n"
   | IfStmt (c, t, e) ->
       indent ^ "if (" ^ compile_expr env c ^ ") {\n"
       ^ compile_stmt env (indent ^ "  ") t

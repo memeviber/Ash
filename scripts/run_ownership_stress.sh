@@ -14,6 +14,17 @@ printf '%s\n' '[1/3] Building Host and Bootstrap.'
 gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror \
   "$BOOT_C_SOURCE" -o "$OUT/bootstrap.bin"
 
+check_no_stray_binaries() {
+  local stray
+  stray=$(find "$ROOT/tests" -type f -print0 | xargs -0 file 2>/dev/null | grep -F 'ELF ' || true)
+  if [ -n "$stray" ]; then
+    printf 'FAIL: stray ELF binaries under tests/ (all executables must live in .tmp/):\n%s\n' "$stray" >&2
+    return 1
+  fi
+  printf 'PASS no stray ELF binaries under tests/\n'
+}
+check_no_stray_binaries
+
 run_valid() {
   local source=$1
   local name

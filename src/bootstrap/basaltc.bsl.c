@@ -2375,6 +2375,12 @@ int gen_expr_kind(int id) {
     {
     }
   }
+  if ((k == N_ADDRESS)) {
+    return TY_PTR;
+  } else {
+    {
+    }
+  }
   if ((k == N_FIELD_ACCESS)) {
     return TY_INT;
   } else {
@@ -2581,7 +2587,17 @@ void gen_stmt(int id) {
                   if (((pk == TY_FLOAT) || (pk == TY_DOUBLE))) {
                     code_emit(C_PUNCT, 21);
                   } else {
-                    code_emit(C_PUNCT, 15);
+                    if ((pk == TY_PTR)) {
+                      {
+                        code_emit(C_PUNCT, 26);
+                        code_emit(C_PUNCT, 4);
+                        code_emit(C_KW, 4);
+                        code_emit(C_PUNCT, 1);
+                        code_emit(C_PUNCT, 5);
+                      }
+                    } else {
+                      code_emit(C_PUNCT, 15);
+                    }
                   }
                 }
               }
@@ -11298,33 +11314,45 @@ void emit_c_token(int* out, int kind, int value) {
                                                         write_string(out, ", ");
                                                       }
                                                     } else {
-                                                      if ((value == 18)) {
-                                                        write_string(out, " ");
+                                                      if ((value == 26)) {
+                                                        {
+                                                          write_char(out, 40);
+                                                          write_char(out, 34);
+                                                          write_string(out, "%p");
+                                                          write_char(out, 92);
+                                                          write_char(out, 110);
+                                                          write_char(out, 34);
+                                                          write_string(out, ", ");
+                                                        }
                                                       } else {
-                                                        if ((value == 19)) {
-                                                          write_string(out, "{0}");
+                                                        if ((value == 18)) {
+                                                          write_string(out, " ");
                                                         } else {
-                                                          if ((value == 22)) {
-                                                            write_char(out, 32);
+                                                          if ((value == 19)) {
+                                                            write_string(out, "{0}");
                                                           } else {
-                                                            if ((value == 23)) {
-                                                              {
-                                                                write_char(out, 40);
-                                                                write_char(out, 34);
-                                                                write_string(out, "%d");
-                                                                write_char(out, 92);
-                                                                write_char(out, 110);
-                                                                write_char(out, 34);
-                                                                write_string(out, ", ");
-                                                              }
+                                                            if ((value == 22)) {
+                                                              write_char(out, 32);
                                                             } else {
-                                                              if ((value == 24)) {
-                                                                write_string(out, "{");
+                                                              if ((value == 23)) {
+                                                                {
+                                                                  write_char(out, 40);
+                                                                  write_char(out, 34);
+                                                                  write_string(out, "%d");
+                                                                  write_char(out, 92);
+                                                                  write_char(out, 110);
+                                                                  write_char(out, 34);
+                                                                  write_string(out, ", ");
+                                                                }
                                                               } else {
-                                                                if ((value == 25)) {
-                                                                  write_string(out, "}");
+                                                                if ((value == 24)) {
+                                                                  write_string(out, "{");
                                                                 } else {
-                                                                  {
+                                                                  if ((value == 25)) {
+                                                                    write_string(out, "}");
+                                                                  } else {
+                                                                    {
+                                                                    }
                                                                   }
                                                                 }
                                                               }

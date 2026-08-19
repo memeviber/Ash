@@ -809,6 +809,7 @@ func gen_expr_kind(id: int): int {
     return TY_INT;
   }
   if k == N_DEREF then return TY_INT;
+  if k == N_ADDRESS then return TY_PTR;
   if k == N_FIELD_ACCESS then return TY_INT;
   if k == N_CALL || k == N_INDIRECT_CALL then return tc_expr_kind_for_emit(id);
   if k == N_BINOP then {
@@ -907,6 +908,13 @@ func gen_stmt(id: int): void {
     if pk == TY_STRING then code_emit(C_PUNCT, 16);
     else if pk == TY_CHAR then code_emit(C_PUNCT, 20);
     else if pk == TY_FLOAT || pk == TY_DOUBLE then code_emit(C_PUNCT, 21);
+    else if pk == TY_PTR then {
+      code_emit(C_PUNCT, 26);
+      code_emit(C_PUNCT, 4);
+      code_emit(C_KW, 4);
+      code_emit(C_PUNCT, 1);
+      code_emit(C_PUNCT, 5);
+    }
     else code_emit(C_PUNCT, 15);
     gen_expr(node_a[id]);
     code_emit(C_PUNCT, 8);
@@ -3805,6 +3813,7 @@ func emit_c_token(out: int*, kind: int, value: int): void {
     } else if value == 17 then write_string(out, ".");
     else if value == 20 then { write_char(out, 40); write_char(out, 34); write_string(out, "%c"); write_char(out, 92); write_char(out, 110); write_char(out, 34); write_string(out, ", "); }
     else if value == 21 then { write_char(out, 40); write_char(out, 34); write_string(out, "%g"); write_char(out, 92); write_char(out, 110); write_char(out, 34); write_string(out, ", "); }
+    else if value == 26 then { write_char(out, 40); write_char(out, 34); write_string(out, "%p"); write_char(out, 92); write_char(out, 110); write_char(out, 34); write_string(out, ", "); }
     else if value == 18 then write_string(out, " ");
     else if value == 19 then write_string(out, "{0}");
     else if value == 22 then write_char(out, 32);

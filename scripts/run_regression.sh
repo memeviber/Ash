@@ -81,6 +81,12 @@ compile_run "$ROOT/tests/regression/stdlib_hashing_test.bsl" stdlib_hashing_test
 compile_run "$ROOT/tests/regression/stress_containers_loop.bsl" stress_containers_loop
 compile_run "$ROOT/tests/regression/generic_map_probe.bsl" generic_map_probe
 compile_run "$ROOT/tests/regression/include_test_main.bsl" include_test_main
+compile_run "$ROOT/tests/regression/print_pointer_test.bsl" print_pointer_test
+grep -Fq '%p' "$OUT/print_pointer_test.host.c"
+grep -Fq '(void*)' "$OUT/print_pointer_test.host.c"
+grep -Fq '%p' "$OUT/print_pointer_test.boot.c"
+grep -Fq '(void*)' "$OUT/print_pointer_test.boot.c"
+printf 'PASS print_pointer_test format guard\n'
 compile_run "$ROOT/tests/regression/namespace_collision.bsl" namespace_collision
 compile_run "$ROOT/tests/regression/nested_namespace_valid.bsl" nested_namespace_valid
 expect_collision_reject "$ROOT/tests/regression/mangle_collision.bsl" mangle_collision
