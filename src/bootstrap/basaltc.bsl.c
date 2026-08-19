@@ -1417,13 +1417,13 @@ void gen_collect_expr(int id) {
         }
       } else {
         {
-          int aa = (node_a)[id];
-          while ((aa != 0)) {
-            {
-              gen_collect_expr(aa);
-              aa = (node_next)[aa];
-            }
-          }
+        }
+      }
+      int aar = (node_a)[id];
+      while ((aar != 0)) {
+        {
+          gen_collect_expr(aar);
+          aar = (node_next)[aar];
         }
       }
       return;

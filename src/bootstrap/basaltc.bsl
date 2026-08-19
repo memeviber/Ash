@@ -457,7 +457,8 @@ func gen_collect_expr(id: int): void {
       let check_actual: int = actual;
       while check_actual != 0 { if gen_type_has_param(check_actual) == 1 then unresolved = 1; check_actual = node_next[check_actual]; }
       if unresolved == 0 then gen_add_fun_spec(f, actual);
-    } else { let aa: int = node_a[id]; while aa != 0 { gen_collect_expr(aa); aa = node_next[aa]; } }
+    }
+    let aar: int = node_a[id]; while aar != 0 { gen_collect_expr(aar); aar = node_next[aar]; }
     return;
   }
   if k == N_INDIRECT_CALL then { gen_collect_expr(node_a[id]); let aa: int = node_b[id]; while aa != 0 { gen_collect_expr(aa); aa = node_next[aa]; } return; }
