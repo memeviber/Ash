@@ -626,14 +626,23 @@ func gen_array_value_ptr(kind: int, name: int, value: int): void {
   code_emit(C_PUNCT, 25);
 }
 
+func gen_array_sizeof_node(ty: int): void {
+  code_emit(C_IDENT, 1011);
+  code_emit(C_PUNCT, 4);
+  if ty != 0 && node_kind[ty] == TY_GENERIC then code_emit(C_IDENT, gen_mangled_type_symbol(ty));
+  else if ty != 0 then gen_array_elem_type(node_kind[ty], node_value[ty]);
+  else gen_array_elem_type(TY_INT, 0);
+  code_emit(C_PUNCT, 5);
+}
+
 func gen_memory_sizeof(arg: int): void {
   let ty: int = tc_emit_arg_type(arg);
   if ty != 0 then ty = gen_substitute_type(ty);
   if ty != 0 && node_kind[ty] == TY_PTR && node_a[ty] != 0 then {
     let elem: int = gen_substitute_type(node_a[ty]);
-    gen_array_sizeof(node_kind[elem], node_value[elem]);
-  } else if ty != 0 then gen_array_sizeof(node_kind[ty], node_value[ty]);
-  else gen_array_sizeof(TY_INT, 0);
+    gen_array_sizeof_node(elem);
+  } else if ty != 0 then gen_array_sizeof_node(ty);
+  else gen_array_sizeof_node(0);
 }
 
 func gen_memory_builtin(id: int): void {
@@ -644,6 +653,11 @@ func gen_memory_builtin(id: int): void {
     let witness: int = node_next[a];
     let elem_kind: int = gen_scalar_kind(witness);
     let elem_name: int = gen_scalar_name(witness);
+    let gen_witness_ty: int = 0;
+    if elem_kind == TY_GENERIC then {
+      let wty: int = tc_emit_arg_type(witness);
+      if wty != 0 then gen_witness_ty = gen_substitute_type(wty);
+    }
     code_emit(C_PUNCT, 6);
     code_emit(C_PUNCT, 6);
     code_emit(C_KW, 4);
@@ -653,14 +667,20 @@ func gen_memory_builtin(id: int): void {
     code_emit(C_PUNCT, 8);
     code_emit(C_PUNCT, 7);
     code_emit(C_PUNCT, 6);
-    gen_array_elem_type(elem_kind, elem_name);
+    if gen_witness_ty != 0 then code_emit(C_IDENT, gen_mangled_type_symbol(gen_witness_ty));
+    else gen_array_elem_type(elem_kind, elem_name);
     code_emit(C_PUNCT, 1);
     code_emit(C_PUNCT, 8);
     code_emit(C_IDENT, 1016);
     code_emit(C_PUNCT, 6);
     gen_expr(a);
     code_emit(C_PUNCT, 7);
-    gen_array_sizeof(elem_kind, elem_name);
+    if gen_witness_ty != 0 then {
+      code_emit(C_IDENT, 1011);
+      code_emit(C_PUNCT, 4);
+      code_emit(C_IDENT, gen_mangled_type_symbol(gen_witness_ty));
+      code_emit(C_PUNCT, 5);
+    } else gen_array_sizeof(elem_kind, elem_name);
     code_emit(C_PUNCT, 8);
     code_emit(C_PUNCT, 8);
   } else if btag == BI_TC_MEM_RESIZE then {
@@ -3292,6 +3312,10 @@ func tc_expr(id: int): void {
       if bi_has_flag(node_value[id], BI_FLAG_DYNFIELD) == 1 then { tc_kind = TY_INT; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0; return; }
       tc_fail(11); return;
     }
+    if base_kind == TY_PTR then {
+      if tc_elem_kind == TY_GENERIC then { base_kind = TY_GENERIC; base_name = tc_elem_name; }
+      else { base_kind = TY_NAMED; base_name = tc_elem_name; }
+    }
     if base_kind == TY_GENERIC then {
       let base_ty: int = base_name;
       let sgen: int = tc_find_struct(node_value[base_ty]);
@@ -3305,10 +3329,6 @@ func tc_expr(id: int): void {
         gf = node_next[gf];
       }
       tc_fail(11); return;
-    }
-    if base_kind == TY_PTR then {
-      if tc_elem_kind == TY_GENERIC then { base_kind = TY_GENERIC; base_name = tc_elem_name; }
-      else { base_kind = TY_NAMED; base_name = tc_elem_name; }
     }
     if base_kind != TY_NAMED then { tc_fail(9); return; }
     let s: int = tc_find_struct(base_name);

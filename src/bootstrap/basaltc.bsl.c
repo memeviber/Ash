@@ -453,6 +453,7 @@ int gen_array_elem_name(int arg);
 void gen_array_elem_type(int kind, int name);
 void gen_array_sizeof(int kind, int name);
 void gen_array_value_ptr(int kind, int name, int value);
+void gen_array_sizeof_node(int ty);
 void gen_memory_sizeof(int arg);
 void gen_memory_builtin(int id);
 int gen_call_name(int id);
@@ -1940,6 +1941,21 @@ void gen_array_value_ptr(int kind, int name, int value) {
   code_emit(C_PUNCT, 25);
 }
 
+void gen_array_sizeof_node(int ty) {
+  code_emit(C_IDENT, 1011);
+  code_emit(C_PUNCT, 4);
+  if (((ty != 0) && ((node_kind)[ty] == TY_GENERIC))) {
+    code_emit(C_IDENT, gen_mangled_type_symbol(ty));
+  } else {
+    if ((ty != 0)) {
+      gen_array_elem_type((node_kind)[ty], (node_value)[ty]);
+    } else {
+      gen_array_elem_type(TY_INT, 0);
+    }
+  }
+  code_emit(C_PUNCT, 5);
+}
+
 void gen_memory_sizeof(int arg) {
   int ty = tc_emit_arg_type(arg);
   if ((ty != 0)) {
@@ -1951,13 +1967,13 @@ void gen_memory_sizeof(int arg) {
   if ((((ty != 0) && ((node_kind)[ty] == TY_PTR)) && ((node_a)[ty] != 0))) {
     {
       int elem = gen_substitute_type((node_a)[ty]);
-      gen_array_sizeof((node_kind)[elem], (node_value)[elem]);
+      gen_array_sizeof_node(elem);
     }
   } else {
     if ((ty != 0)) {
-      gen_array_sizeof((node_kind)[ty], (node_value)[ty]);
+      gen_array_sizeof_node(ty);
     } else {
-      gen_array_sizeof(TY_INT, 0);
+      gen_array_sizeof_node(0);
     }
   }
 }
@@ -1971,6 +1987,21 @@ void gen_memory_builtin(int id) {
       int witness = (node_next)[a];
       int elem_kind = gen_scalar_kind(witness);
       int elem_name = gen_scalar_name(witness);
+      int gen_witness_ty = 0;
+      if ((elem_kind == TY_GENERIC)) {
+        {
+          int wty = tc_emit_arg_type(witness);
+          if ((wty != 0)) {
+            gen_witness_ty = gen_substitute_type(wty);
+          } else {
+            {
+            }
+          }
+        }
+      } else {
+        {
+        }
+      }
       code_emit(C_PUNCT, 6);
       code_emit(C_PUNCT, 6);
       code_emit(C_KW, 4);
@@ -1980,14 +2011,27 @@ void gen_memory_builtin(int id) {
       code_emit(C_PUNCT, 8);
       code_emit(C_PUNCT, 7);
       code_emit(C_PUNCT, 6);
-      gen_array_elem_type(elem_kind, elem_name);
+      if ((gen_witness_ty != 0)) {
+        code_emit(C_IDENT, gen_mangled_type_symbol(gen_witness_ty));
+      } else {
+        gen_array_elem_type(elem_kind, elem_name);
+      }
       code_emit(C_PUNCT, 1);
       code_emit(C_PUNCT, 8);
       code_emit(C_IDENT, 1016);
       code_emit(C_PUNCT, 6);
       gen_expr(a);
       code_emit(C_PUNCT, 7);
-      gen_array_sizeof(elem_kind, elem_name);
+      if ((gen_witness_ty != 0)) {
+        {
+          code_emit(C_IDENT, 1011);
+          code_emit(C_PUNCT, 4);
+          code_emit(C_IDENT, gen_mangled_type_symbol(gen_witness_ty));
+          code_emit(C_PUNCT, 5);
+        }
+      } else {
+        gen_array_sizeof(elem_kind, elem_name);
+      }
       code_emit(C_PUNCT, 8);
       code_emit(C_PUNCT, 8);
     }
@@ -8920,6 +8964,24 @@ void tc_expr(int id) {
         {
         }
       }
+      if ((base_kind == TY_PTR)) {
+        {
+          if ((tc_elem_kind == TY_GENERIC)) {
+            {
+              base_kind = TY_GENERIC;
+              base_name = tc_elem_name;
+            }
+          } else {
+            {
+              base_kind = TY_NAMED;
+              base_name = tc_elem_name;
+            }
+          }
+        }
+      } else {
+        {
+        }
+      }
       if ((base_kind == TY_GENERIC)) {
         {
           int base_ty = base_name;
@@ -8966,24 +9028,6 @@ void tc_expr(int id) {
           }
           tc_fail(11);
           return;
-        }
-      } else {
-        {
-        }
-      }
-      if ((base_kind == TY_PTR)) {
-        {
-          if ((tc_elem_kind == TY_GENERIC)) {
-            {
-              base_kind = TY_GENERIC;
-              base_name = tc_elem_name;
-            }
-          } else {
-            {
-              base_kind = TY_NAMED;
-              base_name = tc_elem_name;
-            }
-          }
         }
       } else {
         {
