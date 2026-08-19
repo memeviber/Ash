@@ -1,0 +1,93 @@
+include "../../src/stdlib/array.bsl"
+include "../../src/stdlib/slice.bsl"
+include "../../src/stdlib/map.bsl"
+include "../../src/stdlib/string.bsl"
+include "../../src/stdlib/string_builder.bsl"
+include "../../src/stdlib/iter.bsl"
+
+let visited_sum: int = 0;
+let visited_pairs: int = 0;
+
+func visit_int(value: int): void {
+  visited_sum = visited_sum + value;
+}
+
+func visit_pair(key: int, value: int): void {
+  visited_pairs = visited_pairs + key + value;
+}
+
+func is_even(value: int): bool {
+  return (value % 2) == 0;
+}
+
+func is_positive(value: int): bool {
+  return value > 0;
+}
+
+func add_ints(acc: int, value: int): int {
+  return acc + value;
+}
+
+func hash_int(key: int): int {
+  return key * 17;
+}
+
+func eq_int(left: int, right: int): bool {
+  return left == right;
+}
+
+func main(): int {
+  let status: int = 0;
+  let values: array::Array<int> = array::new(1, 0);
+  let i: int = 1;
+  while i < 33 {
+    values = array::push(values, i, 0);
+    i = i + 1;
+  }
+  if array::fold(values, 0, &add_ints) != 528 then status = 1;
+  if array::any(values, &is_even) == false then status = 2;
+  if array::all(values, &is_positive) == false then status = 3;
+  array::for_each(values, &visit_int);
+  if visited_sum != 528 then status = 4;
+
+  let values_slice: slice::Slice<int> = slice::new(0);
+  i = 1;
+  while i < 9 {
+    values_slice = slice::push(values_slice, i);
+    i = i + 1;
+  }
+  if slice::fold(values_slice, 0, &add_ints) != 36 then status = 5;
+  if slice::any(values_slice, &is_even) == false then status = 6;
+  if slice::all(values_slice, &is_positive) == false then status = 7;
+  slice::for_each(values_slice, &visit_int);
+  if visited_sum != 564 then status = 8;
+
+  let table: map::HashMap<int, int> = map::new_with_hasher(0, 0, &hash_int, &eq_int);
+  i = 0;
+  while i < 64 {
+    table = map::put(table, i, i * 3);
+    i = i + 1;
+  }
+  map::for_each(table, &visit_pair);
+  if visited_pairs != 8064 then status = 9;
+  if map::get_or(table, 63, 0) != 189 then status = 10;
+
+  let builder: string_builder::Builder = string_builder::new();
+  builder = string_builder::append(builder, "Basalt");
+  builder = string_builder::push_char(builder, ' ');
+  builder = string_builder::append(builder, "Builder");
+  if string_builder::length(builder) != 14 then status = 11;
+  let view_ptr: char* = string_builder::view(builder);
+  if view_ptr[0] != 'B' || view_ptr[6] != ' ' || view_ptr[7] != 'B' || view_ptr[13] != 'r' || view_ptr[14] != '\0' then status = 12;
+  if string_builder::capacity(builder) < 16 then status = 13;
+  builder = string_builder::clear(builder);
+  if string_builder::length(builder) != 0 then status = 14;
+  view_ptr = string_builder::view(builder);
+  if view_ptr[0] != '\0' then status = 15;
+
+  values = array::free(values);
+  values_slice = slice::free(values_slice);
+  table = map::free(table);
+  builder = string_builder::free(builder);
+  return status;
+}

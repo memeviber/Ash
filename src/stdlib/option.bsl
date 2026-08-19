@@ -26,4 +26,21 @@ namespace option {
     if o.present == 1 then { return o.value; }
     return fallback;
   }
+
+  func map<T, U>(o: Option<T>, transform: fn(T): U, zero_u: U): Option<U> {
+    if o.present == 1 then return option::some(transform(o.value));
+    return option::none(zero_u);
+  }
+
+  func filter<T>(o: Option<T>, predicate: fn(T): bool, zero: T): Option<T> {
+    if o.present == 1 then {
+      if predicate(o.value) then return o;
+    }
+    return option::none(zero);
+  }
+
+  func contains<T>(o: Option<T>, value: T): bool {
+    if o.present == 0 then return false;
+    return o.value == value;
+  }
 }

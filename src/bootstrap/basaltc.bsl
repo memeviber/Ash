@@ -874,24 +874,32 @@ func gen_expr_kind(id: int): int {
   return TY_INT;
 }
 
+func gen_initializer(ty: int, expr: int): void {
+  let st: int = gen_substitute_type(ty);
+  if (node_kind[st] == TY_NAMED || node_kind[st] == TY_GENERIC || node_kind[st] == TY_ARRAY) && node_kind[expr] == N_INT && node_value[expr] == 0 then code_emit(C_PUNCT, 19);
+  else if node_kind[st] == TY_FLOAT && gen_expr_kind(expr) != TY_FLOAT then {
+    code_emit(C_PUNCT, 4); code_emit(C_KW, 18); code_emit(C_PUNCT, 5); code_emit(C_PUNCT, 4); gen_expr(expr); code_emit(C_PUNCT, 5);
+  } else gen_expr(expr);
+}
+
+func gen_assignment(lhs: int, rhs: int): void {
+  gen_expr(lhs);
+  code_emit(C_PUNCT, 11);
+  if gen_expr_kind(lhs) == TY_FLOAT && gen_expr_kind(rhs) != TY_FLOAT then {
+    code_emit(C_PUNCT, 4); code_emit(C_KW, 18); code_emit(C_PUNCT, 5); code_emit(C_PUNCT, 4); gen_expr(rhs); code_emit(C_PUNCT, 5);
+  } else gen_expr(rhs);
+}
+
 func gen_for_clause(id: int): void {
   if id == 0 then return;
   if node_kind[id] == N_LET then {
     gen_type(node_kind[node_b[id]], node_b[id], node_value[node_b[id]]);
     code_emit(C_IDENT, node_a[id]);
     code_emit(C_PUNCT, 11);
-    gen_expr(node_c[id]);
+    gen_initializer(node_b[id], node_c[id]);
   } else if node_kind[id] == N_ASSIGN then {
-    gen_expr(node_a[id]);
-    code_emit(C_PUNCT, 11);
-    gen_expr(node_b[id]);
+    gen_assignment(node_a[id], node_b[id]);
   } else if node_kind[id] == N_EXPR then gen_expr(node_a[id]);
-}
-
-func gen_initializer(ty: int, expr: int): void {
-  let st: int = gen_substitute_type(ty);
-  if (node_kind[st] == TY_NAMED || node_kind[st] == TY_GENERIC || node_kind[st] == TY_ARRAY) && node_kind[expr] == N_INT && node_value[expr] == 0 then code_emit(C_PUNCT, 19);
-  else gen_expr(expr);
 }
 
 func gen_fun_decl(ty: int, name: int): void {
@@ -945,9 +953,7 @@ func gen_stmt(id: int): void {
     code_emit(C_PUNCT, 12);
     code_emit(C_NEWLINE, 0);
   } else if k == N_ASSIGN then {
-    gen_expr(node_a[id]);
-    code_emit(C_PUNCT, 11);
-    gen_expr(node_b[id]);
+    gen_assignment(node_a[id], node_b[id]);
     code_emit(C_PUNCT, 12);
     code_emit(C_NEWLINE, 0);
   } else if k == N_PRINT then {

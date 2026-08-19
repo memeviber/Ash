@@ -88,6 +88,9 @@ compile_run "$ROOT/tests/stress/modulo_stress.bsl" modulo_stress
 compile_run "$ROOT/tests/regression/stdlib_growth_test.bsl" stdlib_growth_test
 compile_run "$ROOT/tests/regression/stdlib_containers_test.bsl" stdlib_containers_test
 compile_run "$ROOT/tests/regression/option_test.bsl" option_test
+compile_run "$ROOT/tests/regression/option_result_combinators_test.bsl" option_result_combinators_test
+compile_run "$ROOT/tests/regression/string_builder_iter_test.bsl" string_builder_iter_test
+compile_run "$ROOT/tests/regression/numeric_compound_test.bsl" numeric_compound_test
 compile_run "$ROOT/tests/regression/builtin_join_test.bsl" builtin_join_test
 compile_run "$ROOT/tests/regression/stdlib_slice_only_test.bsl" stdlib_slice_only_test
 compile_run "$ROOT/tests/regression/stdlib_map_only_test.bsl" stdlib_map_only_test

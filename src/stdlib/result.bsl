@@ -34,6 +34,16 @@ namespace result {
     return fallback;
   }
 
+  func map<T, U, E>(r: Result<T, E>, transform: fn(T): U, value_zero: U): Result<U, E> {
+    if r.ok == 1 then return result::ok(transform(r.value), r.error);
+    return result::err(value_zero, r.error);
+  }
+
+  func map_error<T, E, F>(r: Result<T, E>, transform: fn(E): F, error_zero: F): Result<T, F> {
+    if r.ok == 1 then return result::ok(r.value, error_zero);
+    return result::err(r.value, transform(r.error));
+  }
+
   struct Option<T> {
     present: int;
     value: T;
@@ -59,5 +69,10 @@ namespace result {
   func unwrap_or_option<T>(o: Option<T>, fallback: T): T {
     if o.present == 1 then { return o.value; }
     return fallback;
+  }
+
+  func map_option<T, U>(o: Option<T>, transform: fn(T): U, zero_u: U): Option<U> {
+    if o.present == 1 then return result::some(transform(o.value));
+    return result::none(zero_u);
   }
 }

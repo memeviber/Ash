@@ -487,8 +487,9 @@ void gen_memory_builtin(int id);
 int gen_call_name(int id);
 void gen_expr(int id);
 int gen_expr_kind(int id);
-void gen_for_clause(int id);
 void gen_initializer(int ty, int expr);
+void gen_assignment(int lhs, int rhs);
+void gen_for_clause(int id);
 void gen_fun_decl(int ty, int name);
 void gen_decl(int ty, int name);
 void gen_stmt(int id);
@@ -2608,6 +2609,43 @@ int gen_expr_kind(int id) {
   return TY_INT;
 }
 
+void gen_initializer(int ty, int expr) {
+  int st = gen_substitute_type(ty);
+  if (((((((node_kind)[st] == TY_NAMED) || ((node_kind)[st] == TY_GENERIC)) || ((node_kind)[st] == TY_ARRAY)) && ((node_kind)[expr] == N_INT)) && ((node_value)[expr] == 0))) {
+    code_emit(C_PUNCT, 19);
+  } else {
+    if ((((node_kind)[st] == TY_FLOAT) && (gen_expr_kind(expr) != TY_FLOAT))) {
+      {
+        code_emit(C_PUNCT, 4);
+        code_emit(C_KW, 18);
+        code_emit(C_PUNCT, 5);
+        code_emit(C_PUNCT, 4);
+        gen_expr(expr);
+        code_emit(C_PUNCT, 5);
+      }
+    } else {
+      gen_expr(expr);
+    }
+  }
+}
+
+void gen_assignment(int lhs, int rhs) {
+  gen_expr(lhs);
+  code_emit(C_PUNCT, 11);
+  if (((gen_expr_kind(lhs) == TY_FLOAT) && (gen_expr_kind(rhs) != TY_FLOAT))) {
+    {
+      code_emit(C_PUNCT, 4);
+      code_emit(C_KW, 18);
+      code_emit(C_PUNCT, 5);
+      code_emit(C_PUNCT, 4);
+      gen_expr(rhs);
+      code_emit(C_PUNCT, 5);
+    }
+  } else {
+    gen_expr(rhs);
+  }
+}
+
 void gen_for_clause(int id) {
   if ((id == 0)) {
     return;
@@ -2620,14 +2658,12 @@ void gen_for_clause(int id) {
       gen_type((node_kind)[(node_b)[id]], (node_b)[id], (node_value)[(node_b)[id]]);
       code_emit(C_IDENT, (node_a)[id]);
       code_emit(C_PUNCT, 11);
-      gen_expr((node_c)[id]);
+      gen_initializer((node_b)[id], (node_c)[id]);
     }
   } else {
     if (((node_kind)[id] == N_ASSIGN)) {
       {
-        gen_expr((node_a)[id]);
-        code_emit(C_PUNCT, 11);
-        gen_expr((node_b)[id]);
+        gen_assignment((node_a)[id], (node_b)[id]);
       }
     } else {
       if (((node_kind)[id] == N_EXPR)) {
@@ -2637,15 +2673,6 @@ void gen_for_clause(int id) {
         }
       }
     }
-  }
-}
-
-void gen_initializer(int ty, int expr) {
-  int st = gen_substitute_type(ty);
-  if (((((((node_kind)[st] == TY_NAMED) || ((node_kind)[st] == TY_GENERIC)) || ((node_kind)[st] == TY_ARRAY)) && ((node_kind)[expr] == N_INT)) && ((node_value)[expr] == 0))) {
-    code_emit(C_PUNCT, 19);
-  } else {
-    gen_expr(expr);
   }
 }
 
@@ -2727,9 +2754,7 @@ void gen_stmt(int id) {
       } else {
         if ((k == N_ASSIGN)) {
           {
-            gen_expr((node_a)[id]);
-            code_emit(C_PUNCT, 11);
-            gen_expr((node_b)[id]);
+            gen_assignment((node_a)[id], (node_b)[id]);
             code_emit(C_PUNCT, 12);
             code_emit(C_NEWLINE, 0);
           }

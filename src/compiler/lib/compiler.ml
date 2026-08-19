@@ -407,17 +407,25 @@ let format_for_expr env e =
        | _ -> format_for_type (emit_expr_type env e))
   | _ -> format_for_type (emit_expr_type env e)
 
-let compile_for_clause env = function
-  | Let (x, t, e) -> compile_typ t ^ " " ^ x ^ " = " ^ compile_expr env e
-  | Assign (lv, rv) -> compile_expr env lv ^ " = " ^ compile_expr env rv
-  | ExprStmt e -> compile_expr env e
-  | _ -> ""
-
 let compile_initializer env t e =
   match t, e with
   | TNamed n, Int 0 when SMap.mem n env.fields -> "{0}"
   | TGeneric _, Int 0 -> "{0}"
+  | TFloat, _ when emit_expr_type env e <> TFloat -> "(float)(" ^ compile_expr env e ^ ")"
   | _ -> compile_expr env e
+
+let compile_assignment env lv rv =
+  let lhs = compile_expr env lv in
+  let rhs = compile_expr env rv in
+  match emit_expr_type env lv with
+  | TFloat when emit_expr_type env rv <> TFloat -> lhs ^ " = (float)(" ^ rhs ^ ")"
+  | _ -> lhs ^ " = " ^ rhs
+
+let compile_for_clause env = function
+  | Let (x, t, e) -> compile_typ t ^ " " ^ x ^ " = " ^ compile_initializer env t e
+  | Assign (lv, rv) -> compile_assignment env lv rv
+  | ExprStmt e -> compile_expr env e
+  | _ -> ""
 
 let rec compile_stmt env indent = function
   | Let (x, t, e) ->
@@ -427,7 +435,7 @@ let rec compile_stmt env indent = function
        | _ -> indent ^ compile_decl t x ^ " = " ^ compile_initializer env t e ^ ";\n")
   | Const (x, t, e) -> indent ^ "const " ^ compile_decl t x ^ " = " ^ compile_initializer env t e ^ ";\n"
 
-  | Assign (lv, rv) -> indent ^ compile_expr env lv ^ " = " ^ compile_expr env rv ^ ";\n"
+  | Assign (lv, rv) -> indent ^ compile_assignment env lv rv ^ ";\n"
   | Print e ->
       let fmt = format_for_expr env e in
       let arg = if fmt = "%p" then "(void*)" ^ compile_expr env e else compile_expr env e in
