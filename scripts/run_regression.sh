@@ -92,6 +92,8 @@ compile_run "$ROOT/tests/regression/builtin_join_test.bsl" builtin_join_test
 compile_run "$ROOT/tests/regression/stdlib_slice_only_test.bsl" stdlib_slice_only_test
 compile_run "$ROOT/tests/regression/stdlib_map_only_test.bsl" stdlib_map_only_test
 compile_run "$ROOT/tests/regression/stdlib_hashing_test.bsl" stdlib_hashing_test
+compile_run "$ROOT/tests/regression/map_bucket_mask_edge.bsl" map_bucket_mask_edge
+compile_run "$ROOT/tests/stress/map_bucket_mask_stress.bsl" map_bucket_mask_stress
 compile_run "$ROOT/tests/regression/stress_containers_loop.bsl" stress_containers_loop
 compile_run "$ROOT/tests/regression/generic_map_probe.bsl" generic_map_probe
 compile_run "$ROOT/tests/regression/include_test_main.bsl" include_test_main

@@ -5,5 +5,3 @@ func main(): int {
   print borrowed.len;
   return 0;
 }
-
-// Expected: compile-time rejection because values is mutated while borrowed.

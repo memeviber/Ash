@@ -1,4 +1,4 @@
-type typ = TInt | TBool | TChar | TString | TFloat | TDouble | TVoid | TPtr of typ | TArray of typ * int | TDynArray of typ | TNamed of string | TParam of string | TGeneric of string * typ list | TFunPtr of typ list * typ
+type typ = TInt | TBool | TChar | TString | TFloat | TDouble | TLong | TLongLong | TVoid | TPtr of typ | TArray of typ * int | TDynArray of typ | TNamed of string | TParam of string | TGeneric of string * typ list | TFunPtr of typ list * typ
 
 type binop = Add | Sub | Mul | Div | Mod | Eq | Neq | Lt | Gt | And | Or | Concat | BitAnd | BitOr | BitXor | Shl | Shr
 

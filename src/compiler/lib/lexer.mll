@@ -32,6 +32,7 @@ rule read =
   | "bool"   { TBOOL }
   | "float"  { TFLOAT }
   | "double" { TDOUBLE }
+  | "long"   { TLONG }
   | "string" { TSTRING }
   | "void"   { TVOID }
   | "char"   { TCHAR }
@@ -45,6 +46,16 @@ rule read =
   | digit+   { INT (int_of_string (Lexing.lexeme lexbuf)) }
   | "=="     { EQ_EQ }
   | "!="     { NEQ }
+  | "+="     { PLUS_EQ }
+  | "-="     { MINUS_EQ }
+  | "*="     { STAR_EQ }
+  | "/="     { DIV_EQ }
+  | "%="     { MOD_EQ }
+  | "&="     { AMP_EQ }
+  | "|="     { BIT_OR_EQ }
+  | "^="     { BIT_XOR_EQ }
+  | "<<="    { SHL_EQ }
+  | ">>="    { SHR_EQ }
   | "&&"     { AND_AND }
   | "||"     { OR_OR }
   | "<<"     { SHL }

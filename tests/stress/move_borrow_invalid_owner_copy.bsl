@@ -4,5 +4,3 @@ func main(): int {
   print second[0];
   return 0;
 }
-
-// Expected: compile-time rejection because an owning dynamic array cannot be copied implicitly.

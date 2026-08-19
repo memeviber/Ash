@@ -31,7 +31,3 @@ func main(): int {
   move_owner();
   return 0;
 }
-
-// Expected output: 7, 8, 41, 41.
-// The owner is moved exactly once into consume_owner; the scalar read through
-// a borrow is allowed, while the borrowed pointer is confined to this scope.

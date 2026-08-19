@@ -10,5 +10,3 @@ func main(): int {
   print values[0];
   return 0;
 }
-
-// Expected: compile-time rejection because values was moved into consume_owner.

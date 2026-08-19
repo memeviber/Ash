@@ -4,5 +4,3 @@ func main(): int {
   array_free(values);
   return 0;
 }
-
-// Expected: compile-time rejection because values is released twice.

@@ -8,8 +8,8 @@ open Ast
 %token <string> ID STRING
 %token TRUE FALSE
 %token LET CONST NULL FUNC FN EXTERN RETURN WHILE FOR BREAK CONTINUE IF THEN ELSE PRINT STRUCT ENUM NAMESPACE
-%token TINT TBOOL TCHAR TSTRING TFLOAT TDOUBLE TVOID ARRAY
-%token PLUS MINUS STAR DIVIDE MOD CONCAT AND_AND OR_OR BIT_OR BIT_XOR BIT_NOT SHL SHR EQUAL EQ_EQ NEQ LT GT COLON COLONCOLON
+%token TINT TBOOL TCHAR TSTRING TFLOAT TDOUBLE TLONG TVOID ARRAY
+%token PLUS MINUS STAR DIVIDE MOD CONCAT AND_AND OR_OR BIT_OR BIT_XOR BIT_NOT SHL SHR EQUAL PLUS_EQ MINUS_EQ STAR_EQ DIV_EQ MOD_EQ AMP_EQ BIT_OR_EQ BIT_XOR_EQ SHL_EQ SHR_EQ EQ_EQ NEQ LT GT COLON COLONCOLON
 %token LPAREN RPAREN LBRACE RBRACE SEMI COMMA AMP LBRACK RBRACK DOT
 %token EOF
 
@@ -77,6 +77,8 @@ typ:
   | TSTRING { TString }
   | TFLOAT { TFloat }
   | TDOUBLE { TDouble }
+  | TLONG; TLONG { TLongLong }
+  | TLONG { TLong }
   | TVOID { TVoid }
   | x = qualified_name { TNamed x }
   | FN; LPAREN; ps = separated_list(COMMA, typ); RPAREN; COLON; r = typ { TFunPtr (ps, r) }
@@ -87,6 +89,7 @@ stmt:
   | LET; x = ID; COLON; t = typ; EQUAL; e = expr; SEMI { Let(x, t, e) }
   | CONST; x = ID; COLON; t = typ; EQUAL; e = expr; SEMI { Const(x, t, e) }
   | lv = expr; EQUAL; e = expr; SEMI { Assign(lv, e) }
+  | lv = expr; op = compound_op; e = expr; SEMI { Assign(lv, Binop(op, lv, e)) }
   | PRINT; e = expr; SEMI { Print(e) }
   | BREAK; SEMI { Break }
   | CONTINUE; SEMI { Continue }
@@ -103,10 +106,24 @@ stmt:
 for_init:
   | LET; x = ID; COLON; t = typ; EQUAL; e = expr { Let(x, t, e) }
   | lv = expr; EQUAL; e = expr { Assign(lv, e) }
+  | lv = expr; op = compound_op; e = expr { Assign(lv, Binop(op, lv, e)) }
 
 for_step:
   | lv = expr; EQUAL; e = expr { Assign(lv, e) }
+  | lv = expr; op = compound_op; e = expr { Assign(lv, Binop(op, lv, e)) }
   | e = expr { ExprStmt e }
+
+compound_op:
+  | PLUS_EQ { Add }
+  | MINUS_EQ { Sub }
+  | STAR_EQ { Mul }
+  | DIV_EQ { Div }
+  | MOD_EQ { Mod }
+  | AMP_EQ { BitAnd }
+  | BIT_OR_EQ { BitOr }
+  | BIT_XOR_EQ { BitXor }
+  | SHL_EQ { Shl }
+  | SHR_EQ { Shr }
 
 name_atom:
   | x = ID { x }

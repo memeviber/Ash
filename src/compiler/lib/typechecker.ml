@@ -20,7 +20,8 @@ type env = {
 let rec equal_typ a b =
   match a, b with
   | TInt, TInt | TBool, TBool | TInt, TBool | TBool, TInt
-  | TChar, TChar | TString, TString | TFloat, TFloat | TDouble, TDouble | TFloat, TDouble | TDouble, TFloat | TVoid, TVoid -> true
+  | TChar, TChar | TString, TString | TFloat, TFloat | TDouble, TDouble | TFloat, TDouble | TDouble, TFloat
+  | TLong, TLong | TLongLong, TLongLong | TVoid, TVoid -> true
   | TVoid, TInt | TInt, TVoid -> true
   | TPtr x, TPtr y -> equal_typ x y
   | TArray (x, n), TArray (y, m) -> n = m && equal_typ x y
@@ -34,16 +35,30 @@ let rec equal_typ a b =
   | _ -> false
 
 let is_integer_like = function
-  | TInt | TBool | TChar -> true
+  | TInt | TBool | TChar | TLong | TLongLong -> true
   | _ -> false
 
 let is_numeric = function
-  | TInt | TBool | TChar | TFloat | TDouble -> true
+  | TInt | TBool | TChar | TFloat | TDouble | TLong | TLongLong -> true
   | _ -> false
 
 let is_scalar = function
-  | TInt | TBool | TChar | TFloat | TDouble | TPtr _ | TFunPtr _ -> true
+  | TInt | TBool | TChar | TFloat | TDouble | TLong | TLongLong | TPtr _ | TFunPtr _ -> true
   | _ -> false
+
+let numeric_result_type a b =
+  match a, b with
+  | TDouble, _ | _, TDouble -> TDouble
+  | TFloat, _ | _, TFloat -> TFloat
+  | TLongLong, _ | _, TLongLong -> TLongLong
+  | TLong, _ | _, TLong -> TLong
+  | _ -> TInt
+
+let integer_result_type a b =
+  match a, b with
+  | TLongLong, _ | _, TLongLong -> TLongLong
+  | TLong, _ | _, TLong -> TLong
+  | _ -> TInt
 
 let compatible_typ a b =
   equal_typ a b ||
@@ -103,6 +118,8 @@ let rec string_of_typ = function
   | TString -> "string"
   | TFloat -> "float"
   | TDouble -> "double"
+  | TLong -> "long"
+  | TLongLong -> "long long"
   | TVoid -> "void"
   | TPtr _ -> "pointer"
   | TArray _ -> "fixed array"
@@ -211,7 +228,7 @@ let check program =
           let visiting = SSet.add name visiting in
           SMap.exists (fun _ ty -> value_cycle_in_type visiting ty) fields
   and value_cycle_in_type visiting = function
-    | TInt | TBool | TChar | TString | TFloat | TDouble | TVoid | TPtr _ | TParam _ -> false
+    | TInt | TBool | TChar | TString | TFloat | TDouble | TLong | TLongLong | TVoid | TPtr _ | TParam _ -> false
     | TArray (ty, _) -> value_cycle_in_type visiting ty
     | TDynArray _ -> false
     | TFunPtr (args, ret) -> List.exists (value_cycle_in_type visiting) (ret :: args)
@@ -220,7 +237,7 @@ let check program =
   in
   let check_type ty =
     let rec go = function
-      | TInt | TBool | TChar | TString | TFloat | TDouble | TVoid | TParam _ -> Ok ()
+      | TInt | TBool | TChar | TString | TFloat | TDouble | TLong | TLongLong | TVoid | TParam _ -> Ok ()
       | TPtr t | TArray (t, _) | TDynArray t -> go t
       | TGeneric (name, args) ->
           (match SMap.find_opt name generic_structs with
@@ -427,19 +444,19 @@ let check program =
                 (match ta, tb with
                  | TPtr t, x when is_integer_like x && t <> TVoid -> Ok (TPtr t)
                  | x, TPtr t when is_integer_like x && t <> TVoid -> Ok (TPtr t)
-                 | _ when is_numeric ta && is_numeric tb -> Ok (if equal_typ ta TDouble || equal_typ tb TDouble || equal_typ ta TFloat || equal_typ tb TFloat then TDouble else TInt)
+                 | _ when is_numeric ta && is_numeric tb -> Ok (numeric_result_type ta tb)
                  | _ -> Error "addition requires numeric operands or pointer plus integer")
             | Sub ->
                 (match ta, tb with
                  | TPtr t, x when is_integer_like x && t <> TVoid -> Ok (TPtr t)
                  | TPtr t, TPtr u when equal_typ t u && t <> TVoid -> Ok TInt
-                 | _ when is_numeric ta && is_numeric tb -> Ok (if equal_typ ta TDouble || equal_typ tb TDouble || equal_typ ta TFloat || equal_typ tb TFloat then TDouble else TInt)
+                 | _ when is_numeric ta && is_numeric tb -> Ok (numeric_result_type ta tb)
                  | _ -> Error "subtraction requires numeric operands, pointer minus integer, or compatible pointers")
             | Mul | Div | Mod ->
-                if is_numeric ta && is_numeric tb then Ok (if equal_typ ta TDouble || equal_typ tb TDouble || equal_typ ta TFloat || equal_typ tb TFloat then TDouble else TInt)
+                if is_numeric ta && is_numeric tb then Ok (numeric_result_type ta tb)
                 else Error "multiplication, division, and modulo require numeric operands"
             | BitAnd | BitOr | BitXor | Shl | Shr ->
-                if is_integer_like ta && is_integer_like tb then Ok TInt
+                if is_integer_like ta && is_integer_like tb then Ok (integer_result_type ta tb)
                 else Error "bitwise operands must be integer types"
             | And | Or ->
                 if is_scalar ta && is_scalar tb then Ok TBool
@@ -612,7 +629,7 @@ if compatible_typ t te || (match t, e with TNamed _, Int 0 | TGeneric _, Int 0 |
   let check_extern f =
     let check_ffi_type ty =
       let rec go = function
-        | TInt | TBool | TChar | TString | TFloat | TDouble | TVoid | TParam _ -> Ok ()
+        | TInt | TBool | TChar | TString | TFloat | TDouble | TLong | TLongLong | TVoid | TParam _ -> Ok ()
         | TPtr t -> go t
         | TArray (t, _) | TDynArray t -> go t
         | TGeneric (_, args) ->

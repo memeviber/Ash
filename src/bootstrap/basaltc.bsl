@@ -78,6 +78,8 @@ let TY_FUN: int = 11;
 let TY_DYN_ARRAY: int = 13;
 let TY_PARAM: int = 14;
 let TY_GENERIC: int = 15;
+let TY_LONG: int = 16;
+let TY_LLONG: int = 17;
 
 let node_kind: int* = 0;
 let node_a: int* = 0;
@@ -501,6 +503,8 @@ func gen_type(kind: int, child: int, size: int): void {
   else if kind == TY_CHAR then code_emit(C_KW, 17);
   else if kind == TY_FLOAT then code_emit(C_KW, 18);
   else if kind == TY_DOUBLE then code_emit(C_KW, 15);
+  else if kind == TY_LONG then code_emit(C_KW, 19);
+  else if kind == TY_LLONG then code_emit(C_KW, 20);
   else if kind == TY_VOID then code_emit(C_KW, 4);
   else if kind == TY_PTR then {
     gen_type(node_kind[node_a[child]], node_a[child], 0);
@@ -511,7 +515,7 @@ func gen_type(kind: int, child: int, size: int): void {
     code_emit(C_INT, size);
     code_emit(C_PUNCT, 3);
   } else if kind == TY_DYN_ARRAY then {
-    code_emit(C_IDENT, 1003);
+    code_emit(C_IDENT, -1003);
     code_emit(C_PUNCT, 18);
   } else if kind == TY_NAMED then {
     code_emit(C_IDENT, sym_c_symbol(node_value[child]));
@@ -611,6 +615,8 @@ func gen_array_elem_type(kind: int, name: int): void {
   else if kind == TY_CHAR then code_emit(C_KW, 17);
   else if kind == TY_FLOAT then code_emit(C_KW, 18);
   else if kind == TY_DOUBLE then code_emit(C_KW, 15);
+  else if kind == TY_LONG then code_emit(C_KW, 19);
+  else if kind == TY_LLONG then code_emit(C_KW, 20);
   else if kind == TY_STRING then { code_emit(C_KW, 17); code_emit(C_PUNCT, 1); }
   else if kind == TY_NAMED then code_emit(C_IDENT, sym_c_symbol(name));
   else if kind == TY_PTR then { code_emit(C_KW, 1); code_emit(C_PUNCT, 1); }
@@ -618,7 +624,7 @@ func gen_array_elem_type(kind: int, name: int): void {
 }
 
 func gen_array_sizeof(kind: int, name: int): void {
-  code_emit(C_IDENT, 1011);
+  code_emit(C_IDENT, -1011);
   code_emit(C_PUNCT, 4);
   gen_array_elem_type(kind, name);
   code_emit(C_PUNCT, 5);
@@ -644,7 +650,7 @@ func gen_array_value_ptr(kind: int, name: int, value: int): void {
 }
 
 func gen_array_sizeof_node(ty: int): void {
-  code_emit(C_IDENT, 1011);
+  code_emit(C_IDENT, -1011);
   code_emit(C_PUNCT, 4);
   if ty != 0 && node_kind[ty] == TY_GENERIC then code_emit(C_IDENT, gen_mangled_type_symbol(ty));
   else if ty != 0 then gen_array_elem_type(node_kind[ty], node_value[ty]);
@@ -688,12 +694,12 @@ func gen_memory_builtin(id: int): void {
     else gen_array_elem_type(elem_kind, elem_name);
     code_emit(C_PUNCT, 1);
     code_emit(C_PUNCT, 8);
-    code_emit(C_IDENT, 1016);
+    code_emit(C_IDENT, -1016);
     code_emit(C_PUNCT, 6);
     gen_expr(a);
     code_emit(C_PUNCT, 7);
     if gen_witness_ty != 0 then {
-      code_emit(C_IDENT, 1011);
+      code_emit(C_IDENT, -1011);
       code_emit(C_PUNCT, 4);
       code_emit(C_IDENT, gen_mangled_type_symbol(gen_witness_ty));
       code_emit(C_PUNCT, 5);
@@ -718,7 +724,7 @@ func gen_memory_builtin(id: int): void {
     code_emit(C_PUNCT, 6);
     gen_type(node_kind[ptr_ty], ptr_ty, 0);
     code_emit(C_PUNCT, 8);
-    code_emit(C_IDENT, 1017);
+    code_emit(C_IDENT, -1017);
     code_emit(C_PUNCT, 6);
     code_emit(C_PUNCT, 6);
     code_emit(C_KW, 4);
@@ -734,7 +740,7 @@ func gen_memory_builtin(id: int): void {
     code_emit(C_PUNCT, 8);
     code_emit(C_PUNCT, 8);
   } else if btag == BI_TC_MEM_FREE then {
-    code_emit(C_IDENT, 1018);
+    code_emit(C_IDENT, -1018);
     code_emit(C_PUNCT, 6);
     code_emit(C_PUNCT, 6);
     code_emit(C_KW, 4);
@@ -802,7 +808,7 @@ func gen_expr(id: int): void {
   else if k == N_NULL then { code_emit(C_INT, 0); }
   else if k == N_VAR then code_emit(C_IDENT, sym_c_symbol(node_value[id]));
   else if k == N_BINOP then {
-    if node_value[id] == OP_CONCAT then { code_emit(C_IDENT, 1002); code_emit(C_PUNCT, 6); gen_expr(node_a[id]); code_emit(C_PUNCT, 7); gen_expr(node_b[id]); code_emit(C_PUNCT, 8); }
+    if node_value[id] == OP_CONCAT then { code_emit(C_IDENT, -1002); code_emit(C_PUNCT, 6); gen_expr(node_a[id]); code_emit(C_PUNCT, 7); gen_expr(node_b[id]); code_emit(C_PUNCT, 8); }
     else if node_value[id] == OP_SUB && gen_expr_kind(node_a[id]) == TY_PTR && gen_expr_kind(node_b[id]) == TY_PTR then { code_emit(C_PUNCT, 4); code_emit(C_KW, 1); code_emit(C_PUNCT, 5); code_emit(C_PUNCT, 4); gen_expr(node_a[id]); code_emit(C_OP, node_value[id]); gen_expr(node_b[id]); code_emit(C_PUNCT, 5); }
     else { code_emit(C_PUNCT, 4); gen_expr(node_a[id]); code_emit(C_OP, node_value[id]); gen_expr(node_b[id]); code_emit(C_PUNCT, 5); }
   } else if k == N_CALL then {
@@ -856,10 +862,12 @@ func gen_expr_kind(id: int): int {
     if node_value[id] == OP_CONCAT then return TY_STRING;
     if node_value[id] == OP_EQ || node_value[id] == OP_NEQ || node_value[id] == OP_LT || node_value[id] == OP_GT || node_value[id] == OP_AND || node_value[id] == OP_OR then return TY_BOOL;
     if node_value[id] == OP_SUB && gen_expr_kind(node_a[id]) == TY_PTR && gen_expr_kind(node_b[id]) == TY_PTR then return TY_INT;
-    if node_value[id] == OP_BITAND || node_value[id] == OP_BITOR || node_value[id] == OP_BITXOR || node_value[id] == OP_SHL || node_value[id] == OP_SHR then return TY_INT;
     let ak: int = gen_expr_kind(node_a[id]); let bk: int = gen_expr_kind(node_b[id]);
+    if node_value[id] == OP_BITAND || node_value[id] == OP_BITOR || node_value[id] == OP_BITXOR || node_value[id] == OP_SHL || node_value[id] == OP_SHR then { if ak == TY_LLONG || bk == TY_LLONG then return TY_LLONG; if ak == TY_LONG || bk == TY_LONG then return TY_LONG; return TY_INT; }
     if ak == TY_DOUBLE || bk == TY_DOUBLE then return TY_DOUBLE;
     if ak == TY_FLOAT || bk == TY_FLOAT then return TY_FLOAT;
+    if ak == TY_LLONG || bk == TY_LLONG then return TY_LLONG;
+    if ak == TY_LONG || bk == TY_LONG then return TY_LONG;
     if ak == TY_PTR then return TY_PTR;
     return TY_INT;
   }
@@ -943,11 +951,13 @@ func gen_stmt(id: int): void {
     code_emit(C_PUNCT, 12);
     code_emit(C_NEWLINE, 0);
   } else if k == N_PRINT then {
-    code_emit(C_IDENT, 1001);
+    code_emit(C_IDENT, -1001);
     let pk: int = gen_expr_kind(node_a[id]);
     if pk == TY_STRING then code_emit(C_PUNCT, 16);
     else if pk == TY_CHAR then code_emit(C_PUNCT, 20);
     else if pk == TY_FLOAT || pk == TY_DOUBLE then code_emit(C_PUNCT, 21);
+    else if pk == TY_LONG then code_emit(C_PUNCT, 28);
+    else if pk == TY_LLONG then code_emit(C_PUNCT, 29);
     else if pk == TY_PTR then {
       code_emit(C_PUNCT, 26);
       code_emit(C_PUNCT, 4);
@@ -1303,6 +1313,17 @@ let T_ARRAY: int = 59;
 let T_NAMESPACE: int = 60;
 let T_SCOPE: int = 61;
 let T_MOD: int = 62;
+let T_PLUS_EQ: int = 63;
+let T_MINUS_EQ: int = 64;
+let T_STAR_EQ: int = 65;
+let T_DIV_EQ: int = 66;
+let T_MOD_EQ: int = 67;
+let T_AMP_EQ: int = 68;
+let T_BITOR_EQ: int = 69;
+let T_BITXOR_EQ: int = 70;
+let T_SHL_EQ: int = 71;
+let T_SHR_EQ: int = 72;
+let T_TLONG: int = 73;
 
 let input_kind: int* = 0;
 let input_value: int* = 0;
@@ -1416,6 +1437,7 @@ func ast_type(): int {
     else if input_take(T_TCHAR) == 1 then base = TY_CHAR;
     else if input_take(T_FLOAT) == 1 then base = TY_FLOAT;
     else if input_take(T_TDOUBLE) == 1 then base = TY_DOUBLE;
+    else if input_take(T_TLONG) == 1 then { if input_take(T_TLONG) == 1 then base = TY_LLONG; else base = TY_LONG; }
     else if input_take(T_TVOID) == 1 then base = TY_VOID;
     else if input_peek() == T_ID then {
                 named = input_payload();
@@ -1599,6 +1621,32 @@ func ast_operator(kind: int): int {
   return OP_GT;
 }
 
+func ast_compound_operator(kind: int): int {
+  if kind == T_PLUS_EQ then return OP_ADD;
+  if kind == T_MINUS_EQ then return OP_SUB;
+  if kind == T_STAR_EQ then return OP_MUL;
+  if kind == T_DIV_EQ then return OP_DIV;
+  if kind == T_MOD_EQ then return OP_MOD;
+  if kind == T_AMP_EQ then return OP_BITAND;
+  if kind == T_BITOR_EQ then return OP_BITOR;
+  if kind == T_BITXOR_EQ then return OP_BITXOR;
+  if kind == T_SHL_EQ then return OP_SHL;
+  if kind == T_SHR_EQ then return OP_SHR;
+  return 0;
+}
+
+func ast_take_compound_operator(): int {
+  let kind: int = input_peek();
+  let op: int = ast_compound_operator(kind);
+  if op != 0 then input_pos = input_pos + 1;
+  return op;
+}
+
+func ast_compound_assign(left: int, op: int, right: int): int {
+  let combined: int = ast_node(N_BINOP, left, right, 0, op, 0);
+  return ast_node(N_ASSIGN, left, combined, 0, 0, 0);
+}
+
 func ast_expr_prec(min_prec: int): int {
   let left: int = ast_unary();
   if left < 0 then return (0 - 1);
@@ -1729,10 +1777,16 @@ func ast_stmt(): int {
     if input_peek() != T_RPAREN then {
       let l: int = ast_expr();
       if l < 0 then return (0 - 1);
-      if input_take(T_EQUAL) == 1 then {
-        let r: int = ast_expr();
-        step = ast_node(N_ASSIGN, l, r, 0, 0, 0);
-      } else step = ast_node(N_EXPR, l, 0, 0, 0, 0);
+        if input_take(T_EQUAL) == 1 then {
+          let r: int = ast_expr();
+          step = ast_node(N_ASSIGN, l, r, 0, 0, 0);
+        } else {
+          let cop: int = ast_take_compound_operator();
+          if cop != 0 then {
+            let r: int = ast_expr();
+            step = ast_compound_assign(l, cop, r);
+          } else step = ast_node(N_EXPR, l, 0, 0, 0, 0);
+        }
     } else step = ast_node(N_BLOCK, 0, 0, 0, 0, 0);
     if input_take(T_RPAREN) == 0 then return (0 - 1);
     if input_take(T_LBRACE) == 0 then return (0 - 1);
@@ -1791,6 +1845,13 @@ func ast_stmt(): int {
     if right < 0 then return (0 - 1);
     if input_take(T_SEMI) == 0 then return (0 - 1);
     return ast_node(N_ASSIGN, left, right, 0, 0, 0);
+  }
+  let compound_op: int = ast_take_compound_operator();
+  if compound_op != 0 then {
+    let right_compound: int = ast_expr();
+    if right_compound < 0 then return (0 - 1);
+    if input_take(T_SEMI) == 0 then return (0 - 1);
+    return ast_compound_assign(left, compound_op, right_compound);
   }
   if input_take(T_SEMI) == 0 then return (0 - 1);
   return ast_node(N_EXPR, left, 0, 0, 0, 0);
@@ -2060,6 +2121,17 @@ let L_ARRAY: int = 61;
 let L_NAMESPACE: int = 62;
 let L_SCOPE: int = 63;
 let L_MOD: int = 64;
+let L_TLONG: int = 65;
+let L_PLUS_EQ: int = 66;
+let L_MINUS_EQ: int = 67;
+let L_STAR_EQ: int = 68;
+let L_DIV_EQ: int = 69;
+let L_MOD_EQ: int = 70;
+let L_AMP_EQ: int = 71;
+let L_BITOR_EQ: int = 72;
+let L_BITXOR_EQ: int = 73;
+let L_SHL_EQ: int = 74;
+let L_SHR_EQ: int = 75;
 
 let source: int* = 0;
 let source_len: int = 0;
@@ -2396,6 +2468,7 @@ func word_code(start: int, length: int): int {
   if length == 4 then {
     if source[start] == 110 && source[start + 1] == 117 && source[start + 2] == 108 && source[start + 3] == 108 then return L_NULL;
     if source[start] == 99 && source[start + 1] == 104 && source[start + 2] == 97 && source[start + 3] == 114 then return L_TCHAR;
+    if source[start] == 108 && source[start + 1] == 111 && source[start + 2] == 110 && source[start + 3] == 103 then return L_TLONG;
   }
   if length == 5 then {
     if source[start] == 99 && source[start + 1] == 111 && source[start + 2] == 110 && source[start + 3] == 115 && source[start + 4] == 116 then return L_CONST;
@@ -2526,13 +2599,14 @@ func lexer_next(): int {
   source_take();
   tok_length = 1;
   if c == 43 then {
-    if source_peek() == 43 then { source_take(); tok_kind = L_CONCAT; }
+    if source_peek() == 61 then { source_take(); tok_kind = L_PLUS_EQ; }
+    else if source_peek() == 43 then { source_take(); tok_kind = L_CONCAT; }
     else tok_kind = L_PLUS;
   }
-  else if c == 45 then tok_kind = L_MINUS;
-  else if c == 42 then tok_kind = L_STAR;
-  else if c == 47 then tok_kind = L_DIV;
-  else if c == 37 then tok_kind = L_MOD;
+  else if c == 45 then { if source_peek() == 61 then { source_take(); tok_kind = L_MINUS_EQ; } else tok_kind = L_MINUS; }
+  else if c == 42 then { if source_peek() == 61 then { source_take(); tok_kind = L_STAR_EQ; } else tok_kind = L_STAR; }
+  else if c == 47 then { if source_peek() == 61 then { source_take(); tok_kind = L_DIV_EQ; } else tok_kind = L_DIV; }
+  else if c == 37 then { if source_peek() == 61 then { source_take(); tok_kind = L_MOD_EQ; } else tok_kind = L_MOD; }
   else if c == 40 then tok_kind = L_LPAREN;
   else if c == 41 then tok_kind = L_RPAREN;
   else if c == 123 then tok_kind = L_LBRACE;
@@ -2543,10 +2617,10 @@ func lexer_next(): int {
   else if c == 91 then tok_kind = L_LBRACK;
   else if c == 93 then tok_kind = L_RBRACK;
   else if c == 46 then tok_kind = L_DOT;
-  else if c == 60 then { if source_peek() == 60 then { source_take(); tok_kind = L_SHL; } else tok_kind = L_LT; }
-  else if c == 62 then { if source_peek() == 62 then { source_take(); tok_kind = L_SHR; } else tok_kind = L_GT; }
-  else if c == 124 then { if source_peek() == 124 then { source_take(); tok_kind = L_OR; } else tok_kind = L_BITOR; }
-  else if c == 94 then tok_kind = L_BITXOR;
+  else if c == 60 then { if source_peek() == 60 then { source_take(); if source_peek() == 61 then { source_take(); tok_kind = L_SHL_EQ; } else tok_kind = L_SHL; } else tok_kind = L_LT; }
+  else if c == 62 then { if source_peek() == 62 then { source_take(); if source_peek() == 61 then { source_take(); tok_kind = L_SHR_EQ; } else tok_kind = L_SHR; } else tok_kind = L_GT; }
+  else if c == 124 then { if source_peek() == 124 then { source_take(); tok_kind = L_OR; } else if source_peek() == 61 then { source_take(); tok_kind = L_BITOR_EQ; } else tok_kind = L_BITOR; }
+  else if c == 94 then { if source_peek() == 61 then { source_take(); tok_kind = L_BITXOR_EQ; } else tok_kind = L_BITXOR; }
   else if c == 126 then tok_kind = L_BITNOT;
   else if c == 61 then {
     if source_peek() == 61 then { source_take(); tok_kind = L_EQEQ; }
@@ -2558,6 +2632,7 @@ func lexer_next(): int {
   }
   else if c == 38 then {
     if source_peek() == 38 then { source_take(); tok_kind = L_AND; }
+    else if source_peek() == 61 then { source_take(); tok_kind = L_AMP_EQ; }
     else tok_kind = L_AMP;
   }
   else if c == 124 then {
@@ -2662,6 +2737,17 @@ func map_token(k: int): int {
   if k == L_STAR then return T_STAR;
   if k == L_DIV then return T_DIVIDE;
   if k == L_MOD then return T_MOD;
+  if k == L_TLONG then return T_TLONG;
+  if k == L_PLUS_EQ then return T_PLUS_EQ;
+  if k == L_MINUS_EQ then return T_MINUS_EQ;
+  if k == L_STAR_EQ then return T_STAR_EQ;
+  if k == L_DIV_EQ then return T_DIV_EQ;
+  if k == L_MOD_EQ then return T_MOD_EQ;
+  if k == L_AMP_EQ then return T_AMP_EQ;
+  if k == L_BITOR_EQ then return T_BITOR_EQ;
+  if k == L_BITXOR_EQ then return T_BITXOR_EQ;
+  if k == L_SHL_EQ then return T_SHL_EQ;
+  if k == L_SHR_EQ then return T_SHR_EQ;
   if k == L_CONCAT then return T_CONCAT;
   if k == L_AND then return T_AND_AND;
   if k == L_OR then return T_OR_OR;
@@ -2868,7 +2954,7 @@ func tc_type_equal(a: int, b: int): int {
   let ak: int = node_kind[a]; let bk: int = node_kind[b];
   if ak == TY_PARAM || bk == TY_PARAM then { if ak == bk && node_value[a] == node_value[b] then return 1; return 0; }
   if ak != bk then return 0;
-  if ak == TY_INT || ak == TY_BOOL || ak == TY_STRING || ak == TY_CHAR || ak == TY_FLOAT || ak == TY_DOUBLE || ak == TY_VOID then return 1;
+  if ak == TY_INT || ak == TY_BOOL || ak == TY_STRING || ak == TY_CHAR || ak == TY_FLOAT || ak == TY_DOUBLE || ak == TY_LONG || ak == TY_LLONG || ak == TY_VOID then return 1;
   if ak == TY_NAMED then { if node_value[a] == node_value[b] then return 1; return 0; }
   if ak == TY_PTR then return tc_type_equal(node_a[a], node_a[b]);
   if ak == TY_ARRAY then return node_value[a] == node_value[b] && tc_type_equal(node_a[a], node_a[b]);
@@ -2948,13 +3034,14 @@ func tc_same(a_kind: int, a_name: int, b_kind: int, b_name: int): int {
     return 1;
   }
   if (a_kind == TY_FLOAT || a_kind == TY_DOUBLE) && (b_kind == TY_FLOAT || b_kind == TY_DOUBLE) then return 1;
-  if (a_kind == TY_INT || a_kind == TY_BOOL) && (b_kind == TY_INT || b_kind == TY_BOOL) then return 1;
+  if (a_kind == TY_LONG || a_kind == TY_LLONG || a_kind == TY_INT || a_kind == TY_BOOL) && (b_kind == TY_LONG || b_kind == TY_LLONG || b_kind == TY_INT || b_kind == TY_BOOL) then return 1;
   if (a_kind == TY_VOID && b_kind == TY_INT) then return 1;
   if (a_kind == TY_INT && b_kind == TY_VOID) then return 1;
     return 0;
 }
 func tc_array_elem_same(a_kind: int, a_name: int, b_kind: int, b_name: int): int {
   if (a_kind == TY_FLOAT || a_kind == TY_DOUBLE) && (b_kind == TY_FLOAT || b_kind == TY_DOUBLE) then return 1;
+  if (a_kind == TY_LONG || a_kind == TY_LLONG || a_kind == TY_INT || a_kind == TY_BOOL) && (b_kind == TY_LONG || b_kind == TY_LLONG || b_kind == TY_INT || b_kind == TY_BOOL) then return 1;
   if a_kind != b_kind then return 0;
   if a_kind == TY_NAMED then { if a_name == b_name then return 1; return 0; }
   return 1;
@@ -2983,8 +3070,8 @@ func tc_same_full(a_kind: int, a_name: int, a_elem_kind: int, a_elem_name: int, 
     return 1;
   }
   if (a_kind == TY_FLOAT || a_kind == TY_DOUBLE) && (b_kind == TY_FLOAT || b_kind == TY_DOUBLE) then return 1;
-  if (a_kind == TY_INT || a_kind == TY_BOOL) && (b_kind == TY_INT || b_kind == TY_BOOL) then return 1;
-  if (a_kind == TY_CHAR && (b_kind == TY_INT || b_kind == TY_BOOL)) || (b_kind == TY_CHAR && (a_kind == TY_INT || a_kind == TY_BOOL)) then return 1;
+  if (a_kind == TY_LONG || a_kind == TY_LLONG || a_kind == TY_INT || a_kind == TY_BOOL) && (b_kind == TY_LONG || b_kind == TY_LLONG || b_kind == TY_INT || b_kind == TY_BOOL) then return 1;
+  if (a_kind == TY_CHAR && (b_kind == TY_INT || b_kind == TY_BOOL || b_kind == TY_LONG || b_kind == TY_LLONG)) || (b_kind == TY_CHAR && (a_kind == TY_INT || a_kind == TY_BOOL || a_kind == TY_LONG || a_kind == TY_LLONG)) then return 1;
   if (a_kind == TY_VOID && b_kind == TY_INT) || (a_kind == TY_INT && b_kind == TY_VOID) then return 1;
   return 0;
 }
@@ -3272,6 +3359,20 @@ func tc_type_node(ty: int): void {
   }
 }
 
+func tc_numeric_result_kind(a: int, b: int): int {
+  if a == TY_DOUBLE || b == TY_DOUBLE then return TY_DOUBLE;
+  if a == TY_FLOAT || b == TY_FLOAT then return TY_FLOAT;
+  if a == TY_LLONG || b == TY_LLONG then return TY_LLONG;
+  if a == TY_LONG || b == TY_LONG then return TY_LONG;
+  return TY_INT;
+}
+
+func tc_integer_result_kind(a: int, b: int): int {
+  if a == TY_LLONG || b == TY_LLONG then return TY_LLONG;
+  if a == TY_LONG || b == TY_LONG then return TY_LONG;
+  return TY_INT;
+}
+
 func tc_expr(id: int): void {
   tc_kind = TY_INT; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0; tc_result_type = 0; tc_expr_borrow_source = 0 - 1;
   if id != 0 then tc_error_pos = node_pos[id];
@@ -3470,31 +3571,28 @@ func tc_expr(id: int): void {
     } else if node_value[id] == OP_AND || node_value[id] == OP_OR then {
       if (ak != TY_BOOL && ak != TY_INT) || (bk != TY_BOOL && bk != TY_INT) then tc_fail(15);
       tc_kind = TY_BOOL; tc_name = 0;
-    } else if node_value[id] == OP_BITAND || node_value[id] == OP_BITOR || node_value[id] == OP_BITXOR || node_value[id] == OP_SHL || node_value[id] == OP_SHR then { if (ak != TY_INT && ak != TY_CHAR) || (bk != TY_INT && bk != TY_CHAR) then tc_fail(32); tc_kind = TY_INT; tc_name = 0;     } else if node_value[id] == OP_EQ || node_value[id] == OP_NEQ then {
+    } else if node_value[id] == OP_BITAND || node_value[id] == OP_BITOR || node_value[id] == OP_BITXOR || node_value[id] == OP_SHL || node_value[id] == OP_SHR then { if (ak != TY_INT && ak != TY_CHAR && ak != TY_LONG && ak != TY_LLONG) || (bk != TY_INT && bk != TY_CHAR && bk != TY_LONG && bk != TY_LLONG) then tc_fail(32); tc_kind = tc_integer_result_kind(ak, bk); tc_name = 0;     } else if node_value[id] == OP_EQ || node_value[id] == OP_NEQ then {
       let null_cmp: int = 0;
       if ak == TY_PTR && bk == TY_INT && node_kind[node_b[id]] == N_INT && node_value[node_b[id]] == 0 then null_cmp = 1;
       if ak == TY_INT && bk == TY_PTR && node_kind[node_a[id]] == N_INT && node_value[node_a[id]] == 0 then null_cmp = 1;
       if tc_same_full(ak, an, ae, aen, bk, bn, be, ben) == 0 && null_cmp == 0 then tc_fail(16);
       tc_kind = TY_BOOL; tc_name = 0;
     } else if node_value[id] == OP_LT || node_value[id] == OP_GT then {
-      if (ak != TY_INT && ak != TY_FLOAT && ak != TY_DOUBLE) || (bk != TY_INT && bk != TY_FLOAT && bk != TY_DOUBLE) then tc_fail(17);
+      if (ak != TY_INT && ak != TY_CHAR && ak != TY_LONG && ak != TY_LLONG && ak != TY_FLOAT && ak != TY_DOUBLE) || (bk != TY_INT && bk != TY_CHAR && bk != TY_LONG && bk != TY_LLONG && bk != TY_FLOAT && bk != TY_DOUBLE) then tc_fail(17);
       tc_kind = TY_BOOL; tc_name = 0;
     } else if node_value[id] == OP_ADD then {
       if ak == TY_PTR && bk == TY_INT && ae != TY_VOID then { tc_kind = TY_PTR; tc_name = an; tc_elem_kind = ae; tc_elem_name = aen; }
       else if ak == TY_INT && bk == TY_PTR && be != TY_VOID then { tc_kind = TY_PTR; tc_name = bn; tc_elem_kind = be; tc_elem_name = ben; }
-      else if (ak == TY_FLOAT || ak == TY_DOUBLE) && (bk == TY_FLOAT || bk == TY_DOUBLE) then { if ak == TY_DOUBLE || bk == TY_DOUBLE then tc_kind = TY_DOUBLE; else tc_kind = TY_FLOAT; tc_name = 0; }
-      else if ak == TY_INT && bk == TY_INT then { tc_kind = TY_INT; tc_name = 0; }
+      else if (ak == TY_INT || ak == TY_CHAR || ak == TY_LONG || ak == TY_LLONG || ak == TY_FLOAT || ak == TY_DOUBLE) && (bk == TY_INT || bk == TY_CHAR || bk == TY_LONG || bk == TY_LLONG || bk == TY_FLOAT || bk == TY_DOUBLE) then { tc_kind = tc_numeric_result_kind(ak, bk); tc_name = 0; }
       else tc_fail(18);
     } else if node_value[id] == OP_SUB then {
       if ak == TY_PTR && bk == TY_INT && ae != TY_VOID then { tc_kind = TY_PTR; tc_name = an; tc_elem_kind = ae; tc_elem_name = aen; }
       else if tc_ptr_diff_ok(ak, ae, aen, bk, be, ben) == 1 then { tc_kind = TY_INT; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0; }
-      else if (ak == TY_FLOAT || ak == TY_DOUBLE) && (bk == TY_FLOAT || bk == TY_DOUBLE) then { if ak == TY_DOUBLE || bk == TY_DOUBLE then tc_kind = TY_DOUBLE; else tc_kind = TY_FLOAT; tc_name = 0; }
-      else if ak == TY_INT && bk == TY_INT then { tc_kind = TY_INT; tc_name = 0; }
+      else if (ak == TY_INT || ak == TY_CHAR || ak == TY_LONG || ak == TY_LLONG || ak == TY_FLOAT || ak == TY_DOUBLE) && (bk == TY_INT || bk == TY_CHAR || bk == TY_LONG || bk == TY_LLONG || bk == TY_FLOAT || bk == TY_DOUBLE) then { tc_kind = tc_numeric_result_kind(ak, bk); tc_name = 0; }
       else tc_fail(18);
     } else if node_value[id] == OP_MUL || node_value[id] == OP_DIV || node_value[id] == OP_MOD then {
-      if ak == TY_DOUBLE || bk == TY_DOUBLE then tc_kind = TY_DOUBLE;
-      else if ak == TY_FLOAT || bk == TY_FLOAT then tc_kind = TY_FLOAT;
-      else { if ak != TY_INT || bk != TY_INT then tc_fail(18); tc_kind = TY_INT; }
+      if (ak != TY_INT && ak != TY_CHAR && ak != TY_LONG && ak != TY_LLONG && ak != TY_FLOAT && ak != TY_DOUBLE) || (bk != TY_INT && bk != TY_CHAR && bk != TY_LONG && bk != TY_LLONG && bk != TY_FLOAT && bk != TY_DOUBLE) then tc_fail(18);
+      tc_kind = tc_numeric_result_kind(ak, bk);
       tc_name = 0;
     } else {
       tc_fail(18);
@@ -3860,17 +3958,19 @@ func emit_c_token(out: int*, kind: int, value: int): void {
     else if value == 15 then write_string(out, "double ");
     else if value == 16 then write_string(out, "const ");
     else if value == 18 then write_string(out, "float ");
+    else if value == 19 then write_string(out, "long ");
+    else if value == 20 then write_string(out, "long long ");
     else if value == 17 then write_string(out, "char ");
   } else if kind == C_IDENT then {
-    if value == 1001 then write_string(out, "printf");
-    else if value == 1002 then write_string(out, "runtime_string_concat");
-    else if value == 1011 then write_string(out, "sizeof");
-    else if value == 1012 then write_string(out, "len");
-    else if value == 1013 then write_string(out, "cap");
-    else if value == 1015 then write_string(out, "data");
-    else if value == 1016 then write_string(out, "basalt_memory_alloc");
-    else if value == 1017 then write_string(out, "basalt_memory_resize");
-    else if value == 1018 then write_string(out, "basalt_memory_free");
+    if value == -1001 then write_string(out, "printf");
+    else if value == -1002 then write_string(out, "runtime_string_concat");
+    else if value == -1011 then write_string(out, "sizeof");
+    else if value == -1012 then write_string(out, "len");
+    else if value == -1013 then write_string(out, "cap");
+    else if value == -1015 then write_string(out, "data");
+    else if value == -1016 then write_string(out, "basalt_memory_alloc");
+    else if value == -1017 then write_string(out, "basalt_memory_resize");
+    else if value == -1018 then write_string(out, "basalt_memory_free");
     else emit_symbol(out, value);
   } else if kind == C_INT then emit_int_text(out, value);
   else if kind == C_STRING then emit_string(out, value);
@@ -3928,6 +4028,8 @@ func emit_c_token(out: int*, kind: int, value: int): void {
     else if value == 24 then write_string(out, "{");
     else if value == 25 then write_string(out, "}");
     else if value == 27 then write_string(out, "->");
+    else if value == 28 then { write_char(out, 40); write_char(out, 34); write_string(out, "%ld"); write_char(out, 92); write_char(out, 110); write_char(out, 34); write_string(out, ", "); }
+    else if value == 29 then { write_char(out, 40); write_char(out, 34); write_string(out, "%lld"); write_char(out, 92); write_char(out, 110); write_char(out, 34); write_string(out, ", "); }
   } else if kind == C_NEWLINE then write_char(out, 10);
 }
 

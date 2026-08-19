@@ -1,0 +1,47 @@
+include "../../src/stdlib/map.bsl"
+
+func collision_hash(value: int): int {
+  return 0 - (value * 17 + 1);
+}
+
+func same_int(a: int, b: int): bool {
+  return a == b;
+}
+
+func main(): int {
+  let m: map::HashMap<int, int> = map::with_hasher(1, 0, 0, &collision_hash, &same_int);
+  if map::capacity(m) != 8 then return 1;
+  if (map::capacity(m) & (map::capacity(m) - 1)) != 0 then return 2;
+
+  let i: int = 0;
+  while i < 96 {
+    m = map::put(m, i, i * 10);
+    i = i + 1;
+  }
+  if map::length(m) != 96 then return 3;
+  if map::capacity(m) < 128 then return 4;
+  if (map::capacity(m) & (map::capacity(m) - 1)) != 0 then return 5;
+  if map::get_or(m, 0, (0 - 1)) != 0 then return 6;
+  if map::get_or(m, 95, (0 - 1)) != 950 then return 7;
+
+  i = 0;
+  while i < 90 {
+    m = map::remove(m, i);
+    i = i + 1;
+  }
+  if map::length(m) != 6 then return 8;
+  if map::contains_key(m, 12) then return 9;
+  if map::contains_key(m, 95) == false then return 10;
+
+  m = map::put(m, 1000, 10000);
+  if map::length(m) != 7 then return 11;
+  if map::get_or(m, 1000, (0 - 1)) != 10000 then return 12;
+  if map::get_or(m, 94, (0 - 1)) != 940 then return 13;
+
+  m = map::clear(m);
+  if map::length(m) != 0 then return 14;
+  m = map::put(m, 2048, 20480);
+  if map::get_or(m, 2048, (0 - 1)) != 20480 then return 15;
+  m = map::free(m);
+  return 0;
+}

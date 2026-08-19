@@ -27,6 +27,8 @@ let rec generic_type_name = function
   | TString -> "char_ptr"
   | TFloat -> "float"
   | TDouble -> "double"
+  | TLong -> "long"
+  | TLongLong -> "long_long"
   | TVoid -> "void"
   | TPtr t -> generic_type_name t ^ "_ptr"
   | TArray (t, n) -> generic_type_name t ^ "_array_" ^ string_of_int n
@@ -42,7 +44,7 @@ let rec emit_equal_typ a b =
   | TInt, TInt | TBool, TBool | TInt, TBool | TBool, TInt
   | TChar, TChar | TString, TString | TFloat, TFloat
   | TDouble, TDouble | TFloat, TDouble | TDouble, TFloat
-  | TVoid, TVoid -> true
+  | TLong, TLong | TLongLong, TLongLong | TVoid, TVoid -> true
   | TPtr x, TPtr y -> emit_equal_typ x y
   | TFunPtr (ap, ar), TFunPtr (bp, br) ->
       List.length ap = List.length bp && List.for_all2 emit_equal_typ ap bp && emit_equal_typ ar br
@@ -80,6 +82,20 @@ let rec unify_generic formal actual params subst =
 let infer_generic_args params formal actual =
   let subst = List.fold_left2 (fun m f a -> unify_generic f a params m) SMap.empty formal actual in
   List.map (fun p -> match SMap.find_opt p subst with Some t -> t | None -> failwith ("internal: cannot infer generic argument " ^ p)) params
+
+let numeric_result_type a b =
+  match a, b with
+  | TDouble, _ | _, TDouble -> TDouble
+  | TFloat, _ | _, TFloat -> TFloat
+  | TLongLong, _ | _, TLongLong -> TLongLong
+  | TLong, _ | _, TLong -> TLong
+  | _ -> TInt
+
+let integer_result_type a b =
+  match a, b with
+  | TLongLong, _ | _, TLongLong -> TLongLong
+  | TLong, _ | _, TLong -> TLong
+  | _ -> TInt
 
 let rec emit_expr_type env = function
   | Int _ -> TInt
@@ -139,30 +155,26 @@ let rec emit_expr_type env = function
        | t -> failwith ("internal: cannot access field " ^ f ^ " on " ^ generic_type_name t))
   | Binop (op, a, b) ->
       let ta = emit_expr_type env a and tb = emit_expr_type env b in
-      let numeric t = match t with TInt | TBool | TChar | TFloat | TDouble -> true | _ -> false in
-      let integer t = match t with TInt | TBool | TChar -> true | _ -> false in
-      let real t = match t with TFloat | TDouble -> true | _ -> false in
+      let numeric t = match t with TInt | TBool | TChar | TFloat | TDouble | TLong | TLongLong -> true | _ -> false in
+      let integer t = match t with TInt | TBool | TChar | TLong | TLongLong -> true | _ -> false in
       (match op with
       | Concat -> TString
       | Eq | Neq | Lt | Gt | And | Or -> TBool
-      | BitAnd | BitOr | BitXor | Shl | Shr -> TInt
+      | BitAnd | BitOr | BitXor | Shl | Shr -> integer_result_type ta tb
       | Add ->
           (match ta, tb with
            | TPtr t, x when integer x -> TPtr t
            | x, TPtr t when integer x -> TPtr t
-           | _ when numeric ta && numeric tb && (real ta || real tb) -> TDouble
-           | _ when numeric ta && numeric tb -> TInt
+           | _ when numeric ta && numeric tb -> numeric_result_type ta tb
            | _ -> failwith "internal: addition of incompatible operands")
       | Sub ->
           (match ta, tb with
            | TPtr _, TPtr _ -> TInt
            | TPtr t, x when integer x -> TPtr t
-           | _ when numeric ta && numeric tb && (real ta || real tb) -> TDouble
-           | _ when numeric ta && numeric tb -> TInt
+           | _ when numeric ta && numeric tb -> numeric_result_type ta tb
            | _ -> failwith "internal: subtraction of incompatible operands")
       | Mul | Div | Mod ->
-          if numeric ta && numeric tb && (real ta || real tb) then TDouble
-          else if numeric ta && numeric tb then TInt
+          if numeric ta && numeric tb then numeric_result_type ta tb
           else failwith "internal: arithmetic on non-numeric operands")
      | Call ("memory_alloc", [_; zero]) -> TPtr (emit_expr_type env zero)
    | Call ("memory_resize", [ptr; _; _; _]) ->
@@ -211,6 +223,8 @@ let rec compile_typ = function
   | TString -> "char*"
   | TFloat -> "float"
   | TDouble -> "double"
+  | TLong -> "long"
+  | TLongLong -> "long long"
   | TVoid -> "void"
   | TPtr t -> compile_typ t ^ "*"
   | TArray (t, n) -> compile_typ t ^ "[" ^ string_of_int n ^ "]"
@@ -380,6 +394,8 @@ let format_for_type = function
   | TString -> "%s"
   | TChar -> "%c"
   | TFloat | TDouble -> "%g"
+  | TLong -> "%ld"
+  | TLongLong -> "%lld"
   | TPtr _ -> "%p"
   | _ -> "%d"
 

@@ -8,5 +8,3 @@ func main(): int {
   print *leaked;
   return 0;
 }
-
-// Expected: compile-time rejection because the local borrow escapes leak_local.
