@@ -80,7 +80,8 @@ let builtin_funcs = [
   ("basalt_include_close", ([], TVoid));
   ("basalt_include_reset_session", ([], TVoid));
   ("basalt_include_line_mode", ([TPtr TInt; TInt], TInt));
-  ("basalt_inc_realpath", ([TString], TString))
+  ("basalt_inc_realpath", ([TString], TString));
+  ("basalt_inc_join", ([TString; TString], TString))
 ]
 
 type program = {

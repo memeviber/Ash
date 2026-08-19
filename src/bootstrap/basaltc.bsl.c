@@ -341,6 +341,26 @@ int* sym_elem_name = 0;
 int* sym_scope = 0;
 int sym_count = 1;
 int sym_text_len = 0;
+int BI_TC_NONE = 0;
+int BI_TC_VOID = 1;
+int BI_TC_INT = 2;
+int BI_TC_STRING = 3;
+int BI_TC_PTR_INT = 4;
+int BI_TC_PTR_VOID = 5;
+int BI_TC_MEM_ALLOC = 6;
+int BI_TC_MEM_RESIZE = 7;
+int BI_TC_MEM_FREE = 8;
+int BI_FLAG_RESERVED = 1;
+int BI_FLAG_OWNED = 2;
+int BI_FLAG_CONSUME = 4;
+int BI_FLAG_DYNFIELD = 16;
+int BI_FLAG_MAIN = 32;
+int bi_count = 0;
+int bi_cap = 0;
+int* bi_name = 0;
+int* bi_len = 0;
+int* bi_tc = 0;
+int* bi_flags = 0;
 int tok_kind = 0;
 int tok_value = 0;
 int tok_start = 0;
@@ -499,6 +519,12 @@ int sym_qualified(int ns, int name);
 int ast_decl_name(int name);
 int ast_type_name(int name);
 int sym_intern(int start, int length, int kind, int scope);
+void ensure_bi(int need);
+void bi_register(char* text, int tc_tag, int flags);
+int bi_lookup(int name);
+int bi_tag(int name);
+int bi_has_flag(int name, int flag);
+void bi_init(void);
 int word_code(int start, int length);
 void lexer_skip(void);
 int lexer_next(void);
@@ -1938,10 +1964,9 @@ void gen_memory_sizeof(int arg) {
 
 void gen_memory_builtin(int id) {
   int call_name = (node_value)[id];
-  int call_len = (sym_len)[call_name];
-  int call_hash = (sym_hash)[call_name];
+  int btag = bi_tag(call_name);
   int a = (node_a)[id];
-  if (((call_len == 12) && (call_hash == 334590))) {
+  if ((btag == BI_TC_MEM_ALLOC)) {
     {
       int witness = (node_next)[a];
       int elem_kind = gen_scalar_kind(witness);
@@ -1967,7 +1992,7 @@ void gen_memory_builtin(int id) {
       code_emit(C_PUNCT, 8);
     }
   } else {
-    if (((call_len == 13) && (call_hash == 806795))) {
+    if ((btag == BI_TC_MEM_RESIZE)) {
       {
         int old_count = (node_next)[a];
         int new_count = (node_next)[old_count];
@@ -2013,7 +2038,7 @@ void gen_memory_builtin(int id) {
         code_emit(C_PUNCT, 8);
       }
     } else {
-      if (((call_len == 11) && (call_hash == 649155))) {
+      if ((btag == BI_TC_MEM_FREE)) {
         {
           code_emit(C_IDENT, 1018);
           code_emit(C_PUNCT, 6);
@@ -2204,9 +2229,8 @@ void gen_expr(int id) {
                   if ((k == N_CALL)) {
                     {
                       int call_name = (node_value)[id];
-                      int call_len = (sym_len)[call_name];
-                      int call_hash = (sym_hash)[call_name];
-                      if (((((call_len == 12) && (call_hash == 334590)) || ((call_len == 13) && (call_hash == 806795))) || ((call_len == 11) && (call_hash == 649155)))) {
+                      int btag = bi_tag(call_name);
+                      if ((((btag == BI_TC_MEM_ALLOC) || (btag == BI_TC_MEM_RESIZE)) || (btag == BI_TC_MEM_FREE))) {
                         gen_memory_builtin(id);
                       } else {
                         {
@@ -2932,7 +2956,7 @@ void gen_extern_param(int ty, int name) {
 }
 
 void gen_function_signature(int id) {
-  if ((((sym_len)[(node_value)[id]] == 4) && ((sym_hash)[(node_value)[id]] == 808448))) {
+  if ((bi_has_flag((node_value)[id], BI_FLAG_MAIN) == 1)) {
     code_emit(C_KW, 1);
   } else {
     gen_type((node_aux)[id], (node_b)[id], 0);
@@ -2967,7 +2991,7 @@ void gen_prototype(int id) {
 
 void gen_function(int id) {
   gen_function_signature(id);
-  if (((((sym_len)[(node_value)[id]] == 4) && ((sym_hash)[(node_value)[id]] == 808448)) && ((node_kind)[(node_a)[id]] == N_BLOCK))) {
+  if (((bi_has_flag((node_value)[id], BI_FLAG_MAIN) == 1) && ((node_kind)[(node_a)[id]] == N_BLOCK))) {
     {
       code_emit(C_PUNCT, 13);
       int item = (node_a)[(node_a)[id]];
@@ -5583,6 +5607,154 @@ int sym_intern(int start, int length, int kind, int scope) {
   return id;
 }
 
+void ensure_bi(int need) {
+  if ((need < bi_cap)) {
+    return;
+  } else {
+    {
+    }
+  }
+  int n = next_capacity(bi_cap, need);
+  bi_name = (int*)grow_ints(bi_name, bi_cap, n);
+  bi_len = (int*)grow_ints(bi_len, bi_cap, n);
+  bi_tc = (int*)grow_ints(bi_tc, bi_cap, n);
+  bi_flags = (int*)grow_ints(bi_flags, bi_cap, n);
+  bi_cap = n;
+}
+
+void bi_register(char* text, int tc_tag, int flags) {
+  int len = 0;
+  while (((text)[len] != '\0')) {
+    {
+      len = (len + 1);
+    }
+  }
+  int start = (source_len + sym_text_len);
+  int i = 0;
+  while ((i < len)) {
+    {
+      ensure_source((start + i));
+      (source)[(start + i)] = (text)[i];
+      i = (i + 1);
+    }
+  }
+  sym_text_len = (sym_text_len + len);
+  int id = sym_intern(start, len, L_STRING, 0);
+  ensure_bi(bi_count);
+  (bi_name)[bi_count] = id;
+  (bi_len)[bi_count] = len;
+  (bi_tc)[bi_count] = tc_tag;
+  (bi_flags)[bi_count] = flags;
+  bi_count = (bi_count + 1);
+}
+
+int bi_lookup(int name) {
+  if ((bi_count == 0)) {
+    bi_init();
+  } else {
+    {
+    }
+  }
+  int i = 0;
+  while ((i < bi_count)) {
+    {
+      if ((((sym_len)[name] == (bi_len)[i]) && ((sym_hash)[name] == (sym_hash)[(bi_name)[i]]))) {
+        return i;
+      } else {
+        {
+        }
+      }
+      i = (i + 1);
+    }
+  }
+  return (0 - 1);
+}
+
+int bi_tag(int name) {
+  int i = bi_lookup(name);
+  if ((i < 0)) {
+    return BI_TC_NONE;
+  } else {
+    {
+    }
+  }
+  return (bi_tc)[i];
+}
+
+int bi_has_flag(int name, int flag) {
+  int i = bi_lookup(name);
+  if ((i < 0)) {
+    return 0;
+  } else {
+    {
+    }
+  }
+  if ((((bi_flags)[i] & flag) != 0)) {
+    return 1;
+  } else {
+    {
+    }
+  }
+  return 0;
+}
+
+void bi_init(void) {
+  bi_register("printf", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("memory_alloc", BI_TC_MEM_ALLOC, (BI_FLAG_RESERVED + BI_FLAG_OWNED));
+  bi_register("memory_resize", BI_TC_MEM_RESIZE, (BI_FLAG_RESERVED + BI_FLAG_OWNED));
+  bi_register("memory_free", BI_TC_MEM_FREE, (BI_FLAG_RESERVED + BI_FLAG_CONSUME));
+  bi_register("alloc_ints", BI_TC_PTR_INT, (BI_FLAG_RESERVED + BI_FLAG_OWNED));
+  bi_register("free_ints", BI_TC_VOID, (BI_FLAG_RESERVED + BI_FLAG_CONSUME));
+  bi_register("grow_ints", BI_TC_PTR_INT, BI_FLAG_RESERVED);
+  bi_register("open_file", BI_TC_PTR_VOID, (BI_FLAG_RESERVED + BI_FLAG_OWNED));
+  bi_register("read_char", BI_TC_INT, BI_FLAG_RESERVED);
+  bi_register("close_file", BI_TC_INT, (BI_FLAG_RESERVED + BI_FLAG_CONSUME));
+  bi_register("write_char", BI_TC_INT, BI_FLAG_RESERVED);
+  bi_register("write_string", BI_TC_INT, BI_FLAG_RESERVED);
+  bi_register("write_int", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("runtime_string_concat", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("basalt_track", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("basalt_release", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("basalt_memory_alloc", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("basalt_memory_resize", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("basalt_memory_free", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("basalt_panic", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("basalt_checked_bytes", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("basalt_find", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("basalt_validate", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("basalt_cleanup", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("basalt_inc_find", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("basalt_inc_add", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("basalt_inc_strdup", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("basalt_inc_realpath", BI_TC_STRING, BI_FLAG_RESERVED);
+  bi_register("basalt_inc_join", BI_TC_STRING, BI_FLAG_RESERVED);
+  bi_register("basalt_include_line_mode", BI_TC_INT, BI_FLAG_RESERVED);
+  bi_register("basalt_include_close", BI_TC_VOID, BI_FLAG_RESERVED);
+  bi_register("basalt_include_open_root", BI_TC_PTR_INT, (BI_FLAG_RESERVED + BI_FLAG_OWNED));
+  bi_register("basalt_include_open_line", BI_TC_PTR_INT, (BI_FLAG_RESERVED + BI_FLAG_OWNED));
+  bi_register("basalt_include_last_status", BI_TC_INT, BI_FLAG_RESERVED);
+  bi_register("basalt_include_reset_session", BI_TC_VOID, BI_FLAG_RESERVED);
+  bi_register("malloc", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("calloc", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("realloc", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("free", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("memcpy", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("memset", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("strlen", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("strrchr", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("fopen", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("fclose", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("fgetc", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("fputc", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("fputs", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("fprintf", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("exit", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("atexit", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("len", BI_TC_NONE, BI_FLAG_DYNFIELD);
+  bi_register("cap", BI_TC_NONE, BI_FLAG_DYNFIELD);
+  bi_register("main", BI_TC_NONE, BI_FLAG_MAIN);
+}
+
 int word_code(int start, int length) {
   int h = span_hash(start, length);
   if ((length == 2)) {
@@ -8036,19 +8208,7 @@ int tc_cycle_type(int ty) {
 }
 
 int tc_release_name(int name) {
-  if ((((sym_len)[name] == 11) && ((sym_hash)[name] == 649155))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 9) && ((sym_hash)[name] == 340336))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 10) && ((sym_hash)[name] == 327082))) {
+  if ((bi_has_flag(name, BI_FLAG_CONSUME) == 1)) {
     return 1;
   } else {
     {
@@ -8064,49 +8224,7 @@ int tc_owned_initializer(int id) {
     {
     }
   }
-  if ((((sym_len)[(node_value)[id]] == 12) && ((sym_hash)[(node_value)[id]] == 334590))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[(node_value)[id]] == 13) && ((sym_hash)[(node_value)[id]] == 806795))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[(node_value)[id]] == 10) && ((sym_hash)[(node_value)[id]] == 984821))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[(node_value)[id]] == 9) && ((sym_hash)[(node_value)[id]] == 17002))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[(node_value)[id]] == 21) && ((sym_hash)[(node_value)[id]] == 375664))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[(node_value)[id]] == 21) && ((sym_hash)[(node_value)[id]] == 191106))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[(node_value)[id]] == 24) && ((sym_hash)[(node_value)[id]] == 940431))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[(node_value)[id]] == 24) && ((sym_hash)[(node_value)[id]] == 124989))) {
+  if ((bi_has_flag((node_value)[id], BI_FLAG_OWNED) == 1)) {
     return 1;
   } else {
     {
@@ -8783,19 +8901,7 @@ void tc_expr(int id) {
       int base_name = tc_name;
       if ((base_kind == TY_DYN_ARRAY)) {
         {
-          if ((((sym_len)[(node_value)[id]] == 3) && ((sym_hash)[(node_value)[id]] == 315566))) {
-            {
-              tc_kind = TY_INT;
-              tc_name = 0;
-              tc_elem_kind = 0;
-              tc_elem_name = 0;
-              return;
-            }
-          } else {
-            {
-            }
-          }
-          if ((((sym_len)[(node_value)[id]] == 3) && ((sym_hash)[(node_value)[id]] == 306795))) {
+          if ((bi_has_flag((node_value)[id], BI_FLAG_DYNFIELD) == 1)) {
             {
               tc_kind = TY_INT;
               tc_name = 0;
@@ -8927,9 +9033,8 @@ void tc_expr(int id) {
   if ((k == N_CALL)) {
     {
       int call_name = (node_value)[id];
-      int call_len = (sym_len)[call_name];
-      int call_hash = (sym_hash)[call_name];
-      if (((call_len == 12) && (call_hash == 334590))) {
+      int btag = bi_tag(call_name);
+      if ((btag == BI_TC_MEM_ALLOC)) {
         {
           int aa = (node_a)[id];
           if ((((aa == 0) || ((node_next)[aa] == 0)) || ((node_next)[(node_next)[aa]] != 0))) {
@@ -8982,7 +9087,7 @@ void tc_expr(int id) {
         {
         }
       }
-      if (((call_len == 13) && (call_hash == 806795))) {
+      if ((btag == BI_TC_MEM_RESIZE)) {
         {
           int aa = (node_a)[id];
           if ((((((aa == 0) || ((node_next)[aa] == 0)) || ((node_next)[(node_next)[aa]] == 0)) || ((node_next)[(node_next)[(node_next)[aa]]] == 0)) || ((node_next)[(node_next)[(node_next)[(node_next)[aa]]]] != 0))) {
@@ -9051,7 +9156,7 @@ void tc_expr(int id) {
         {
         }
       }
-      if (((call_len == 11) && (call_hash == 649155))) {
+      if ((btag == BI_TC_MEM_FREE)) {
         {
           int aa = (node_a)[id];
           if (((aa == 0) || ((node_next)[aa] != 0))) {
@@ -9142,7 +9247,7 @@ void tc_expr(int id) {
             {
             }
           }
-          if ((((sym_len)[(node_value)[id]] == 10) && ((sym_hash)[(node_value)[id]] == 984821))) {
+          if ((btag == BI_TC_PTR_INT)) {
             {
               tc_kind = TY_PTR;
               tc_name = 0;
@@ -9154,7 +9259,7 @@ void tc_expr(int id) {
             {
             }
           }
-          if ((((sym_len)[(node_value)[id]] == 9) && ((sym_hash)[(node_value)[id]] == 340336))) {
+          if ((btag == BI_TC_VOID)) {
             {
               tc_kind = TY_VOID;
               tc_name = 0;
@@ -9164,29 +9269,7 @@ void tc_expr(int id) {
             {
             }
           }
-          if ((((sym_len)[(node_value)[id]] == 9) && ((sym_hash)[(node_value)[id]] == 739305))) {
-            {
-              tc_kind = TY_PTR;
-              tc_name = 0;
-              tc_elem_kind = TY_INT;
-              tc_elem_name = 0;
-              return;
-            }
-          } else {
-            {
-            }
-          }
-          if ((((sym_len)[(node_value)[id]] == 12) && ((sym_hash)[(node_value)[id]] == 904440))) {
-            {
-              tc_kind = TY_INT;
-              tc_name = 0;
-              return;
-            }
-          } else {
-            {
-            }
-          }
-          if ((((sym_len)[(node_value)[id]] == 9) && ((sym_hash)[(node_value)[id]] == 17002))) {
+          if ((btag == BI_TC_PTR_VOID)) {
             {
               tc_kind = TY_PTR;
               tc_name = 0;
@@ -9198,7 +9281,7 @@ void tc_expr(int id) {
             {
             }
           }
-          if ((((sym_len)[(node_value)[id]] == 9) && ((sym_hash)[(node_value)[id]] == 977208))) {
+          if ((btag == BI_TC_INT)) {
             {
               tc_kind = TY_INT;
               tc_name = 0;
@@ -9208,93 +9291,9 @@ void tc_expr(int id) {
             {
             }
           }
-          if ((((sym_len)[(node_value)[id]] == 10) && ((sym_hash)[(node_value)[id]] == 327082))) {
-            {
-              tc_kind = TY_INT;
-              tc_name = 0;
-              return;
-            }
-          } else {
-            {
-            }
-          }
-          if ((((sym_len)[(node_value)[id]] == 10) && ((sym_hash)[(node_value)[id]] == 493501))) {
-            {
-              tc_kind = TY_INT;
-              tc_name = 0;
-              return;
-            }
-          } else {
-            {
-            }
-          }
-          if ((((sym_len)[(node_value)[id]] == 24) && ((sym_hash)[(node_value)[id]] == 435348))) {
-            {
-              tc_kind = TY_INT;
-              tc_name = 0;
-              return;
-            }
-          } else {
-            {
-            }
-          }
-          if ((((sym_len)[(node_value)[id]] == 19) && ((sym_hash)[(node_value)[id]] == 51911))) {
+          if ((btag == BI_TC_STRING)) {
             {
               tc_kind = TY_STRING;
-              tc_name = 0;
-              return;
-            }
-          } else {
-            {
-            }
-          }
-          if ((((sym_len)[(node_value)[id]] == 24) && ((sym_hash)[(node_value)[id]] == 940431))) {
-            {
-              tc_kind = TY_PTR;
-              tc_name = 0;
-              tc_elem_kind = TY_INT;
-              tc_elem_name = 0;
-              return;
-            }
-          } else {
-            {
-            }
-          }
-          if ((((sym_len)[(node_value)[id]] == 24) && ((sym_hash)[(node_value)[id]] == 124989))) {
-            {
-              tc_kind = TY_PTR;
-              tc_name = 0;
-              tc_elem_kind = TY_INT;
-              tc_elem_name = 0;
-              return;
-            }
-          } else {
-            {
-            }
-          }
-          if ((((sym_len)[(node_value)[id]] == 26) && ((sym_hash)[(node_value)[id]] == 804225))) {
-            {
-              tc_kind = TY_INT;
-              tc_name = 0;
-              return;
-            }
-          } else {
-            {
-            }
-          }
-          if ((((sym_len)[(node_value)[id]] == 20) && ((sym_hash)[(node_value)[id]] == 349502))) {
-            {
-              tc_kind = TY_VOID;
-              tc_name = 0;
-              return;
-            }
-          } else {
-            {
-            }
-          }
-          if ((((sym_len)[(node_value)[id]] == 28) && ((sym_hash)[(node_value)[id]] == 895852))) {
-            {
-              tc_kind = TY_VOID;
               tc_name = 0;
               return;
             }
@@ -10487,307 +10486,7 @@ int tc_check_function_symbols(int root) {
 }
 
 int tc_reserved_function(int name) {
-  if ((((sym_len)[name] == 6) && ((sym_hash)[name] == 509536))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 12) && ((sym_hash)[name] == 334590))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 13) && ((sym_hash)[name] == 806795))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 11) && ((sym_hash)[name] == 649155))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 10) && ((sym_hash)[name] == 984821))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 9) && ((sym_hash)[name] == 340336))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 9) && ((sym_hash)[name] == 739305))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 9) && ((sym_hash)[name] == 17002))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 9) && ((sym_hash)[name] == 977208))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 10) && ((sym_hash)[name] == 327082))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 10) && ((sym_hash)[name] == 493501))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 12) && ((sym_hash)[name] == 904440))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 9) && ((sym_hash)[name] == 667048))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 21) && ((sym_hash)[name] == 550324))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 12) && ((sym_hash)[name] == 909736))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 14) && ((sym_hash)[name] == 282340))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 19) && ((sym_hash)[name] == 597626))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 20) && ((sym_hash)[name] == 960911))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 18) && ((sym_hash)[name] == 141511))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 12) && ((sym_hash)[name] == 721876))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 20) && ((sym_hash)[name] == 341680))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 11) && ((sym_hash)[name] == 668540))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 15) && ((sym_hash)[name] == 960985))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 14) && ((sym_hash)[name] == 559937))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 15) && ((sym_hash)[name] == 694909))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 14) && ((sym_hash)[name] == 920669))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 17) && ((sym_hash)[name] == 268146))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 19) && ((sym_hash)[name] == 51911))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 15) && ((sym_hash)[name] == 819694))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 24) && ((sym_hash)[name] == 435348))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 20) && ((sym_hash)[name] == 349502))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 24) && ((sym_hash)[name] == 124989))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 24) && ((sym_hash)[name] == 940431))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 26) && ((sym_hash)[name] == 804225))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 28) && ((sym_hash)[name] == 895852))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 6) && ((sym_hash)[name] == 9519))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 6) && ((sym_hash)[name] == 718009))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 7) && ((sym_hash)[name] == 168955))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 4) && ((sym_hash)[name] == 616115))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 6) && ((sym_hash)[name] == 724798))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 6) && ((sym_hash)[name] == 739828))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 6) && ((sym_hash)[name] == 509771))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 7) && ((sym_hash)[name] == 979653))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 5) && ((sym_hash)[name] == 20873))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 6) && ((sym_hash)[name] == 455513))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 5) && ((sym_hash)[name] == 772428))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 5) && ((sym_hash)[name] == 55923))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 5) && ((sym_hash)[name] == 55939))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 7) && ((sym_hash)[name] == 658008))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 4) && ((sym_hash)[name] == 592229))) {
-    return 1;
-  } else {
-    {
-    }
-  }
-  if ((((sym_len)[name] == 6) && ((sym_hash)[name] == 809432))) {
+  if ((bi_has_flag(name, BI_FLAG_RESERVED) == 1)) {
     return 1;
   } else {
     {

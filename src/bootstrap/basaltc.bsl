@@ -637,10 +637,9 @@ func gen_memory_sizeof(arg: int): void {
 
 func gen_memory_builtin(id: int): void {
   let call_name: int = node_value[id];
-  let call_len: int = sym_len[call_name];
-  let call_hash: int = sym_hash[call_name];
+  let btag: int = bi_tag(call_name);
   let a: int = node_a[id];
-  if call_len == 12 && call_hash == 334590 then {
+  if btag == BI_TC_MEM_ALLOC then {
     let witness: int = node_next[a];
     let elem_kind: int = gen_scalar_kind(witness);
     let elem_name: int = gen_scalar_name(witness);
@@ -663,7 +662,7 @@ func gen_memory_builtin(id: int): void {
     gen_array_sizeof(elem_kind, elem_name);
     code_emit(C_PUNCT, 8);
     code_emit(C_PUNCT, 8);
-  } else if call_len == 13 && call_hash == 806795 then {
+  } else if btag == BI_TC_MEM_RESIZE then {
     let old_count: int = node_next[a];
     let new_count: int = node_next[old_count];
     let zero: int = node_next[new_count];
@@ -696,7 +695,7 @@ func gen_memory_builtin(id: int): void {
     gen_memory_sizeof(a);
     code_emit(C_PUNCT, 8);
     code_emit(C_PUNCT, 8);
-  } else if call_len == 11 && call_hash == 649155 then {
+  } else if btag == BI_TC_MEM_FREE then {
     code_emit(C_IDENT, 1018);
     code_emit(C_PUNCT, 6);
     code_emit(C_PUNCT, 6);
@@ -770,9 +769,8 @@ func gen_expr(id: int): void {
     else { code_emit(C_PUNCT, 4); gen_expr(node_a[id]); code_emit(C_OP, node_value[id]); gen_expr(node_b[id]); code_emit(C_PUNCT, 5); }
   } else if k == N_CALL then {
     let call_name: int = node_value[id];
-    let call_len: int = sym_len[call_name];
-    let call_hash: int = sym_hash[call_name];
-    if (call_len == 12 && call_hash == 334590) || (call_len == 13 && call_hash == 806795) || (call_len == 11 && call_hash == 649155) then gen_memory_builtin(id);
+    let btag: int = bi_tag(call_name);
+    if btag == BI_TC_MEM_ALLOC || btag == BI_TC_MEM_RESIZE || btag == BI_TC_MEM_FREE then gen_memory_builtin(id);
     else { code_emit(C_IDENT, gen_call_name(id)); code_emit(C_PUNCT, 6); let arg: int = node_a[id]; while arg != 0 { gen_expr(arg); if node_next[arg] != 0 then code_emit(C_PUNCT, 7); arg = node_next[arg]; } code_emit(C_PUNCT, 8); }
   } else if k == N_INDIRECT_CALL then {
     code_emit(C_PUNCT, 4); gen_expr(node_a[id]); code_emit(C_PUNCT, 5); code_emit(C_PUNCT, 6);
@@ -1075,7 +1073,7 @@ func gen_extern_param(ty: int, name: int): void {
 }
 
 func gen_function_signature(id: int): void {
-  if sym_len[node_value[id]] == 4 && sym_hash[node_value[id]] == 808448 then code_emit(C_KW, 1);
+  if bi_has_flag(node_value[id], BI_FLAG_MAIN) == 1 then code_emit(C_KW, 1);
   else gen_type(node_aux[id], node_b[id], 0);
   code_emit(C_IDENT, sym_c_symbol(node_value[id]));
   code_emit(C_PUNCT, 6);
@@ -1097,7 +1095,7 @@ func gen_prototype(id: int): void {
 
 func gen_function(id: int): void {
   gen_function_signature(id);
-  if sym_len[node_value[id]] == 4 && sym_hash[node_value[id]] == 808448 && node_kind[node_a[id]] == N_BLOCK then {
+  if bi_has_flag(node_value[id], BI_FLAG_MAIN) == 1 && node_kind[node_a[id]] == N_BLOCK then {
     code_emit(C_PUNCT, 13);
     let item: int = node_a[node_a[id]];
     while item != 0 {
@@ -2111,6 +2109,26 @@ let sym_elem_name: int* = 0;
 let sym_scope: int* = 0;
 let sym_count: int = 1;
 let sym_text_len: int = 0;
+let BI_TC_NONE: int = 0;
+let BI_TC_VOID: int = 1;
+let BI_TC_INT: int = 2;
+let BI_TC_STRING: int = 3;
+let BI_TC_PTR_INT: int = 4;
+let BI_TC_PTR_VOID: int = 5;
+let BI_TC_MEM_ALLOC: int = 6;
+let BI_TC_MEM_RESIZE: int = 7;
+let BI_TC_MEM_FREE: int = 8;
+let BI_FLAG_RESERVED: int = 1;
+let BI_FLAG_OWNED: int = 2;
+let BI_FLAG_CONSUME: int = 4;
+let BI_FLAG_DYNFIELD: int = 16;
+let BI_FLAG_MAIN: int = 32;
+let bi_count: int = 0;
+let bi_cap: int = 0;
+let bi_name: int* = 0;
+let bi_len: int* = 0;
+let bi_tc: int* = 0;
+let bi_flags: int* = 0;
 
 func span_hash(start: int, length: int): int {
   let i: int = 0;
@@ -2187,6 +2205,112 @@ func sym_intern(start: int, length: int, kind: int, scope: int): int {
   sym_elem_name[id] = 0;
   sym_count = sym_count + 1;
   return id;
+}
+
+func ensure_bi(need: int): void {
+  if need < bi_cap then return;
+  let n: int = next_capacity(bi_cap, need);
+  bi_name = grow_ints(bi_name, bi_cap, n);
+  bi_len = grow_ints(bi_len, bi_cap, n);
+  bi_tc = grow_ints(bi_tc, bi_cap, n);
+  bi_flags = grow_ints(bi_flags, bi_cap, n);
+  bi_cap = n;
+}
+
+func bi_register(text: string, tc_tag: int, flags: int): void {
+  let len: int = 0;
+  while text[len] != '\0' { len = len + 1; }
+  let start: int = source_len + sym_text_len;
+  let i: int = 0;
+  while i < len { ensure_source(start + i); source[start + i] = text[i]; i = i + 1; }
+  sym_text_len = sym_text_len + len;
+  let id: int = sym_intern(start, len, L_STRING, 0);
+  ensure_bi(bi_count);
+  bi_name[bi_count] = id;
+  bi_len[bi_count] = len;
+  bi_tc[bi_count] = tc_tag;
+  bi_flags[bi_count] = flags;
+  bi_count = bi_count + 1;
+}
+
+func bi_lookup(name: int): int {
+  if bi_count == 0 then bi_init();
+  let i: int = 0;
+  while i < bi_count {
+    if sym_len[name] == bi_len[i] && sym_hash[name] == sym_hash[bi_name[i]] then return i;
+    i = i + 1;
+  }
+  return 0 - 1;
+}
+
+func bi_tag(name: int): int {
+  let i: int = bi_lookup(name);
+  if i < 0 then return BI_TC_NONE;
+  return bi_tc[i];
+}
+
+func bi_has_flag(name: int, flag: int): int {
+  let i: int = bi_lookup(name);
+  if i < 0 then return 0;
+  if (bi_flags[i] & flag) != 0 then return 1;
+  return 0;
+}
+
+func bi_init(): void {
+  bi_register("printf", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("memory_alloc", BI_TC_MEM_ALLOC, BI_FLAG_RESERVED + BI_FLAG_OWNED);
+  bi_register("memory_resize", BI_TC_MEM_RESIZE, BI_FLAG_RESERVED + BI_FLAG_OWNED);
+  bi_register("memory_free", BI_TC_MEM_FREE, BI_FLAG_RESERVED + BI_FLAG_CONSUME);
+  bi_register("alloc_ints", BI_TC_PTR_INT, BI_FLAG_RESERVED + BI_FLAG_OWNED);
+  bi_register("free_ints", BI_TC_VOID, BI_FLAG_RESERVED + BI_FLAG_CONSUME);
+  bi_register("grow_ints", BI_TC_PTR_INT, BI_FLAG_RESERVED);
+  bi_register("open_file", BI_TC_PTR_VOID, BI_FLAG_RESERVED + BI_FLAG_OWNED);
+  bi_register("read_char", BI_TC_INT, BI_FLAG_RESERVED);
+  bi_register("close_file", BI_TC_INT, BI_FLAG_RESERVED + BI_FLAG_CONSUME);
+  bi_register("write_char", BI_TC_INT, BI_FLAG_RESERVED);
+  bi_register("write_string", BI_TC_INT, BI_FLAG_RESERVED);
+  bi_register("write_int", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("runtime_string_concat", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("basalt_track", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("basalt_release", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("basalt_memory_alloc", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("basalt_memory_resize", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("basalt_memory_free", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("basalt_panic", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("basalt_checked_bytes", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("basalt_find", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("basalt_validate", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("basalt_cleanup", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("basalt_inc_find", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("basalt_inc_add", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("basalt_inc_strdup", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("basalt_inc_realpath", BI_TC_STRING, BI_FLAG_RESERVED);
+  bi_register("basalt_inc_join", BI_TC_STRING, BI_FLAG_RESERVED);
+  bi_register("basalt_include_line_mode", BI_TC_INT, BI_FLAG_RESERVED);
+  bi_register("basalt_include_close", BI_TC_VOID, BI_FLAG_RESERVED);
+  bi_register("basalt_include_open_root", BI_TC_PTR_INT, BI_FLAG_RESERVED + BI_FLAG_OWNED);
+  bi_register("basalt_include_open_line", BI_TC_PTR_INT, BI_FLAG_RESERVED + BI_FLAG_OWNED);
+  bi_register("basalt_include_last_status", BI_TC_INT, BI_FLAG_RESERVED);
+  bi_register("basalt_include_reset_session", BI_TC_VOID, BI_FLAG_RESERVED);
+  bi_register("malloc", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("calloc", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("realloc", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("free", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("memcpy", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("memset", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("strlen", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("strrchr", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("fopen", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("fclose", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("fgetc", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("fputc", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("fputs", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("fprintf", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("exit", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("atexit", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("len", BI_TC_NONE, BI_FLAG_DYNFIELD);
+  bi_register("cap", BI_TC_NONE, BI_FLAG_DYNFIELD);
+  bi_register("main", BI_TC_NONE, BI_FLAG_MAIN);
 }
 
 func word_code(start: int, length: int): int {
@@ -2972,22 +3096,13 @@ func tc_cycle_type(ty: int): int {
 
 
 func tc_release_name(name: int): int {
-  if sym_len[name] == 11 && sym_hash[name] == 649155 then return 1;
-  if sym_len[name] == 9 && sym_hash[name] == 340336 then return 1;
-  if sym_len[name] == 10 && sym_hash[name] == 327082 then return 1;
+  if bi_has_flag(name, BI_FLAG_CONSUME) == 1 then return 1;
   return 0;
 }
 
 func tc_owned_initializer(id: int): int {
   if id == 0 || node_kind[id] != N_CALL then return 0;
-  if sym_len[node_value[id]] == 12 && sym_hash[node_value[id]] == 334590 then return 1;
-  if sym_len[node_value[id]] == 13 && sym_hash[node_value[id]] == 806795 then return 1;
-  if sym_len[node_value[id]] == 10 && sym_hash[node_value[id]] == 984821 then return 1;
-  if sym_len[node_value[id]] == 9 && sym_hash[node_value[id]] == 17002 then return 1;
-  if sym_len[node_value[id]] == 21 && sym_hash[node_value[id]] == 375664 then return 1;
-  if sym_len[node_value[id]] == 21 && sym_hash[node_value[id]] == 191106 then return 1;
-  if sym_len[node_value[id]] == 24 && sym_hash[node_value[id]] == 940431 then return 1;
-  if sym_len[node_value[id]] == 24 && sym_hash[node_value[id]] == 124989 then return 1;
+  if bi_has_flag(node_value[id], BI_FLAG_OWNED) == 1 then return 1;
   return 0;
 }
 func tc_is_owner_kind(kind: int): int {
@@ -3173,8 +3288,7 @@ func tc_expr(id: int): void {
     tc_expr(node_a[id]);
     let base_kind: int = tc_kind; let base_name: int = tc_name;
     if base_kind == TY_DYN_ARRAY then {
-      if sym_len[node_value[id]] == 3 && sym_hash[node_value[id]] == 315566 then { tc_kind = TY_INT; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0; return; }
-      if sym_len[node_value[id]] == 3 && sym_hash[node_value[id]] == 306795 then { tc_kind = TY_INT; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0; return; }
+      if bi_has_flag(node_value[id], BI_FLAG_DYNFIELD) == 1 then { tc_kind = TY_INT; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0; return; }
       tc_fail(11); return;
     }
     if base_kind == TY_GENERIC then {
@@ -3207,9 +3321,8 @@ func tc_expr(id: int): void {
   }
   if k == N_CALL then {
     let call_name: int = node_value[id];
-    let call_len: int = sym_len[call_name];
-    let call_hash: int = sym_hash[call_name];
-    if call_len == 12 && call_hash == 334590 then {
+    let btag: int = bi_tag(call_name);
+    if btag == BI_TC_MEM_ALLOC then {
       let aa: int = node_a[id];
       if aa == 0 || node_next[aa] == 0 || node_next[node_next[aa]] != 0 then { tc_fail(13); return; }
       tc_expr(aa);
@@ -3224,7 +3337,7 @@ func tc_expr(id: int): void {
       tc_result_type = ast_node(TY_PTR, witness_ty, 0, 0, 0, 0);
       return;
     }
-    if call_len == 13 && call_hash == 806795 then {
+    if btag == BI_TC_MEM_RESIZE then {
       let aa: int = node_a[id];
       if aa == 0 || node_next[aa] == 0 || node_next[node_next[aa]] == 0 || node_next[node_next[node_next[aa]]] == 0 || node_next[node_next[node_next[node_next[aa]]]] != 0 then { tc_fail(13); return; }
       tc_expr(aa);
@@ -3237,7 +3350,7 @@ func tc_expr(id: int): void {
       if tc_kind == TY_VOID || tc_array_elem_same(pk, pn, tc_kind, tc_name) == 0 then { tc_fail(36); return; }
       tc_kind = TY_PTR; tc_name = 0; tc_elem_kind = pk; tc_elem_name = pn; tc_result_type = ptr_ty; return;
     }
-    if call_len == 11 && call_hash == 649155 then {
+    if btag == BI_TC_MEM_FREE then {
       let aa: int = node_a[id];
       if aa == 0 || node_next[aa] != 0 then { tc_fail(13); return; }
       tc_expr(aa);
@@ -3260,21 +3373,11 @@ func tc_expr(id: int): void {
         if arg_fp != 0 || p_fp != 0 then tc_fail(13);
         tc_type_node(node_b[fty]); return;
       }
-      if sym_len[node_value[id]] == 10 && sym_hash[node_value[id]] == 984821 then { tc_kind = TY_PTR; tc_name = 0; tc_elem_kind = TY_INT; tc_elem_name = 0; return; }
-      if sym_len[node_value[id]] == 9 && sym_hash[node_value[id]] == 340336 then { tc_kind = TY_VOID; tc_name = 0; return; }
-      if sym_len[node_value[id]] == 9 && sym_hash[node_value[id]] == 739305 then { tc_kind = TY_PTR; tc_name = 0; tc_elem_kind = TY_INT; tc_elem_name = 0; return; }
-      if sym_len[node_value[id]] == 12 && sym_hash[node_value[id]] == 904440 then { tc_kind = TY_INT; tc_name = 0; return; }
-      if sym_len[node_value[id]] == 9 && sym_hash[node_value[id]] == 17002 then { tc_kind = TY_PTR; tc_name = 0; tc_elem_kind = TY_VOID; tc_elem_name = 0; return; }
-      if sym_len[node_value[id]] == 9 && sym_hash[node_value[id]] == 977208 then { tc_kind = TY_INT; tc_name = 0; return; }
-      if sym_len[node_value[id]] == 10 && sym_hash[node_value[id]] == 327082 then { tc_kind = TY_INT; tc_name = 0; return; }
-      if sym_len[node_value[id]] == 10 && sym_hash[node_value[id]] == 493501 then { tc_kind = TY_INT; tc_name = 0; return; }
-      if sym_len[node_value[id]] == 24 && sym_hash[node_value[id]] == 435348 then { tc_kind = TY_INT; tc_name = 0; return; }
-      if sym_len[node_value[id]] == 19 && sym_hash[node_value[id]] == 51911 then { tc_kind = TY_STRING; tc_name = 0; return; }
-      if sym_len[node_value[id]] == 24 && sym_hash[node_value[id]] == 940431 then { tc_kind = TY_PTR; tc_name = 0; tc_elem_kind = TY_INT; tc_elem_name = 0; return; }
-      if sym_len[node_value[id]] == 24 && sym_hash[node_value[id]] == 124989 then { tc_kind = TY_PTR; tc_name = 0; tc_elem_kind = TY_INT; tc_elem_name = 0; return; }
-      if sym_len[node_value[id]] == 26 && sym_hash[node_value[id]] == 804225 then { tc_kind = TY_INT; tc_name = 0; return; }
-      if sym_len[node_value[id]] == 20 && sym_hash[node_value[id]] == 349502 then { tc_kind = TY_VOID; tc_name = 0; return; }
-      if sym_len[node_value[id]] == 28 && sym_hash[node_value[id]] == 895852 then { tc_kind = TY_VOID; tc_name = 0; return; }
+      if btag == BI_TC_PTR_INT then { tc_kind = TY_PTR; tc_name = 0; tc_elem_kind = TY_INT; tc_elem_name = 0; return; }
+      if btag == BI_TC_VOID then { tc_kind = TY_VOID; tc_name = 0; return; }
+      if btag == BI_TC_PTR_VOID then { tc_kind = TY_PTR; tc_name = 0; tc_elem_kind = TY_VOID; tc_elem_name = 0; return; }
+      if btag == BI_TC_INT then { tc_kind = TY_INT; tc_name = 0; return; }
+      if btag == BI_TC_STRING then { tc_kind = TY_STRING; tc_name = 0; return; }
       tc_fail(41); return;
     }
     if node_kind[fun_node] == N_GENERIC_FUNC then {
@@ -3606,57 +3709,7 @@ func tc_check_function_symbols(root: int): int {
   return 1;
 }
 func tc_reserved_function(name: int): int {
-  if sym_len[name] == 6 && sym_hash[name] == 509536 then return 1;
-  if sym_len[name] == 12 && sym_hash[name] == 334590 then return 1;
-  if sym_len[name] == 13 && sym_hash[name] == 806795 then return 1;
-  if sym_len[name] == 11 && sym_hash[name] == 649155 then return 1;
-  if sym_len[name] == 10 && sym_hash[name] == 984821 then return 1;
-  if sym_len[name] == 9 && sym_hash[name] == 340336 then return 1;
-  if sym_len[name] == 9 && sym_hash[name] == 739305 then return 1;
-  if sym_len[name] == 9 && sym_hash[name] == 17002 then return 1;
-  if sym_len[name] == 9 && sym_hash[name] == 977208 then return 1;
-  if sym_len[name] == 10 && sym_hash[name] == 327082 then return 1;
-  if sym_len[name] == 10 && sym_hash[name] == 493501 then return 1;
-  if sym_len[name] == 12 && sym_hash[name] == 904440 then return 1;
-  if sym_len[name] == 9 && sym_hash[name] == 667048 then return 1;
-  if sym_len[name] == 21 && sym_hash[name] == 550324 then return 1;
-  if sym_len[name] == 12 && sym_hash[name] == 909736 then return 1;
-  if sym_len[name] == 14 && sym_hash[name] == 282340 then return 1;
-  if sym_len[name] == 19 && sym_hash[name] == 597626 then return 1;
-  if sym_len[name] == 20 && sym_hash[name] == 960911 then return 1;
-  if sym_len[name] == 18 && sym_hash[name] == 141511 then return 1;
-  if sym_len[name] == 12 && sym_hash[name] == 721876 then return 1;
-  if sym_len[name] == 20 && sym_hash[name] == 341680 then return 1;
-  if sym_len[name] == 11 && sym_hash[name] == 668540 then return 1;
-  if sym_len[name] == 15 && sym_hash[name] == 960985 then return 1;
-  if sym_len[name] == 14 && sym_hash[name] == 559937 then return 1;
-  if sym_len[name] == 15 && sym_hash[name] == 694909 then return 1;
-  if sym_len[name] == 14 && sym_hash[name] == 920669 then return 1;
-  if sym_len[name] == 17 && sym_hash[name] == 268146 then return 1;
-  if sym_len[name] == 19 && sym_hash[name] == 51911 then return 1;
-  if sym_len[name] == 15 && sym_hash[name] == 819694 then return 1;
-  if sym_len[name] == 24 && sym_hash[name] == 435348 then return 1;
-  if sym_len[name] == 20 && sym_hash[name] == 349502 then return 1;
-  if sym_len[name] == 24 && sym_hash[name] == 124989 then return 1;
-  if sym_len[name] == 24 && sym_hash[name] == 940431 then return 1;
-  if sym_len[name] == 26 && sym_hash[name] == 804225 then return 1;
-  if sym_len[name] == 28 && sym_hash[name] == 895852 then return 1;
-  if sym_len[name] == 6 && sym_hash[name] == 9519 then return 1;
-  if sym_len[name] == 6 && sym_hash[name] == 718009 then return 1;
-  if sym_len[name] == 7 && sym_hash[name] == 168955 then return 1;
-  if sym_len[name] == 4 && sym_hash[name] == 616115 then return 1;
-  if sym_len[name] == 6 && sym_hash[name] == 724798 then return 1;
-  if sym_len[name] == 6 && sym_hash[name] == 739828 then return 1;
-  if sym_len[name] == 6 && sym_hash[name] == 509771 then return 1;
-  if sym_len[name] == 7 && sym_hash[name] == 979653 then return 1;
-  if sym_len[name] == 5 && sym_hash[name] == 20873 then return 1;
-  if sym_len[name] == 6 && sym_hash[name] == 455513 then return 1;
-  if sym_len[name] == 5 && sym_hash[name] == 772428 then return 1;
-  if sym_len[name] == 5 && sym_hash[name] == 55923 then return 1;
-  if sym_len[name] == 5 && sym_hash[name] == 55939 then return 1;
-  if sym_len[name] == 7 && sym_hash[name] == 658008 then return 1;
-  if sym_len[name] == 4 && sym_hash[name] == 592229 then return 1;
-  if sym_len[name] == 6 && sym_hash[name] == 809432 then return 1;
+  if bi_has_flag(name, BI_FLAG_RESERVED) == 1 then return 1;
   return 0;
 }
 func tc_program(root: int): int {
