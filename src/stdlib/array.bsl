@@ -18,6 +18,16 @@ namespace array {
     return a;
   }
 
+  func new_aligned<T>(capacity: int, alignment: int, zero: T): Array<T> {
+    let a: Array<T> = 0;
+    let cap: int = capacity;
+    if cap < 1 then cap = 4;
+    a.data = memory_alloc_aligned(cap, alignment, zero);
+    a.len = 0;
+    a.cap = cap;
+    return a;
+  }
+
   func reserve<T>(a: Array<T>, minimum: int, zero: T): Array<T> {
     if minimum < 1 then return a;
     if minimum > a.cap then {

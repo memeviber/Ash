@@ -526,6 +526,15 @@ func gen_collect_stmt(id: int): void {
   if k == N_WHILE then { gen_collect_expr(node_a[id]); gen_collect_stmt(node_b[id]); return; }
   if k == N_FOR then { gen_collect_stmt(node_a[id]); gen_collect_expr(node_b[id]); gen_collect_stmt(node_c[id]); gen_collect_stmt(node_value[id]); return; }
 }
+func gen_alignment(alignment: int): void {
+  if alignment > 0 then {
+    code_emit(C_IDENT, -1020);
+    code_emit(C_PUNCT, 4);
+    code_emit(C_INT, alignment);
+    code_emit(C_PUNCT, 5);
+  }
+}
+
 func gen_type(kind: int, child: int, size: int): void {
   if kind == TY_INT then code_emit(C_KW, 1);
   else if kind == TY_BOOL then code_emit(C_KW, 2);
@@ -702,8 +711,10 @@ func gen_memory_builtin(id: int): void {
   let call_name: int = node_value[id];
   let btag: int = bi_tag(call_name);
   let a: int = node_a[id];
-  if btag == BI_TC_MEM_ALLOC then {
+  if btag == BI_TC_MEM_ALLOC || btag == BI_TC_MEM_ALLOC_ALIGNED then {
+    let alignment_arg: int = 0;
     let witness: int = node_next[a];
+    if btag == BI_TC_MEM_ALLOC_ALIGNED then { alignment_arg = witness; witness = node_next[witness]; }
     let elem_kind: int = gen_scalar_kind(witness);
     let elem_name: int = gen_scalar_name(witness);
     let gen_witness_ty: int = 0;
@@ -724,10 +735,12 @@ func gen_memory_builtin(id: int): void {
     else gen_array_elem_type(elem_kind, elem_name);
     code_emit(C_PUNCT, 1);
     code_emit(C_PUNCT, 8);
-    code_emit(C_IDENT, -1016);
+    if btag == BI_TC_MEM_ALLOC_ALIGNED then code_emit(C_IDENT, -1019);
+    else code_emit(C_IDENT, -1016);
     code_emit(C_PUNCT, 6);
     gen_expr(a);
     code_emit(C_PUNCT, 7);
+    if btag == BI_TC_MEM_ALLOC_ALIGNED then { gen_expr(alignment_arg); code_emit(C_PUNCT, 7); }
     if gen_witness_ty != 0 then {
       code_emit(C_IDENT, -1011);
       code_emit(C_PUNCT, 4);
@@ -882,7 +895,7 @@ func gen_expr(id: int): void {
   } else if k == N_CALL then {
     let call_name: int = node_value[id];
     let btag: int = bi_tag(call_name);
-    if btag == BI_TC_MEM_ALLOC || btag == BI_TC_MEM_RESIZE || btag == BI_TC_MEM_FREE then gen_memory_builtin(id);
+    if btag == BI_TC_MEM_ALLOC || btag == BI_TC_MEM_ALLOC_ALIGNED || btag == BI_TC_MEM_RESIZE || btag == BI_TC_MEM_FREE then gen_memory_builtin(id);
     else { code_emit(C_IDENT, gen_call_name(id)); code_emit(C_PUNCT, 6); let arg: int = node_a[id]; while arg != 0 { gen_expr(arg); if node_next[arg] != 0 then code_emit(C_PUNCT, 7); arg = node_next[arg]; } code_emit(C_PUNCT, 8); }
   } else if k == N_INDIRECT_CALL then {
     code_emit(C_PUNCT, 4); gen_expr(node_a[id]); code_emit(C_PUNCT, 5); code_emit(C_PUNCT, 6);
@@ -1029,12 +1042,14 @@ func gen_stmt(id: int): void {
   gen_source_epoch = gen_source_epoch + 1;
   let k: int = node_kind[id];
   if k == N_GLOBAL then {
+    gen_alignment(node_aux[id]);
     gen_decl(node_b[id], node_a[id]);
     code_emit(C_PUNCT, 11);
     gen_initializer(node_b[id], node_c[id]);
     code_emit(C_PUNCT, 12);
     code_emit(C_NEWLINE, 0);
   } else if k == N_CONST then {
+    gen_alignment(node_aux[id]);
     code_emit(C_KW, 16);
     gen_decl(node_b[id], node_a[id]);
     code_emit(C_PUNCT, 11);
@@ -1042,6 +1057,7 @@ func gen_stmt(id: int): void {
     code_emit(C_PUNCT, 12);
     code_emit(C_NEWLINE, 0);
   } else if k == N_LET then {
+    gen_alignment(node_aux[id]);
     gen_decl(node_b[id], node_a[id]);
     code_emit(C_PUNCT, 11);
     gen_initializer(node_b[id], node_c[id]);
@@ -1502,6 +1518,7 @@ let T_BITXOR_EQ: int = 70;
 let T_SHL_EQ: int = 71;
 let T_SHR_EQ: int = 72;
 let T_TLONG: int = 73;
+let T_ALIGNAS: int = 74;
 
 let input_kind: int* = 0;
 let input_value: int* = 0;
@@ -1885,6 +1902,23 @@ func lower_for_stmt(id: int, step: int): int {
   return id;
 }
 
+func ast_alignment(): int {
+  if input_take(T_ALIGNAS) == 0 then return 0;
+  if input_take(T_LPAREN) == 0 then return (0 - 1);
+  if input_peek() != T_INT then return (0 - 1);
+  let alignment: int = input_payload();
+  input_pos = input_pos + 1;
+  if alignment < 1 then return (0 - 1);
+  let power: int = 1;
+  while power < alignment {
+    if power > 1073741824 then return (0 - 1);
+    power = power * 2;
+  }
+  if power != alignment then return (0 - 1);
+  if input_take(T_RPAREN) == 0 then return (0 - 1);
+  return alignment;
+}
+
 func ast_stmt(): int {
   if input_take(T_BREAK) == 1 then {
     if input_take(T_SEMI) == 0 then return (0 - 1);
@@ -1906,11 +1940,13 @@ func ast_stmt(): int {
     if input_take(T_COLON) == 0 then return (0 - 1);
     let ty: int = ast_type();
     if ty == 0 then return (0 - 1);
+    let alignment: int = ast_alignment();
+    if alignment < 0 then return (0 - 1);
     if input_take(T_EQUAL) == 0 then return (0 - 1);
     let value: int = ast_expr();
     if value < 0 then return (0 - 1);
     if input_take(T_SEMI) == 0 then return (0 - 1);
-    return ast_node(N_LET, name, ty, value, 0, node_kind[ty]);
+    return ast_node(N_LET, name, ty, value, 0, alignment);
   }
   if input_take(T_PRINT) == 1 then {
     let value: int = ast_expr();
@@ -1943,9 +1979,11 @@ func ast_stmt(): int {
         if input_take(T_COLON) == 0 then return (0 - 1);
         let t: int = ast_type();
         if t == 0 then return (0 - 1);
+        let alignment: int = ast_alignment();
+        if alignment < 0 then return (0 - 1);
         if input_take(T_EQUAL) == 0 then return (0 - 1);
         let v: int = ast_expr();
-        init = ast_node(N_LET, n, t, v, 0, node_kind[t]);
+        init = ast_node(N_LET, n, t, v, 0, alignment);
       } else {
         let l: int = ast_expr();
         if l < 0 then return (0 - 1);
@@ -2172,10 +2210,12 @@ func ast_decl(): int {
     name = ast_decl_name(name);
     if input_take(T_COLON) == 0 then return (0 - 1);
     let ty: int = ast_type(); if ty == 0 then return (0 - 1);
+    let alignment: int = ast_alignment();
+    if alignment < 0 then return (0 - 1);
     if input_take(T_EQUAL) == 0 then return (0 - 1);
     let value: int = ast_expr(); if value < 0 then return (0 - 1);
     if input_take(T_SEMI) == 0 then return (0 - 1);
-    return ast_node(N_CONST, name, ty, value, 0, node_kind[ty]);
+    return ast_node(N_CONST, name, ty, value, 0, alignment);
   }
   if input_take(T_STRUCT) == 1 then return ast_struct_decl();
   if input_take(T_ENUM) == 1 then return ast_enum_decl();
@@ -2187,11 +2227,13 @@ func ast_decl(): int {
     if input_take(T_COLON) == 0 then return (0 - 1);
     let ty: int = ast_type();
     if ty == 0 then return (0 - 1);
+    let alignment: int = ast_alignment();
+    if alignment < 0 then return (0 - 1);
     if input_take(T_EQUAL) == 0 then return (0 - 1);
     let value: int = ast_expr();
     if value < 0 then return (0 - 1);
     if input_take(T_SEMI) == 0 then return (0 - 1);
-    return ast_node(N_GLOBAL, name, ty, value, 0, node_kind[ty]);
+    return ast_node(N_GLOBAL, name, ty, value, 0, alignment);
   }
   if input_take(T_FUNC) == 1 then {
     if input_peek() != T_ID then return (0 - 1);
@@ -2325,6 +2367,7 @@ let L_NAMESPACE: int = 62;
 let L_SCOPE: int = 63;
 let L_MOD: int = 64;
 let L_TLONG: int = 65;
+let L_ALIGNAS: int = 76;
 let L_PLUS_EQ: int = 66;
 let L_MINUS_EQ: int = 67;
 let L_STAR_EQ: int = 68;
@@ -2524,6 +2567,7 @@ let BI_TC_STRING: int = 3;
 let BI_TC_PTR_INT: int = 4;
 let BI_TC_PTR_VOID: int = 5;
 let BI_TC_MEM_ALLOC: int = 6;
+let BI_TC_MEM_ALLOC_ALIGNED: int = 30;
 let BI_TC_MEM_RESIZE: int = 7;
 let BI_TC_MEM_FREE: int = 8;
 let BI_TC_READ_LINE: int = 9;
@@ -2707,6 +2751,7 @@ func bi_init(): void {
   bi_register("runtime_write_char", BI_TC_WRITE_CHAR, BI_FLAG_RESERVED);
   bi_register("runtime_io_status", BI_TC_IO_STATUS, BI_FLAG_RESERVED);
   bi_register("memory_alloc", BI_TC_MEM_ALLOC, BI_FLAG_RESERVED + BI_FLAG_OWNED);
+  bi_register("memory_alloc_aligned", BI_TC_MEM_ALLOC_ALIGNED, BI_FLAG_RESERVED + BI_FLAG_OWNED);
   bi_register("memory_resize", BI_TC_MEM_RESIZE, BI_FLAG_RESERVED + BI_FLAG_OWNED);
   bi_register("memory_free", BI_TC_MEM_FREE, BI_FLAG_RESERVED + BI_FLAG_CONSUME);
   bi_register("alloc_ints", BI_TC_PTR_INT, BI_FLAG_RESERVED + BI_FLAG_OWNED);
@@ -2864,6 +2909,7 @@ func word_code(start: int, length: int): int {
     }
   }
   if length == 5 then { if source[start] == 102 && source[start+1] == 108 && source[start+2] == 111 && source[start+3] == 97 && source[start+4] == 116 then return L_TFLOAT; }
+  if length == 7 then { if source[start] == 97 && source[start+1] == 108 && source[start+2] == 105 && source[start+3] == 103 && source[start+4] == 110 && source[start+5] == 97 && source[start+6] == 115 then return L_ALIGNAS; }
   if length == 9 then { if source[start] == 110 && source[start+1] == 97 && source[start+2] == 109 && source[start+3] == 101 && source[start+4] == 115 && source[start+5] == 112 && source[start+6] == 97 && source[start+7] == 99 && source[start+8] == 101 then return L_NAMESPACE; }
   if length == 6 then { if source[start] == 100 && source[start+1] == 111 && source[start+2] == 117 && source[start+3] == 98 && source[start+4] == 108 && source[start+5] == 101 then return L_TDOUBLE; }
   return L_ID;
@@ -3099,6 +3145,7 @@ func map_token(k: int): int {
   if k == L_DIV then return T_DIVIDE;
   if k == L_MOD then return T_MOD;
   if k == L_TLONG then return T_TLONG;
+  if k == L_ALIGNAS then return T_ALIGNAS;
   if k == L_PLUS_EQ then return T_PLUS_EQ;
   if k == L_MINUS_EQ then return T_MINUS_EQ;
   if k == L_STAR_EQ then return T_STAR_EQ;
@@ -3928,6 +3975,25 @@ func tc_expr(id: int): void {
       tc_result_type = ast_node(TY_PTR, witness_ty, 0, 0, 0, 0);
       return;
     }
+    if btag == BI_TC_MEM_ALLOC_ALIGNED then {
+      let aa: int = node_a[id];
+      if aa == 0 || node_next[aa] == 0 || node_next[node_next[aa]] == 0 || node_next[node_next[node_next[aa]]] != 0 then { tc_fail(13); return; }
+      tc_expr(aa);
+      if tc_kind != TY_INT then { tc_fail(17); return; }
+      aa = node_next[aa];
+      tc_expr(aa);
+      if tc_kind != TY_INT then { tc_fail(17); return; }
+      if node_kind[aa] == N_INT && node_value[aa] < 1 then { tc_fail(17); return; }
+      aa = node_next[aa];
+      tc_expr(aa);
+      if tc_kind == TY_VOID then { tc_fail(17); return; }
+      let wk: int = tc_kind; let wn: int = tc_name;
+      let witness_ty: int = tc_result_type;
+      if witness_ty == 0 then witness_ty = tc_type_node_from_summary(wk, wn, tc_elem_kind, tc_elem_name);
+      tc_kind = TY_PTR; tc_name = 0; tc_elem_kind = wk; tc_elem_name = wn;
+      tc_result_type = ast_node(TY_PTR, witness_ty, 0, 0, 0, 0);
+      return;
+    }
     if btag == BI_TC_MEM_RESIZE then {
       let aa: int = node_a[id];
       if aa == 0 || node_next[aa] == 0 || node_next[node_next[aa]] == 0 || node_next[node_next[node_next[aa]]] == 0 || node_next[node_next[node_next[node_next[aa]]]] != 0 then { tc_fail(13); return; }
@@ -4634,6 +4700,8 @@ func emit_c_token(out: int*, kind: int, value: int): void {
     else if value == -1016 then write_string(out, "basalt_memory_alloc");
     else if value == -1017 then write_string(out, "basalt_memory_resize");
     else if value == -1018 then write_string(out, "basalt_memory_free");
+    else if value == -1019 then write_string(out, "basalt_memory_alloc_aligned");
+    else if value == -1020 then write_string(out, "_Alignas");
     else emit_symbol(out, value);
   } else if kind == C_INT then emit_int_text(out, value);
   else if kind == C_STRING then emit_string(out, value);
@@ -4744,6 +4812,7 @@ func emit_runtime(out: int*): void {
   write_string(out, "static BASALT_UNUSED void runtime_write_int(int value){if(fprintf(stdout,\"%d\",value)<0||fflush(stdout)!=0)basalt_panic(8);}\n");
   write_string(out, "static BASALT_UNUSED void runtime_write_char(char value){if(fputc((unsigned char)value,stdout)==EOF||fflush(stdout)!=0)basalt_panic(8);}\n");
   write_string(out, "static BASALT_UNUSED void* basalt_memory_alloc(int count,size_t elem_size){size_t bytes=basalt_checked_bytes(count,elem_size);void*p=calloc(1,bytes?bytes:1);if(!p)basalt_panic(5);return basalt_track(p);}\n");
+  write_string(out, "static BASALT_UNUSED void* basalt_memory_alloc_aligned(int count,int alignment,size_t elem_size){size_t bytes,rounded,a;void*p;if(count<0||alignment<1)basalt_panic(1);a=(size_t)alignment;if((a&(a-1))!=0)basalt_panic(1);if(a<sizeof(void*))a=sizeof(void*);bytes=basalt_checked_bytes(count,elem_size);if(bytes==0)bytes=1;if(bytes>(size_t)-1-(a-1))basalt_panic(1);rounded=(bytes+a-1)&~(a-1);p=aligned_alloc(a,rounded);if(!p)basalt_panic(5);return basalt_track(p);}\n");
   write_string(out, "static BASALT_UNUSED void* basalt_memory_resize(void* old,int old_count,int new_count,size_t elem_size){size_t slot=(size_t)-1;size_t old_bytes;size_t new_bytes;void*p;if(old_count<0||new_count<0||new_count<old_count)basalt_panic(1);if(old){slot=basalt_find(old);if(slot==(size_t)-1)basalt_panic(2);}old_bytes=basalt_checked_bytes(old_count,elem_size);new_bytes=basalt_checked_bytes(new_count,elem_size);p=realloc(old,new_bytes?new_bytes:1);if(!p)basalt_panic(6);if(slot==(size_t)-1)basalt_track(p);else basalt_live[slot]=p;if(new_bytes>old_bytes)memset((char*)p+old_bytes,0,new_bytes-old_bytes);return p;}\n");
   write_string(out, "static BASALT_UNUSED void basalt_memory_free(void*p){basalt_release(p);}\n");
   write_string(out, "static BASALT_UNUSED char* runtime_string_concat(const char* a,const char* b){size_t na,nb,total;char* p;if(!a||!b)basalt_panic(4);na=strlen(a);nb=strlen(b);if(na>(size_t)-1-nb-1)basalt_panic(1);total=na+nb+1;p=(char*)malloc(total);if(!p)basalt_panic(5);memcpy(p,a,na);memcpy(p+na,b,nb);p[na+nb]=0;return(char*)basalt_track(p);}\n");

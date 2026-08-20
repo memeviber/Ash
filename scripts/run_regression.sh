@@ -134,6 +134,8 @@ compile_run "$ROOT/tests/regression/compound_assignment_side_effect_test.bsl" co
 compile_run "$ROOT/tests/regression/source_mapping_test.bsl" source_mapping_test
 compile_run "$ROOT/tests/regression/tagged_union_test.bsl" tagged_union_test
 compile_run "$ROOT/tests/regression/concurrency_test.bsl" concurrency_test
+compile_run "$ROOT/tests/regression/aligned_alloc_test.bsl" aligned_alloc_test
+expect_reject "$ROOT/tests/regression/aligned_invalid_power.bsl" aligned_invalid_power
 expect_reject "$ROOT/tests/regression/concurrency_invalid_atomic.bsl" concurrency_invalid_atomic
 expect_reject "$ROOT/tests/regression/concurrency_invalid_callback.bsl" concurrency_invalid_callback
 expect_reject "$ROOT/tests/regression/tagged_union_arity_invalid.bsl" tagged_union_arity_invalid
