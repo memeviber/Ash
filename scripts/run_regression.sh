@@ -132,6 +132,9 @@ compile_run "$ROOT/tests/regression/string_builder_iter_test.bsl" string_builder
 compile_run "$ROOT/tests/regression/numeric_compound_test.bsl" numeric_compound_test
 compile_run "$ROOT/tests/regression/compound_assignment_side_effect_test.bsl" compound_assignment_side_effect_test
 compile_run "$ROOT/tests/regression/source_mapping_test.bsl" source_mapping_test
+compile_run "$ROOT/tests/regression/tagged_union_test.bsl" tagged_union_test
+expect_reject "$ROOT/tests/regression/tagged_union_arity_invalid.bsl" tagged_union_arity_invalid
+expect_reject "$ROOT/tests/regression/tagged_union_type_invalid.bsl" tagged_union_type_invalid
 compile_run_with_input "$ROOT/tests/regression/io_safe_test.bsl" io_safe_test $'42\nbad-number\nBasalt-OVERFLOW\nok\n' $'safe-io\n42\nBasalt-\n'
 compile_run_with_input "$ROOT/tests/regression/io_safe_edge_test.bsl" io_safe_edge_test $'-17\n999999999999999999999999999999999999999999999\n' ''
 expect_runtime_failure_with_input "$ROOT/tests/regression/io_invalid_limit.bsl" io_invalid_limit '' 2

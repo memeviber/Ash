@@ -46,6 +46,7 @@ let N_FLOAT: int = 33;
 let N_EXTERN: int = 34;
 let N_GENERIC_STRUCT: int = 35;
 let N_GENERIC_FUNC: int = 36;
+let N_VARIANT: int = 39;
 
 let OP_ADD: int = 1;
 let OP_SUB: int = 2;
@@ -81,6 +82,7 @@ let TY_PARAM: int = 14;
 let TY_GENERIC: int = 15;
 let TY_LONG: int = 16;
 let TY_LLONG: int = 17;
+let TY_VARIANT: int = 18;
 
 let node_kind: int* = 0;
 let node_a: int* = 0;
@@ -94,6 +96,7 @@ let node_scope: int* = 0;
 let ast_parse_mode: int = 0;
 let node_count: int = 1;
 let ast_namespace_scope: int = 0;
+let sym_tag_name: int = 0;
 
 
 let node_cap: int = 0;
@@ -493,6 +496,7 @@ func gen_collect_type(ty: int): void {
 func gen_collect_expr(id: int): void {
   if id == 0 then return;
   let k: int = node_kind[id];
+  if k == N_VARIANT then { let aa: int = node_a[id]; while aa != 0 { gen_collect_expr(aa); aa = node_next[aa]; } return; }
   if k == N_CALL then {
     let f: int = tc_find_function_ctx(node_value[id], node_scope[id]);
     if f != 0 && node_kind[f] == N_GENERIC_FUNC then {
@@ -824,6 +828,43 @@ func gen_call_name(id: int): int {
   return gen_mangled_function_symbol(node_value[f], typeargs);
 }
 
+func gen_variant_expr(id: int): void {
+  tc_find_enum_variant(node_value[id]);
+  let enum_name: int = tc_variant_enum;
+  if enum_name == 0 && node_aux[id] != 0 && node_kind[node_aux[id]] == TY_NAMED then enum_name = node_value[node_aux[id]];
+  let member: int = tc_variant_member;
+  if member == 0 then { code_emit(C_INT, 0); return; }
+  code_emit(C_PUNCT, 4);
+  code_emit(C_IDENT, sym_c_symbol(enum_name));
+  code_emit(C_PUNCT, 5);
+  code_emit(C_PUNCT, 24);
+  code_emit(C_PUNCT, 17);
+  code_emit(C_IDENT, sym_tag_id());
+  code_emit(C_PUNCT, 11);
+  code_emit(C_IDENT, sym_c_symbol(sym_qualified(enum_name, node_a[member])));
+  let payload: int = node_b[member];
+  if payload != 0 then {
+    code_emit(C_PUNCT, 7);
+    code_emit(C_PUNCT, 17);
+    code_emit(C_IDENT, sym_c_symbol(node_a[member]));
+    code_emit(C_PUNCT, 11);
+    code_emit(C_PUNCT, 24);
+    let arg: int = node_a[id];
+    let field: int = payload;
+    while field != 0 && arg != 0 {
+      code_emit(C_PUNCT, 17);
+      code_emit(C_IDENT, sym_c_symbol(node_a[field]));
+      code_emit(C_PUNCT, 11);
+      gen_expr(arg);
+      if node_next[field] != 0 && node_next[arg] != 0 then code_emit(C_PUNCT, 7);
+      field = node_next[field];
+      arg = node_next[arg];
+    }
+    code_emit(C_PUNCT, 25);
+  }
+  code_emit(C_PUNCT, 25);
+}
+
 func gen_expr(id: int): void {
   let k: int = node_kind[id];
   if k == N_INT then code_emit(C_INT, node_value[id]);
@@ -831,6 +872,7 @@ func gen_expr(id: int): void {
   else if k == N_FLOAT then code_emit(C_IDENT, node_value[id]);
   else if k == N_STRING then code_emit(C_STRING, node_value[id]);
   else if k == N_CHAR then code_emit(C_INT, node_value[id]);
+  else if k == N_VARIANT then gen_variant_expr(id);
   else if k == N_NULL then { code_emit(C_INT, 0); }
   else if k == N_VAR then code_emit(C_IDENT, sym_c_symbol(node_value[id]));
   else if k == N_BINOP then {
@@ -861,6 +903,7 @@ func gen_expr(id: int): void {
 func gen_expr_kind(id: int): int {
   let k: int = node_kind[id];
   if k == N_INT || k == N_BOOL then return TY_INT;
+  if k == N_VARIANT then { if node_aux[id] != 0 then return node_kind[node_aux[id]]; return TY_NAMED; }
   if k == N_CHAR then return TY_CHAR;
   if k == N_FLOAT then return TY_DOUBLE;
   if k == N_STRING then return TY_STRING;
@@ -882,7 +925,7 @@ func gen_expr_kind(id: int): int {
   }
   if k == N_DEREF then return TY_INT;
   if k == N_ADDRESS then return TY_PTR;
-  if k == N_FIELD_ACCESS then return TY_INT;
+  if k == N_FIELD_ACCESS then { let field_ty: int = tc_emit_field_type(id); if field_ty != 0 then return node_kind[field_ty]; return TY_INT; }
   if k == N_CALL || k == N_INDIRECT_CALL then return tc_expr_kind_for_emit(id);
   if k == N_BINOP then {
     if node_value[id] == OP_CONCAT then return TY_STRING;
@@ -1156,9 +1199,72 @@ func gen_struct_decl(id: int): void {
   code_emit(C_NEWLINE, 0);
 }
 
+func gen_tagged_enum_decl(id: int): void {
+  let enum_name: int = node_value[id];
+  let c_enum_name: int = sym_c_symbol(enum_name);
+  let tag_name: int = sym_c_symbol(sym_qualified(enum_name, sym_tag_id()));
+  code_emit(C_KW, 14);
+  code_emit(C_KW, 13);
+  code_emit(C_IDENT, tag_name);
+  code_emit(C_PUNCT, 13);
+  let f: int = node_a[id];
+  while f != 0 {
+    code_emit(C_IDENT, sym_c_symbol(sym_qualified(enum_name, node_a[f])));
+    code_emit(C_PUNCT, 11);
+    code_emit(C_INT, node_value[f]);
+    if node_next[f] != 0 then code_emit(C_PUNCT, 7);
+    code_emit(C_NEWLINE, 0);
+    f = node_next[f];
+  }
+  code_emit(C_PUNCT, 14);
+  code_emit(C_IDENT, tag_name);
+  code_emit(C_PUNCT, 12);
+  code_emit(C_NEWLINE, 0);
+
+  code_emit(C_KW, 14);
+  code_emit(C_KW, 12);
+  code_emit(C_IDENT, c_enum_name);
+  code_emit(C_PUNCT, 13);
+  code_emit(C_IDENT, tag_name);
+  code_emit(C_PUNCT, 18);
+  code_emit(C_IDENT, sym_tag_id());
+  code_emit(C_PUNCT, 12);
+  code_emit(C_KW, 21);
+  code_emit(C_PUNCT, 13);
+  f = node_a[id];
+  while f != 0 {
+    if node_b[f] != 0 then {
+      code_emit(C_KW, 12);
+      code_emit(C_PUNCT, 13);
+      let field: int = node_b[f];
+      while field != 0 {
+        gen_decl(node_b[field], node_a[field]);
+        code_emit(C_PUNCT, 12);
+        code_emit(C_NEWLINE, 0);
+        field = node_next[field];
+      }
+      code_emit(C_PUNCT, 14);
+      code_emit(C_IDENT, sym_c_symbol(node_a[f]));
+      code_emit(C_PUNCT, 12);
+      code_emit(C_NEWLINE, 0);
+    }
+    f = node_next[f];
+  }
+  code_emit(C_PUNCT, 14);
+  code_emit(C_PUNCT, 12);
+  code_emit(C_PUNCT, 14);
+  code_emit(C_IDENT, c_enum_name);
+  code_emit(C_PUNCT, 12);
+  code_emit(C_NEWLINE, 0);
+}
+
 func gen_enum_decl(id: int): void {
   gen_source_pos = node_pos[id];
   gen_source_epoch = gen_source_epoch + 1;
+  let tagged: int = 0;
+  let probe: int = node_a[id];
+  while probe != 0 { if node_b[probe] != 0 then tagged = 1; probe = node_next[probe]; }
+  if tagged == 1 then { gen_tagged_enum_decl(id); return; }
   code_emit(C_KW, 14);
   code_emit(C_KW, 13);
   code_emit(C_IDENT, sym_c_symbol(node_value[id]));
@@ -1999,7 +2105,20 @@ func ast_enum_decl(): int {
     if input_peek() == T_EOF then return (0 - 1);
     if input_peek() != T_ID then return (0 - 1);
     let member: int = input_payload(); input_pos = input_pos + 1;
-    let item: int = ast_node(N_FIELD, member, 0, 0, ordinal, 0);
+    let payload: int = 0;
+    if input_take(T_LBRACE) == 1 then {
+      while input_peek() != T_RBRACE {
+        if input_peek() == T_EOF || input_peek() != T_ID then return (0 - 1);
+        let field_name: int = input_payload(); input_pos = input_pos + 1;
+        if input_take(T_COLON) == 0 then return (0 - 1);
+        let field_type: int = ast_type();
+        if field_type == 0 || input_take(T_SEMI) == 0 then return (0 - 1);
+        let field: int = ast_node(N_FIELD, field_name, field_type, 0, 0, 0);
+        if payload == 0 then payload = field; else payload = ast_link(payload, field);
+      }
+      if input_take(T_RBRACE) == 0 then return (0 - 1);
+    }
+    let item: int = ast_node(N_FIELD, member, payload, 0, ordinal, 0);
     if values == 0 then values = item; else values = ast_link(values, item);
     ordinal = ordinal + 1;
     if input_take(T_COMMA) == 0 then { }
@@ -2457,6 +2576,18 @@ func sym_lookup(start: int, length: int, h: int): int {
     i = i + 1;
   }
   return 0;
+}
+
+func sym_tag_id(): int {
+  if sym_tag_name != 0 then return sym_tag_name;
+  let start: int = source_len + sym_text_len;
+  ensure_source(start + 2);
+  source[start] = 116;
+  source[start + 1] = 97;
+  source[start + 2] = 103;
+  sym_tag_name = sym_intern(start, 3, L_ID, 0);
+  sym_text_len = sym_text_len + 3;
+  return sym_tag_name;
 }
 
 func sym_qualified(ns: int, name: int): int {
@@ -3063,6 +3194,8 @@ let tc_path_count: int = 0;
 let tc_path_cap: int = 0;
 let tc_loop_depth: int = 0;
 let tc_result_type: int = 0;
+let tc_variant_enum: int = 0;
+let tc_variant_member: int = 0;
 let tc_bind_name: int* = 0;
 let tc_bind_type: int* = 0;
 let tc_bind_count: int = 0;
@@ -3164,6 +3297,7 @@ func tc_type_equal(a: int, b: int): int {
   if ak != bk then return 0;
   if ak == TY_INT || ak == TY_BOOL || ak == TY_STRING || ak == TY_CHAR || ak == TY_FLOAT || ak == TY_DOUBLE || ak == TY_LONG || ak == TY_LLONG || ak == TY_VOID then return 1;
   if ak == TY_NAMED then { if node_value[a] == node_value[b] then return 1; return 0; }
+  if ak == TY_VARIANT then { if node_value[a] == node_value[b] && node_aux[a] == node_aux[b] then return 1; return 0; }
   if ak == TY_PTR then return tc_type_equal(node_a[a], node_a[b]);
   if ak == TY_ARRAY then return node_value[a] == node_value[b] && tc_type_equal(node_a[a], node_a[b]);
   if ak == TY_DYN_ARRAY then return tc_type_equal(node_a[a], node_a[b]);
@@ -3180,6 +3314,7 @@ func tc_type_equal(a: int, b: int): int {
 func tc_type_node_from_summary(kind: int, name: int, elem_kind: int, elem_name: int): int {
   if kind == TY_GENERIC && name != 0 then return name;
   if kind == TY_NAMED then return ast_node(TY_NAMED, 0, 0, 0, name, 0);
+  if kind == TY_VARIANT then return ast_node(TY_VARIANT, 0, 0, 0, name, elem_name);
   if kind == TY_PTR then return ast_node(TY_PTR, tc_type_node_from_summary(elem_kind, elem_name, 0, 0), 0, 0, 0, 0);
   if kind == TY_DYN_ARRAY then return ast_node(TY_DYN_ARRAY, tc_type_node_from_summary(elem_kind, elem_name, 0, 0), 0, 0, 0, 0);
   return ast_node(kind, 0, 0, 0, 0, 0);
@@ -3581,6 +3716,27 @@ func tc_integer_result_kind(a: int, b: int): int {
   return TY_INT;
 }
 
+func tc_check_variant(id: int): int {
+  if tc_find_enum_variant(node_value[id]) == 0 then return 0;
+  let arg: int = node_a[id];
+  let field: int = node_b[tc_variant_member];
+  while arg != 0 && field != 0 {
+    tc_expr(arg);
+    let ak: int = tc_kind; let an: int = tc_name; let aek: int = tc_elem_kind; let aen: int = tc_elem_name;
+    tc_type_node(node_b[field]);
+    if tc_same_full(ak, an, aek, aen, tc_kind, tc_name, tc_elem_kind, tc_elem_name) == 0 then { tc_fail(12); return 1; }
+    arg = node_next[arg]; field = node_next[field];
+  }
+  if arg != 0 || field != 0 then { tc_fail(13); return 1; }
+  tc_kind = TY_NAMED;
+  tc_name = tc_variant_enum;
+  tc_elem_kind = 0;
+  tc_elem_name = 0;
+  tc_result_type = ast_node(TY_NAMED, 0, 0, 0, tc_variant_enum, 0);
+  node_aux[id] = tc_result_type;
+  return 1;
+}
+
 func tc_expr(id: int): void {
   tc_kind = TY_INT; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0; tc_result_type = 0; tc_expr_borrow_source = 0 - 1;
   if id != 0 then tc_error_pos = node_pos[id];
@@ -3592,6 +3748,7 @@ func tc_expr(id: int): void {
   if k == N_NULL then { tc_kind = TY_PTR; tc_name = 0; tc_elem_kind = TY_VOID; tc_elem_name = 0; tc_result_type = ast_node(TY_PTR, ast_node(TY_VOID, 0, 0, 0, 0, 0), 0, 0, 0, 0); return; }
   if k == N_BOOL then { tc_kind = TY_BOOL; tc_result_type = ast_node(TY_BOOL, 0, 0, 0, 0, 0); return; }
   if k == N_STRING then { tc_kind = TY_STRING; tc_result_type = ast_node(TY_STRING, 0, 0, 0, 0, 0); return; }
+  if k == N_VARIANT then { tc_check_variant(id); return; }
   if k == N_VAR then {
     if tc_lookup_var(node_value[id]) == 1 then { if tc_last_var_moved == 1 then tc_fail(33); tc_expr_borrow_source = tc_var_borrow_source[tc_last_var_index]; tc_result_type = tc_last_var_type; node_aux[id] = tc_last_var_type; return; }
     let e: int = tc_find_enum_value(node_value[id]);
@@ -3641,6 +3798,35 @@ func tc_expr(id: int): void {
       if tc_elem_kind == TY_GENERIC then { base_kind = TY_GENERIC; base_name = tc_elem_name; }
       else { base_kind = TY_NAMED; base_name = tc_elem_name; }
     }
+    if base_kind == TY_VARIANT then {
+      let variant: int = base_name;
+      let payload_field: int = node_b[variant];
+      while payload_field != 0 {
+        if node_a[payload_field] == node_value[id] then { tc_type_node(node_b[payload_field]); return; }
+        payload_field = node_next[payload_field];
+      }
+      tc_fail(11); return;
+    }
+    if base_kind == TY_NAMED then {
+      if node_value[id] == sym_tag_id() && tc_find_enum(base_name) != 0 then { tc_kind = TY_INT; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0; return; }
+      let enum_decl: int = tc_find_enum(base_name);
+      if enum_decl != 0 then {
+        let variant_item: int = node_a[enum_decl];
+        while variant_item != 0 {
+          if node_a[variant_item] == node_value[id] then {
+            if node_b[variant_item] == 0 then { tc_fail(11); return; }
+            tc_kind = TY_VARIANT;
+            tc_name = variant_item;
+            tc_elem_kind = 0;
+            tc_elem_name = 0;
+            tc_result_type = ast_node(TY_VARIANT, 0, 0, 0, variant_item, base_name);
+            node_aux[id] = tc_result_type;
+            return;
+          }
+          variant_item = node_next[variant_item];
+        }
+      }
+    }
     if base_kind == TY_GENERIC then {
       let base_ty: int = base_name;
       let sgen: int = tc_find_struct(node_value[base_ty]);
@@ -3666,6 +3852,7 @@ func tc_expr(id: int): void {
     tc_fail(11); return;
   }
   if k == N_CALL then {
+    if tc_check_variant(id) == 1 then { node_kind[id] = N_VARIANT; return; }
     let call_name: int = node_value[id];
     let btag: int = bi_tag(call_name);
     if btag == BI_TC_MEM_ALLOC then {
@@ -3890,11 +4077,35 @@ func tc_find_enum_value(name: int): int {
   return 0;
 }
 
+func tc_find_enum_variant(name: int): int {
+  tc_variant_enum = 0;
+  tc_variant_member = 0;
+  let item: int = node_a[tc_root];
+  while item != 0 {
+    if node_kind[item] == N_ENUM then {
+      let f: int = node_a[item];
+      while f != 0 {
+        let qualified: int = sym_qualified(node_value[item], node_a[f]);
+        if qualified == name then { tc_variant_enum = node_value[item]; tc_variant_member = f; return 1; }
+        f = node_next[f];
+      }
+    }
+    item = node_next[item];
+  }
+  return 0;
+}
+
 func tc_emit_field_type(id: int): int {
   if id == 0 || node_kind[id] != N_FIELD_ACCESS then return 0;
   let base_ty: int = tc_emit_arg_type(node_a[id]);
   if base_ty == 0 then return 0;
   base_ty = gen_substitute_type(base_ty);
+  if node_kind[base_ty] == TY_VARIANT then {
+    let variant_item: int = node_value[base_ty];
+    let variant_field: int = node_b[variant_item];
+    while variant_field != 0 { if node_a[variant_field] == node_value[id] then return gen_substitute_type(node_b[variant_field]); variant_field = node_next[variant_field]; }
+    return 0;
+  }
   let struct_name: int = 0;
   let args: int = 0;
   if node_kind[base_ty] == TY_GENERIC then { struct_name = node_value[base_ty]; args = node_a[base_ty]; }
@@ -3917,6 +4128,7 @@ func tc_emit_field_type(id: int): int {
 
 func tc_emit_arg_type(id: int): int {
   if id == 0 then return 0;
+  if node_kind[id] == N_FIELD_ACCESS && node_aux[id] != 0 && node_kind[node_aux[id]] == TY_VARIANT then return node_aux[id];
   if node_kind[id] == N_FIELD_ACCESS then {
     let field_ty: int = tc_emit_field_type(id);
     if field_ty != 0 then return field_ty;
@@ -4254,6 +4466,7 @@ func emit_c_token(out: int*, kind: int, value: int): void {
     else if value == 18 then write_string(out, "float ");
     else if value == 19 then write_string(out, "long ");
     else if value == 20 then write_string(out, "long long ");
+    else if value == 21 then write_string(out, "union ");
     else if value == 17 then write_string(out, "char ");
   } else if kind == C_IDENT then {
     if value == -1001 then write_string(out, "printf");
