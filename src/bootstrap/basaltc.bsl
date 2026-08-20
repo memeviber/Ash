@@ -15,6 +15,7 @@ let N_VAR: int = 4;
 let N_BINOP: int = 5;
 let N_CALL: int = 6;
 let N_INDIRECT_CALL: int = 37;
+let N_COMPOUND_ASSIGN: int = 38;
 let N_DEREF: int = 7;
 let N_INDEX: int = 8;
 let N_ADDRESS: int = 9;
@@ -489,7 +490,7 @@ func gen_collect_stmt(id: int): void {
   let k: int = node_kind[id];
   if k == N_LET || k == N_CONST then { gen_collect_type(node_b[id]); gen_collect_expr(node_c[id]); return; }
   if k == N_GLOBAL then { gen_collect_type(node_b[id]); gen_collect_expr(node_c[id]); return; }
-  if k == N_ASSIGN then { gen_collect_expr(node_a[id]); gen_collect_expr(node_b[id]); return; }
+  if k == N_ASSIGN || k == N_COMPOUND_ASSIGN then { gen_collect_expr(node_a[id]); gen_collect_expr(node_b[id]); return; }
   if k == N_PRINT || k == N_EXPR || k == N_RETURN then { gen_collect_expr(node_a[id]); return; }
   if k == N_BLOCK then { let x: int = node_a[id]; while x != 0 { gen_collect_stmt(x); x = node_next[x]; } return; }
   if k == N_IF then { gen_collect_expr(node_a[id]); gen_collect_stmt(node_b[id]); gen_collect_stmt(node_c[id]); return; }
@@ -890,6 +891,28 @@ func gen_assignment(lhs: int, rhs: int): void {
   } else gen_expr(rhs);
 }
 
+func compound_c_operator(op: int): int {
+  if op == OP_ADD then return 19;
+  if op == OP_SUB then return 20;
+  if op == OP_MUL then return 21;
+  if op == OP_DIV then return 22;
+  if op == OP_MOD then return 23;
+  if op == OP_BITAND then return 24;
+  if op == OP_BITOR then return 25;
+  if op == OP_BITXOR then return 26;
+  if op == OP_SHL then return 27;
+  if op == OP_SHR then return 28;
+  return 19;
+}
+
+func gen_compound_assignment(lhs: int, op: int, rhs: int): void {
+  gen_expr(lhs);
+  code_emit(C_OP, compound_c_operator(op));
+  if gen_expr_kind(lhs) == TY_FLOAT && gen_expr_kind(rhs) != TY_FLOAT then {
+    code_emit(C_PUNCT, 4); code_emit(C_KW, 18); code_emit(C_PUNCT, 5); code_emit(C_PUNCT, 4); gen_expr(rhs); code_emit(C_PUNCT, 5);
+  } else gen_expr(rhs);
+}
+
 func gen_for_clause(id: int): void {
   if id == 0 then return;
   if node_kind[id] == N_LET then {
@@ -899,6 +922,8 @@ func gen_for_clause(id: int): void {
     gen_initializer(node_b[id], node_c[id]);
   } else if node_kind[id] == N_ASSIGN then {
     gen_assignment(node_a[id], node_b[id]);
+  } else if node_kind[id] == N_COMPOUND_ASSIGN then {
+    gen_compound_assignment(node_a[id], node_value[id], node_b[id]);
   } else if node_kind[id] == N_EXPR then gen_expr(node_a[id]);
 }
 
@@ -954,6 +979,10 @@ func gen_stmt(id: int): void {
     code_emit(C_NEWLINE, 0);
   } else if k == N_ASSIGN then {
     gen_assignment(node_a[id], node_b[id]);
+    code_emit(C_PUNCT, 12);
+    code_emit(C_NEWLINE, 0);
+  } else if k == N_COMPOUND_ASSIGN then {
+    gen_compound_assignment(node_a[id], node_value[id], node_b[id]);
     code_emit(C_PUNCT, 12);
     code_emit(C_NEWLINE, 0);
   } else if k == N_PRINT then {
@@ -1649,8 +1678,7 @@ func ast_take_compound_operator(): int {
 }
 
 func ast_compound_assign(left: int, op: int, right: int): int {
-  let combined: int = ast_node(N_BINOP, left, right, 0, op, 0);
-  return ast_node(N_ASSIGN, left, combined, 0, 0, 0);
+  return ast_node(N_COMPOUND_ASSIGN, left, right, 0, op, 0);
 }
 
 func ast_expr_prec(min_prec: int): int {
@@ -1662,6 +1690,11 @@ func ast_expr_prec(min_prec: int): int {
       if index < 0 then return (0 - 1);
       if input_take(T_RBRACK) == 0 then return (0 - 1);
       left = ast_node(N_INDEX, left, index, 0, 0, 0);
+    } else if input_take(T_DOT) == 1 then {
+      if input_peek() != T_ID then return (0 - 1);
+      let field: int = input_payload();
+      input_pos = input_pos + 1;
+      left = ast_node(N_FIELD_ACCESS, left, 0, 0, field, 0);
     } else {
       let p: int = ast_precedence(input_peek());
       if p < min_prec then return left;
@@ -1771,9 +1804,15 @@ func ast_stmt(): int {
       } else {
         let l: int = ast_expr();
         if l < 0 then return (0 - 1);
-        if input_take(T_EQUAL) == 0 then return (0 - 1);
-        let r: int = ast_expr();
-        init = ast_node(N_ASSIGN, l, r, 0, 0, 0);
+        if input_take(T_EQUAL) == 1 then {
+          let r: int = ast_expr();
+          init = ast_node(N_ASSIGN, l, r, 0, 0, 0);
+        } else {
+          let cop: int = ast_take_compound_operator();
+          if cop == 0 then return (0 - 1);
+          let r: int = ast_expr();
+          init = ast_compound_assign(l, cop, r);
+        }
       }
     }
     if input_take(T_SEMI) == 0 then return (0 - 1);
@@ -3815,11 +3854,15 @@ func tc_stmt(id: int, expected_kind: int, expected_name: int): void {
     tc_add_var(node_a[id], dk, dn, de, den, node_b[id]);
     if dk == TY_DYN_ARRAY || tc_owned_initializer(node_c[id]) == 1 then tc_var_owned[tc_last_var_index] = 1;
     if dk == TY_PTR then { if rhs_borrow < 0 then { } else tc_record_borrow(tc_last_var_index, rhs_borrow); }
-  } else if k == N_ASSIGN then {
+  } else if k == N_ASSIGN || k == N_COMPOUND_ASSIGN then {
     if node_kind[node_a[id]] == N_VAR && sym_type[node_value[node_a[id]]] > 100 then tc_fail(31);
     tc_expr(node_a[id]); let lk: int = tc_kind; let ln: int = tc_name; let le: int = tc_elem_kind; let len: int = tc_elem_name; let lhs_borrow: int = tc_expr_borrow_source; let lhs_index: int = tc_last_var_index;
     tc_require_mutable(node_a[id]);
     tc_expr(node_b[id]); let rhs_borrow_assign: int = tc_expr_borrow_source;
+    if k == N_COMPOUND_ASSIGN then {
+      let combined: int = ast_node(N_BINOP, node_a[id], node_b[id], 0, node_value[id], 0);
+      tc_expr(combined);
+    }
     if lk == TY_DYN_ARRAY && node_kind[node_b[id]] == N_VAR then tc_fail(40);
     if tc_same_full(lk, ln, le, len, tc_kind, tc_name, tc_elem_kind, tc_elem_name) == 0 then { if (node_kind[node_b[id]] != N_INT || node_value[node_b[id]] != 0) && node_kind[node_b[id]] != N_NULL then tc_fail(21); }
     if tc_ok == 1 && node_kind[node_a[id]] == N_VAR && lk == TY_DYN_ARRAY then {
@@ -4070,8 +4113,19 @@ func emit_c_token(out: int*, kind: int, value: int): void {
     else if value == 14 then write_string(out, "^");
     else if value == 15 then write_string(out, "<<");
     else if value == 16 then write_string(out, ">>");
-    else if value == 17 then write_string(out, "%");
+    else     if value == 17 then write_string(out, "%");
     else if value == 18 then write_string(out, ":");
+    else if value == 19 then write_string(out, "+=");
+    else if value == 20 then write_string(out, "-=");
+    else if value == 21 then write_string(out, "*=");
+    else if value == 22 then write_string(out, "/=");
+    else if value == 23 then write_string(out, "%=");
+    else if value == 24 then write_string(out, "&=");
+    else if value == 25 then write_string(out, "|=");
+    else if value == 26 then write_string(out, "^=");
+    else if value == 27 then write_string(out, "<<=");
+    else if value == 28 then write_string(out, ">>=");
+
   } else if kind == C_PUNCT then {
     if value == 1 then write_string(out, "*");
     else if value == 2 then write_string(out, "[");

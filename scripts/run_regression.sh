@@ -115,6 +115,7 @@ compile_run "$ROOT/tests/regression/option_test.bsl" option_test
 compile_run "$ROOT/tests/regression/option_result_combinators_test.bsl" option_result_combinators_test
 compile_run "$ROOT/tests/regression/string_builder_iter_test.bsl" string_builder_iter_test
 compile_run "$ROOT/tests/regression/numeric_compound_test.bsl" numeric_compound_test
+compile_run "$ROOT/tests/regression/compound_assignment_side_effect_test.bsl" compound_assignment_side_effect_test
 compile_run_with_input "$ROOT/tests/regression/io_safe_test.bsl" io_safe_test $'42\nbad-number\nBasalt-OVERFLOW\nok\n' $'safe-io\n42\nBasalt-\n'
 compile_run_with_input "$ROOT/tests/regression/io_safe_edge_test.bsl" io_safe_edge_test $'-17\n999999999999999999999999999999999999999999999\n' ''
 expect_runtime_failure_with_input "$ROOT/tests/regression/io_invalid_limit.bsl" io_invalid_limit '' 2
