@@ -9,10 +9,10 @@ The repository keeps two C artifacts with distinct roles:
 | Artifact | Role | Policy |
 |---|---|---|
 | `src/bootstrap/basaltc.bsl.c` | Historical C artifact preserved from the previous development generation | Never overwrite it during modern development |
-| `src/bootstrap/basaltc.modern.c` | Immutable C compiler seed used as the previous-generation boundary | Compile it only to translate the current Bootstrap source |
+| `src/bootstrap/basaltc.seed.c` | Immutable C compiler seed used as the previous-generation boundary | Compile it only to translate the current Bootstrap source |
 | `.tmp/*/basaltc.current.c` | Current-generation C compiler generated from `basaltc.bsl` | Temporary; compile it to produce the compiler used by modern tests |
 
-Every active runner performs two stages. First, strict C11 GCC compiles `basaltc.modern.c` into a seed binary. Second, that seed binary translates the current `src/bootstrap/basaltc.bsl` into a current-generation C compiler, which is then compiled and used for all new language, standard-library, and fixture work. The current Bootstrap source is therefore free to evolve; it is not required to match the stored seed's source text.
+Every active runner performs two stages. First, strict C11 GCC compiles `basaltc.seed.c` into a seed binary. Second, that seed binary translates the current `src/bootstrap/basaltc.bsl` into a current-generation C compiler, which is then compiled and used for all new language, standard-library, and fixture work. The current Bootstrap source is therefore free to evolve; it is not required to match the stored seed's source text.
 
 ## Development loop
 
@@ -26,13 +26,13 @@ bash scripts/run_ownership_stress.sh
 python3 scripts/run_memory_sanitizer.py
 ```
 
-New language features must be implemented in `src/bootstrap/basaltc.bsl`, and new tests must be compiled and run through the Bootstrap compiler produced from `basaltc.modern.c`. Generated C files and binaries belong only in `.tmp/` and must not be committed.
+New language features must be implemented in `src/bootstrap/basaltc.bsl`, and new tests must be compiled and run through the Bootstrap compiler produced from `basaltc.seed.c`. Generated C files and binaries belong only in `.tmp/` and must not be committed.
 
 ## Fixed point
 
 `scripts/fixed_point.sh` uses the stored modern compiler and performs the contemporary self-hosting loop:
 
-1. The frozen `basaltc.modern.c` is compiled to a seed binary.
+1. The frozen `basaltc.seed.c` is compiled to a seed binary.
 2. The seed translates the current `basaltc.bsl` to `n2.c`; this may differ from the frozen seed because the source is allowed to evolve.
 3. `n2.c` is compiled to `n2.bin`, which translates the source to `n3.c`.
 4. `n3.c` is compiled to `n3.bin`, which translates the source to `n4.c`.

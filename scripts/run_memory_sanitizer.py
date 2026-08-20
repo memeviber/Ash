@@ -327,7 +327,7 @@ def main() -> int:
     source.write_text(BASALT_SOURCE, encoding="utf-8")
     c_source.write_text(C_SOURCE, encoding="utf-8")
 
-    seed_source = root / "src" / "bootstrap" / "basaltc.modern.c"
+    seed_source = root / "src" / "bootstrap" / "basaltc.seed.c"
     seed_compiler = binaries / "bootstrap.seed.bin"
     current_source = sources / "basaltc.current.c"
     bootstrap_compiler = binaries / "bootstrap.current.bin"

@@ -14,7 +14,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / ".tmp" / "code_buffer_v3"
-MODERN_C = ROOT / "src" / "bootstrap" / "basaltc.modern.c"
+MODERN_C = ROOT / "src" / "bootstrap" / "basaltc.seed.c"
 ASSIGNMENTS = 20_000
 EXPECTED = f"{ASSIGNMENTS}\n"
 STRICT = ["-std=c11", "-Wall", "-Wextra", "-Wpedantic", "-Wconversion", "-Wshadow", "-Werror"]
