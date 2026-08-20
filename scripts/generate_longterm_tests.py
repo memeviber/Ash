@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Generate a deterministic long-term Basalt conformance corpus.
 
-The generated cases are deliberately small and independent so Host and Bootstrap
-can compile them in the same runner.  They are not random fuzz inputs: every
+The generated cases are deliberately small and independent so the Bootstrap
+compiler can compile them repeatedly in the conformance runner.  They are not random fuzz inputs: every
 family has an explicit semantic target and stable expected result.
 """
 from pathlib import Path

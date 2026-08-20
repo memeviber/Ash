@@ -2,9 +2,8 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-COMPILER="$ROOT/src/compiler/_build/default/bin/basaltc.exe"
 BOOT_SOURCE="$ROOT/src/bootstrap/basaltc.bsl"
-BOOT_C="$ROOT/src/bootstrap/basaltc.bsl.c"
+MODERN_C="$ROOT/src/bootstrap/basaltc.modern.c"
 BOOT_BIN="$ROOT/.tmp/bootstrap.bin"
 OUT="$ROOT/.tmp/regression"
 mkdir -p "$OUT"
@@ -12,16 +11,15 @@ mkdir -p "$OUT"
 GENERATED_SOURCES=()
 track_source() { GENERATED_SOURCES+=("$1"); }
 cleanup_generated() {
-  rm -f "$ROOT/src/bootstrap/basaltc"
   for source in "${GENERATED_SOURCES[@]}"; do
     rm -f "${source}.c" "${source%.bsl}"
   done
 }
 trap cleanup_generated EXIT
 
-(cd "$ROOT/src/compiler" && dune build bin/basaltc.exe)
-(cd "$ROOT/src/compiler" && "$COMPILER" "$BOOT_SOURCE")
-gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror "$BOOT_C" -o "$BOOT_BIN"
+# The stored C compiler is the only compiler used for modern development.
+# Never invoke or build the frozen OCaml Host compiler.
+gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror "$MODERN_C" -o "$BOOT_BIN"
 
 assert_single_runtime_prologue() {
   local c_file=$1 label=$2
@@ -43,19 +41,14 @@ assert_single_runtime_prologue() {
 compile_run() {
   local source=$1 label=$2
   track_source "$source"
-  local host_c="$OUT/${label}.host.c" boot_c="$OUT/${label}.boot.c"
-  local host_bin="$OUT/${label}.host.bin" boot_bin="$OUT/${label}.boot.bin"
-  rm -f "$host_c" "$boot_c" "$host_bin" "$boot_bin" "$ROOT"/$(basename "$source").c
-  (cd "$(dirname "$source")" && "$COMPILER" "$(basename "$source")") >/dev/null
-  cp "${source}.c" "$host_c"
+  local boot_c="$OUT/${label}.boot.c"
+  local boot_bin="$OUT/${label}.boot.bin"
+  rm -f "$boot_c" "$boot_bin" "$ROOT"/$(basename "$source").c
   "$BOOT_BIN" "$source" "$boot_c" >/dev/null
   if [[ "$label" == "include_test_main" ]]; then
-    assert_single_runtime_prologue "$host_c" "$label (Host)"
     assert_single_runtime_prologue "$boot_c" "$label (Bootstrap)"
   fi
-  gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror "$host_c" -o "$host_bin"
   gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror "$boot_c" -o "$boot_bin"
-  "$host_bin"
   "$boot_bin"
   printf 'PASS %s\n' "$label"
 }
@@ -63,12 +56,8 @@ compile_run() {
 expect_reject() {
   local source=$1 label=$2
   track_source "$source"
-  local host_log="$OUT/${label}.host.log" boot_log="$OUT/${label}.boot.log"
+  local boot_log="$OUT/${label}.boot.log"
   rm -f "${source}.c" "$OUT/${label}.boot.c"
-  if (cd "$(dirname "$source")" && "$COMPILER" "$(basename "$source")") >"$host_log" 2>&1; then
-    echo "FAIL $label: Host accepted invalid source" >&2
-    return 1
-  fi
   if "$BOOT_BIN" "$source" "$OUT/${label}.boot.c" >"$boot_log" 2>&1; then
     echo "FAIL $label: Bootstrap accepted invalid source" >&2
     return 1
@@ -80,7 +69,6 @@ expect_reject() {
 expect_collision_reject() {
   local source=$1 label=$2
   expect_reject "$source" "$label"
-  grep -Fq 'C symbol collision' "$OUT/${label}.host.log"
   grep -Fq 'distinct functions collide after C mangling' "$OUT/${label}.boot.log"
 }
 
@@ -101,8 +89,6 @@ compile_run "$ROOT/tests/regression/stress_containers_loop.bsl" stress_container
 compile_run "$ROOT/tests/regression/generic_map_probe.bsl" generic_map_probe
 compile_run "$ROOT/tests/regression/include_test_main.bsl" include_test_main
 compile_run "$ROOT/tests/regression/print_pointer_test.bsl" print_pointer_test
-grep -Fq '%p' "$OUT/print_pointer_test.host.c"
-grep -Fq '(void*)' "$OUT/print_pointer_test.host.c"
 grep -Fq '%p' "$OUT/print_pointer_test.boot.c"
 grep -Fq '(void*)' "$OUT/print_pointer_test.boot.c"
 printf 'PASS print_pointer_test format guard\n'
@@ -129,4 +115,4 @@ expect_reject "$ROOT/tests/regression/deref_non_pointer.bsl" deref_non_pointer
 expect_reject "$ROOT/tests/regression/index_non_container.bsl" index_non_container
 expect_reject "$ROOT/tests/regression/indirect_call_non_function.bsl" indirect_call_non_function
 expect_reject "$ROOT/tests/regression/reserved_runtime_function.bsl" reserved_runtime_function
-printf 'Regression checks completed successfully.\n'
+printf 'Bootstrap-only regression checks completed successfully.\n'

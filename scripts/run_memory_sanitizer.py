@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Run repeatable ASan/LSan/UBSan ownership checks for Basalt and C.
+"""Run repeatable ASan/LSan/UBSan ownership checks for Bootstrap Basalt and C.
 
 The harness deliberately keeps the generated fixtures in .tmp so no binaries or
-large generated C files enter the repository. It checks Basalt Host, Basalt
-Bootstrap, and a hand-written C baseline with the same observable result.
+large generated C files enter the repository. It checks the frozen Bootstrap
+compiler and a hand-written C baseline with the same observable result.
 """
 
 from __future__ import annotations
@@ -276,13 +276,13 @@ def text_of(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="replace") if path.exists() else ""
 
 
-def compile_basalt(host: Path, source: Path, cwd: Path, log_dir: Path, label: str) -> Path:
+def compile_basalt(compiler: Path, source: Path, cwd: Path, log_dir: Path, label: str) -> Path:
     stdout = log_dir / f"{label}.compile.out"
     stderr = log_dir / f"{label}.compile.err"
-    result = run([str(host), source.name], cwd=cwd, stdout=stdout, stderr=stderr)
+    result = run([str(compiler), str(source), str(cwd / f"{source.stem}.{label}.c")], cwd=cwd, stdout=stdout, stderr=stderr)
     if result.returncode != 0:
-        raise RuntimeError(f"Basalt Host compilation failed for {label}; see {stderr}")
-    generated = cwd / f"{source.name}.c"
+        raise RuntimeError(f"Bootstrap compilation failed for {label}; see {stderr}")
+    generated = cwd / f"{source.stem}.{label}.c"
     if not generated.exists():
         raise RuntimeError(f"Basalt did not produce {generated}")
     return generated
@@ -326,30 +326,15 @@ def main() -> int:
     source.write_text(BASALT_SOURCE, encoding="utf-8")
     c_source.write_text(C_SOURCE, encoding="utf-8")
 
-    compiler_dir = root / "src" / "compiler"
-    host = compiler_dir / "_build" / "default" / "bin" / "basaltc.exe"
-    build = run(["dune", "build", "bin/basaltc.exe"], cwd=compiler_dir,
-                stdout=logs / "dune-build.out", stderr=logs / "dune-build.err")
-    if build.returncode != 0:
-        raise RuntimeError(f"Host build failed; see {logs / 'dune-build.err'}")
-    if not host.exists():
-        raise RuntimeError(f"Missing Host compiler: {host}")
-
-    host_generated = compile_basalt(host, source, sources, logs, "host")
-    bootstrap_source = root / "src" / "bootstrap" / "basaltc.bsl.c"
+    modern_source = root / "src" / "bootstrap" / "basaltc.modern.c"
     bootstrap_compiler = binaries / "bootstrap.bin"
-    bootstrap_build = run(["gcc", *STRICT_FLAGS, str(bootstrap_source), "-o", str(bootstrap_compiler)],
+    bootstrap_build = run(["gcc", *STRICT_FLAGS, str(modern_source), "-o", str(bootstrap_compiler)],
                           stdout=logs / "bootstrap-build.out", stderr=logs / "bootstrap-build.err")
     if bootstrap_build.returncode != 0:
         raise RuntimeError(f"Bootstrap C build failed; see {logs / 'bootstrap-build.err'}")
-    bootstrap_generated = sources / "complex_ownership.bootstrap.c"
-    bootstrap_run = run([str(bootstrap_compiler), str(source), str(bootstrap_generated)],
-                        stdout=logs / "bootstrap-compile.out", stderr=logs / "bootstrap-compile.err")
-    if bootstrap_run.returncode != 0:
-        raise RuntimeError(f"Bootstrap compilation failed; see {logs / 'bootstrap-compile.err'}")
+    bootstrap_generated = compile_basalt(bootstrap_compiler, source, sources, logs, "bootstrap")
 
     artifacts = {
-        "host": host_generated,
         "bootstrap": bootstrap_generated,
         "c": c_source,
     }
@@ -388,7 +373,7 @@ def main() -> int:
 
 ## Result
 
-The complex ownership workload was compiled and run through the Basalt Host compiler, the Bootstrap compiler, and a hand-written C baseline under AddressSanitizer, LeakSanitizer leak detection, and UndefinedBehaviorSanitizer. Output parity: **{'PASS' if output_parity else 'FAIL'}**. Sanitizer status: **{'PASS' if sanitizer_clean else 'FAIL'}**.
+The complex ownership workload was compiled and run through the frozen Bootstrap compiler and a hand-written C baseline under AddressSanitizer, LeakSanitizer leak detection, and UndefinedBehaviorSanitizer. Output parity: **{'PASS' if output_parity else 'FAIL'}**. Sanitizer status: **{'PASS' if sanitizer_clean else 'FAIL'}**.
 
 | Variant | Return code | Output | Sanitizer diagnostics |
 |---|---:|---|---|
