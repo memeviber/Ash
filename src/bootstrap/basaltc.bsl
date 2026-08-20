@@ -91,6 +91,7 @@ let node_value: int* = 0;
 let node_aux: int* = 0;
 let node_pos: int* = 0;
 let node_scope: int* = 0;
+let ast_parse_mode: int = 0;
 let node_count: int = 1;
 let ast_namespace_scope: int = 0;
 
@@ -104,6 +105,19 @@ let input_cap: int = 0;
 let source_cap: int = 0;
 let c_source_cap: int = 0;
 let sym_cap: int = 0;
+let source_file_at: int* = 0;
+let source_line_at: int* = 0;
+let source_file_name_start: int* = 0;
+let source_file_name_len: int* = 0;
+let source_file_name_text: int* = 0;
+let source_file_count: int = 1;
+let source_file_cap: int = 0;
+let source_file_name_text_len: int = 0;
+let source_file_name_text_cap: int = 0;
+let source_active_file: int = 0;
+let source_active_line: int = 1;
+let gen_source_pos: int = 0;
+let gen_source_epoch: int = 0;
 
 func next_capacity(old: int, need: int): int {
   let n: int = old;
@@ -141,6 +155,8 @@ func ensure_code(need: int): void {
   let n: int = next_capacity(code_cap, need);
   code_kind = grow_ints(code_kind, code_cap, n);
   code_value = grow_ints(code_value, code_cap, n);
+  code_pos = grow_ints(code_pos, code_cap, n);
+  code_epoch = grow_ints(code_epoch, code_cap, n);
   code_cap = n;
 }
 
@@ -149,6 +165,7 @@ func ensure_input(need: int): void {
   let n: int = next_capacity(input_cap, need);
   input_kind = grow_ints(input_kind, input_cap, n);
   input_value = grow_ints(input_value, input_cap, n);
+  input_source_pos = grow_ints(input_source_pos, input_cap, n);
   input_cap = n;
 }
 
@@ -156,6 +173,8 @@ func ensure_source(need: int): void {
   if need < source_cap then return;
   let n: int = next_capacity(source_cap, need);
   source = grow_ints(source, source_cap, n);
+  source_file_at = grow_ints(source_file_at, source_cap, n);
+  source_line_at = grow_ints(source_line_at, source_cap, n);
   source_cap = n;
 }
 
@@ -175,6 +194,8 @@ func ensure_sym(need: int): void {
 
 func ast_node(kind: int, a: int, b: int, c: int, value: int, aux: int): int {
   let id: int = node_count;
+  let parse_pos: int = current_source_pos;
+  if ast_parse_mode == 1 && input_pos > 0 && input_pos < input_count + 1 then parse_pos = input_source_pos[input_pos - 1];
   ensure_node(id);
   node_kind[id] = kind;
   node_a[id] = a;
@@ -183,7 +204,7 @@ func ast_node(kind: int, a: int, b: int, c: int, value: int, aux: int): int {
   node_next[id] = 0;
   node_value[id] = value;
   node_aux[id] = aux;
-  node_pos[id] = current_source_pos;
+  node_pos[id] = parse_pos;
   node_scope[id] = ast_namespace_scope;
   node_count = node_count + 1;
   return id;
@@ -253,6 +274,8 @@ let C_PUNCT: int = 6;
 let C_NEWLINE: int = 7;
 let code_kind: int* = 0;
 let code_value: int* = 0;
+let code_pos: int* = 0;
+let code_epoch: int* = 0;
 let code_count: int = 0;
 let emit_for_step: int = 0;
 // v3 regression snapshots are growable as well; no fixed 65536-token limit.
@@ -354,6 +377,8 @@ func code_emit(kind: int, value: int): void {
   ensure_code(code_count);
   code_kind[code_count] = kind;
   code_value[code_count] = value;
+  code_pos[code_count] = gen_source_pos;
+  code_epoch[code_count] = gen_source_epoch;
   code_count = code_count + 1;
 }
 
@@ -957,6 +982,8 @@ func gen_decl(ty: int, name: int): void {
 }
 
 func gen_stmt(id: int): void {
+  gen_source_pos = node_pos[id];
+  gen_source_epoch = gen_source_epoch + 1;
   let k: int = node_kind[id];
   if k == N_GLOBAL then {
     gen_decl(node_b[id], node_a[id]);
@@ -1112,6 +1139,8 @@ func gen_function_specialized(decl: int, inst: int, cname: int): void {
 }
 
 func gen_struct_decl(id: int): void {
+  gen_source_pos = node_pos[id];
+  gen_source_epoch = gen_source_epoch + 1;
   code_emit(C_KW, 12);
   code_emit(C_IDENT, sym_c_symbol(node_value[id]));
   code_emit(C_PUNCT, 13);
@@ -1128,6 +1157,8 @@ func gen_struct_decl(id: int): void {
 }
 
 func gen_enum_decl(id: int): void {
+  gen_source_pos = node_pos[id];
+  gen_source_epoch = gen_source_epoch + 1;
   code_emit(C_KW, 14);
   code_emit(C_KW, 13);
   code_emit(C_IDENT, sym_c_symbol(node_value[id]));
@@ -1171,12 +1202,16 @@ func gen_function_signature(id: int): void {
 }
 
 func gen_prototype(id: int): void {
+  gen_source_pos = node_pos[id];
+  gen_source_epoch = gen_source_epoch + 1;
   gen_function_signature(id);
   code_emit(C_PUNCT, 12);
   code_emit(C_NEWLINE, 0);
 }
 
 func gen_function(id: int): void {
+  gen_source_pos = node_pos[id];
+  gen_source_epoch = gen_source_epoch + 1;
   gen_function_signature(id);
   if bi_has_flag(node_value[id], BI_FLAG_MAIN) == 1 && node_kind[node_a[id]] == N_BLOCK then {
     code_emit(C_PUNCT, 13);
@@ -1195,6 +1230,8 @@ func gen_function(id: int): void {
 
 func gen_program(id: int): void {
   let gen_saved_node_count: int = node_count;
+  gen_source_pos = 0;
+  gen_source_epoch = 0;
   code_reset(); gen_spec_count = 0; gen_name_override = 0;
   let item: int = node_a[id];
   while item != 0 {
@@ -1362,6 +1399,7 @@ let T_TLONG: int = 73;
 
 let input_kind: int* = 0;
 let input_value: int* = 0;
+let input_source_pos: int* = 0;
 let input_count: int = 0;
 let input_pos: int = 0;
 let debug_tokens: int = 0;
@@ -1372,10 +1410,11 @@ func input_reset(): void {
   input_pos = 0;
 }
 
-func input_put(kind: int, value: int): void {
+func input_put(kind: int, value: int, pos: int): void {
   ensure_input(input_count);
   input_kind[input_count] = kind;
   input_value[input_count] = value;
+  input_source_pos[input_count] = pos;
   input_count = input_count + 1;
 }
 
@@ -2199,16 +2238,112 @@ func c_source_put(c: int): void {
   c_source_len = c_source_len + 1;
 }
 
+func ensure_source_file_names(need: int): void {
+  if need < source_file_cap then return;
+  let n: int = next_capacity(source_file_cap, need);
+  source_file_name_start = grow_ints(source_file_name_start, source_file_cap, n);
+  source_file_name_len = grow_ints(source_file_name_len, source_file_cap, n);
+  source_file_cap = n;
+}
+
+func ensure_source_file_text(need: int): void {
+  if need < source_file_name_text_cap then return;
+  let n: int = next_capacity(source_file_name_text_cap, need);
+  source_file_name_text = grow_ints(source_file_name_text, source_file_name_text_cap, n);
+  source_file_name_text_cap = n;
+}
+
+func source_path_length(path: string): int {
+  let n: int = 0;
+  while path[n] != '\0' { n = n + 1; }
+  return n;
+}
+
+func source_file_intern(path: string): int {
+  let length: int = source_path_length(path);
+  let id: int = 1;
+  while id < source_file_count {
+    if source_file_name_len[id] == length then {
+      let i: int = 0;
+      let same: int = 1;
+      while i < length { if source_file_name_text[source_file_name_start[id] + i] != path[i] then same = 0; i = i + 1; }
+      if same == 1 then return id;
+    }
+    id = id + 1;
+  }
+  id = source_file_count;
+  ensure_source_file_names(id);
+  ensure_source_file_text(source_file_name_text_len + length);
+  source_file_name_start[id] = source_file_name_text_len;
+  source_file_name_len[id] = length;
+  let j: int = 0;
+  while j < length { source_file_name_text[source_file_name_text_len + j] = path[j]; j = j + 1; }
+  source_file_name_text_len = source_file_name_text_len + length;
+  source_file_count = source_file_count + 1;
+  return id;
+}
+
+func source_file_intern_include(line: int*, length: int, base_id: int): int {
+  let q: int = 0;
+  while q < length && line[q] != 34 { q = q + 1; }
+  if q == length then return base_id;
+  let a: int = q + 1;
+  let b: int = a;
+  while b < length && line[b] != 34 { b = b + 1; }
+  if b == length then return base_id;
+  let base_len: int = 0;
+  if base_id > 0 then base_len = source_file_name_len[base_id];
+  let prefix_len: int = 0;
+  let p: int = base_len;
+  let found_slash: int = 0;
+  while p > 0 && found_slash == 0 {
+    if source_file_name_text[source_file_name_start[base_id] + p - 1] == 47 || source_file_name_text[source_file_name_start[base_id] + p - 1] == 92 then { prefix_len = p; found_slash = 1; }
+    else p = p - 1;
+  }
+  let raw_len: int = b - a;
+  let total: int = prefix_len + raw_len;
+  let id: int = 1;
+  while id < source_file_count {
+    if source_file_name_len[id] == total then {
+      let i: int = 0;
+      let same: int = 1;
+      while i < prefix_len { if source_file_name_text[source_file_name_start[id] + i] != source_file_name_text[source_file_name_start[base_id] + i] then same = 0; i = i + 1; }
+      i = 0;
+      while i < raw_len { if source_file_name_text[source_file_name_start[id] + prefix_len + i] != line[a + i] then same = 0; i = i + 1; }
+      if same == 1 then return id;
+    }
+    id = id + 1;
+  }
+  id = source_file_count;
+  ensure_source_file_names(id);
+  ensure_source_file_text(source_file_name_text_len + total);
+  source_file_name_start[id] = source_file_name_text_len;
+  source_file_name_len[id] = total;
+  let j: int = 0;
+  while j < prefix_len { source_file_name_text[source_file_name_text_len + j] = source_file_name_text[source_file_name_start[base_id] + j]; j = j + 1; }
+  j = 0;
+  while j < raw_len { source_file_name_text[source_file_name_text_len + prefix_len + j] = line[a + j]; j = j + 1; }
+  source_file_name_text_len = source_file_name_text_len + total;
+  source_file_count = source_file_count + 1;
+  return id;
+}
 
 func source_reset(): void {
   source_len = 0;
   source_pos = 0;
+  source_file_count = 1;
+  source_file_name_text_len = 0;
+  source_active_file = 0;
+  source_active_line = 1;
 }
 
 func source_put(c: int): void {
   ensure_source(source_len);
   source[source_len] = c;
+  source_file_at[source_len] = source_active_file;
+  source_line_at[source_len] = source_active_line;
   source_len = source_len + 1;
+  if c == 10 then source_active_line = source_active_line + 1;
 }
 
 func is_space(c: int): int {
@@ -2722,12 +2857,19 @@ func include_process_line(line: int*, length: int): void {
     while i < length { source_put(line[i]); i = i + 1; }
     source_put(10);
   } else {
+    let child_file: int = source_file_intern_include(line, length, source_active_file);
     let child: int* = basalt_include_open_line(line, length, mode);
     if child == 0 then {
       if basalt_include_last_status() == 1 then include_ok = 0;
     } else {
       if mode == 1 then {
+        let parent_file: int = source_active_file;
+        let parent_line: int = source_active_line;
+        source_active_file = child_file;
+        source_active_line = 1;
         include_expand_handle(child);
+        source_active_file = parent_file;
+        source_active_line = parent_line;
       } else {
         let c: int = read_char(child);
         while c != (0 - 1) { c_source_put(c); c = read_char(child); }
@@ -2741,9 +2883,10 @@ func include_process_line(line: int*, length: int): void {
 func include_expand_handle(handle: int*): void {
   let line: int* = alloc_ints(include_line_cap);
   let length: int = 0;
+  let line_number: int = 1;
   let c: int = read_char(handle);
   while c != (0 - 1) {
-    if c == 10 then { include_process_line(line, length); length = 0; }
+    if c == 10 then { include_process_line(line, length); length = 0; line_number = line_number + 1; source_active_line = line_number; }
     else {
       if length < include_line_cap then { line[length] = c; length = length + 1; }
       else include_ok = 0;
@@ -2857,6 +3000,8 @@ func load_tokens_from_file(path: string): void {
   let handle: int* = basalt_include_open_root(path);
   if handle == 0 then include_ok = 0;
   else {
+    source_active_file = source_file_intern(path);
+    source_active_line = 1;
     include_expand_handle(handle);
     close_file(handle);
     basalt_include_close();
@@ -2873,10 +3018,10 @@ func load_tokens_from_file(path: string): void {
       print "token.value";
       print tok_value;
     }
-    input_put(map_token(k), tok_value);
+    input_put(map_token(k), tok_value, tok_start);
     k = lexer_next();
   }
-  input_put(T_EOF, 0);
+  input_put(T_EOF, 0, source_pos);
 }
 
 // Bootstrap type checker. Types are represented by (kind, named-id) pairs so
@@ -3991,7 +4136,9 @@ func tc_program(root: int): int {
 func pipeline_main(path: string): int {
   load_tokens_from_file(path);
   node_count = 1;
+    ast_parse_mode = 1;
     let root: int = ast_program();
+    ast_parse_mode = 0;
   pipeline_root = root;
   let parsed: int = 1;
   if root < 0 then parsed = 0;
@@ -4059,6 +4206,31 @@ func emit_int_text(out: int*, value: int): void {
     emit_int_text(out, value / 10);
     write_char(out, 48 + (value - (value / 10) * 10));
   }
+}
+
+func emit_source_filename(out: int*, file_id: int): void {
+  let i: int = 0;
+  while i < source_file_name_len[file_id] {
+    let c: int = source_file_name_text[source_file_name_start[file_id] + i];
+    if c == 34 || c == 92 then { write_char(out, 92); write_char(out, c); }
+    else if c == 10 then { write_char(out, 92); write_char(out, 110); }
+    else if c == 13 then { write_char(out, 92); write_char(out, 114); }
+    else if c == 9 then { write_char(out, 92); write_char(out, 116); }
+    else write_char(out, c);
+    i = i + 1;
+  }
+}
+
+func emit_source_line(out: int*, pos: int): void {
+  if pos < 0 || pos > source_len - 1 then return;
+  let file_id: int = source_file_at[pos];
+  if file_id < 1 || file_id > source_file_count - 1 then return;
+  write_char(out, 10);
+  write_string(out, "#line ");
+  emit_int_text(out, source_line_at[pos]);
+  write_string(out, " \"");
+  emit_source_filename(out, file_id);
+  write_string(out, "\"\n");
 }
 
 func emit_c_token(out: int*, kind: int, value: int): void {
@@ -4173,7 +4345,7 @@ func emit_runtime(out: int*): void {
   write_string(out, "static BASALT_UNUSED size_t basalt_inc_find(char**v,size_t n,const char*p){size_t i;for(i=0;i<n;i++)if(basalt_inc_eq(v[i],p))return i;return (size_t)-1;}\n");
   write_string(out, "static BASALT_UNUSED void basalt_inc_add(char***vp,size_t*np,size_t*cp,char*p){size_t c;char**q;if(*np==*cp){c=*cp?*cp*2:16;q=(char**)realloc(*vp,c*sizeof(char*));if(!q)exit(2);*vp=q;*cp=c;}(*vp)[(*np)++]=p;}\n");
   write_string(out, "static BASALT_UNUSED char* basalt_inc_strdup(const char*p){size_t n=strlen(p);char*q=(char*)malloc(n+1);if(!q)exit(2);memcpy(q,p,n+1);return(char*)basalt_track(q);}\n");
-  write_string(out, "static BASALT_UNUSED char* basalt_inc_realpath(const char*p){\n#if defined(_WIN32)\nchar*q=_fullpath(NULL,p,0);if(q)return(char*)basalt_track(q);\n#else\nchar*q=realpath(p,NULL);if(q)return(char*)basalt_track(q);\n#endif\nreturn basalt_inc_strdup(p);}\n");
+  write_string(out, "static BASALT_UNUSED char* basalt_inc_realpath(const char*p){if(p&&p[0]==0&&basalt_inc_active_n)return basalt_inc_active[basalt_inc_active_n-1];\n#if defined(_WIN32)\nchar*q=_fullpath(NULL,p,0);if(q)return(char*)basalt_track(q);\n#else\nchar*q=realpath(p,NULL);if(q)return(char*)basalt_track(q);\n#endif\nreturn basalt_inc_strdup(p);}\n");
   write_string(out, "static BASALT_UNUSED int basalt_inc_begin(char*p){if(basalt_inc_find(basalt_inc_active,basalt_inc_active_n,p)!=(size_t)-1){basalt_inc_status=1;return 0;}if(basalt_inc_find(basalt_inc_loaded,basalt_inc_loaded_n,p)!=(size_t)-1){basalt_inc_status=2;return 0;}basalt_inc_add(&basalt_inc_active,&basalt_inc_active_n,&basalt_inc_active_cap,p);basalt_inc_status=0;return 1;}\n");
   write_string(out, "static BASALT_UNUSED void basalt_include_close(void){if(basalt_inc_active_n){char*p=basalt_inc_active[--basalt_inc_active_n];if(basalt_inc_find(basalt_inc_loaded,basalt_inc_loaded_n,p)==(size_t)-1)basalt_inc_add(&basalt_inc_loaded,&basalt_inc_loaded_n,&basalt_inc_loaded_cap,p);}}\n");
   write_string(out, "static BASALT_UNUSED char* basalt_inc_join(const char*base,const char*raw){const char*s=strrchr(base,'/');size_t n=s?(size_t)(s-base+1):0;size_t m=strlen(raw);char*q=(char*)malloc(n+m+1);if(!q)exit(2);if(n)memcpy(q,base,n);memcpy(q+n,raw,m+1);return(char*)basalt_track(q);}\n");
@@ -4219,7 +4391,12 @@ func emit_c_file(path: string): void {
   let ci: int = 0;
   while ci < c_source_len { write_char(out, c_source[ci]); ci = ci + 1; }
   let i: int = 0;
+  let last_epoch: int = (0 - 1);
   while i < code_count {
+    if code_epoch[i] != last_epoch then {
+      emit_source_line(out, code_pos[i]);
+      last_epoch = code_epoch[i];
+    }
     emit_c_token(out, code_kind[i], code_value[i]);
     i = i + 1;
   }

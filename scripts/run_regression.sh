@@ -41,6 +41,15 @@ assert_single_runtime_prologue() {
   fi
 }
 
+assert_source_mapping() {
+  local c_file=$1 source_file=$2 source_line=$3 label=$4
+  local directive="#line ${source_line} \"${source_file}\""
+  if ! grep -Fqx -- "$directive" "$c_file"; then
+    echo "FAIL $label: missing source mapping '$directive'" >&2
+    return 1
+  fi
+}
+
 compile_run() {
   local source=$1 label=$2
   track_source "$source"
@@ -50,6 +59,12 @@ compile_run() {
   "$BOOT_BIN" "$source" "$boot_c" >/dev/null
   if [[ "$label" == "include_test_main" ]]; then
     assert_single_runtime_prologue "$boot_c" "$label (Bootstrap)"
+    assert_source_mapping "$boot_c" "$ROOT/tests/regression/include_test_nested.bsl" 2 "$label (nested include)"
+    assert_source_mapping "$boot_c" "$ROOT/tests/regression/include_test_lib.bsl" 3 "$label (include library)"
+    assert_source_mapping "$boot_c" "$ROOT/tests/regression/include_test_main.bsl" 8 "$label (main source)"
+  fi
+  if [[ "$label" == "source_mapping_test" ]]; then
+    assert_source_mapping "$boot_c" "$ROOT/tests/regression/source_mapping_test.bsl" 3 "$label"
   fi
   gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror "$boot_c" -o "$boot_bin"
   "$boot_bin"
@@ -116,6 +131,7 @@ compile_run "$ROOT/tests/regression/option_result_combinators_test.bsl" option_r
 compile_run "$ROOT/tests/regression/string_builder_iter_test.bsl" string_builder_iter_test
 compile_run "$ROOT/tests/regression/numeric_compound_test.bsl" numeric_compound_test
 compile_run "$ROOT/tests/regression/compound_assignment_side_effect_test.bsl" compound_assignment_side_effect_test
+compile_run "$ROOT/tests/regression/source_mapping_test.bsl" source_mapping_test
 compile_run_with_input "$ROOT/tests/regression/io_safe_test.bsl" io_safe_test $'42\nbad-number\nBasalt-OVERFLOW\nok\n' $'safe-io\n42\nBasalt-\n'
 compile_run_with_input "$ROOT/tests/regression/io_safe_edge_test.bsl" io_safe_edge_test $'-17\n999999999999999999999999999999999999999999999\n' ''
 expect_runtime_failure_with_input "$ROOT/tests/regression/io_invalid_limit.bsl" io_invalid_limit '' 2
