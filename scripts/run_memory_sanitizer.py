@@ -2,8 +2,9 @@
 """Run repeatable ASan/LSan/UBSan ownership checks for Bootstrap Basalt and C.
 
 The harness deliberately keeps the generated fixtures in .tmp so no binaries or
-large generated C files enter the repository. It checks the frozen Bootstrap
-compiler and a hand-written C baseline with the same observable result.
+large generated C files enter the repository. The frozen Bootstrap C seed creates
+the current compiler, which is checked against a hand-written C baseline with the
+same observable result.
 """
 
 from __future__ import annotations
@@ -326,12 +327,22 @@ def main() -> int:
     source.write_text(BASALT_SOURCE, encoding="utf-8")
     c_source.write_text(C_SOURCE, encoding="utf-8")
 
-    modern_source = root / "src" / "bootstrap" / "basaltc.modern.c"
-    bootstrap_compiler = binaries / "bootstrap.bin"
-    bootstrap_build = run(["gcc", *STRICT_FLAGS, str(modern_source), "-o", str(bootstrap_compiler)],
-                          stdout=logs / "bootstrap-build.out", stderr=logs / "bootstrap-build.err")
-    if bootstrap_build.returncode != 0:
-        raise RuntimeError(f"Bootstrap C build failed; see {logs / 'bootstrap-build.err'}")
+    seed_source = root / "src" / "bootstrap" / "basaltc.modern.c"
+    seed_compiler = binaries / "bootstrap.seed.bin"
+    current_source = sources / "basaltc.current.c"
+    bootstrap_compiler = binaries / "bootstrap.current.bin"
+    seed_build = run(["gcc", *STRICT_FLAGS, str(seed_source), "-o", str(seed_compiler)],
+                     stdout=logs / "bootstrap-seed-build.out", stderr=logs / "bootstrap-seed-build.err")
+    if seed_build.returncode != 0:
+        raise RuntimeError(f"Bootstrap seed C build failed; see {logs / 'bootstrap-seed-build.err'}")
+    current_build = run([str(seed_compiler), str(root / "src" / "bootstrap" / "basaltc.bsl"), str(current_source)],
+                        stdout=logs / "bootstrap-current-generate.out", stderr=logs / "bootstrap-current-generate.err")
+    if current_build.returncode != 0:
+        raise RuntimeError(f"Current Bootstrap generation failed; see {logs / 'bootstrap-current-generate.err'}")
+    current_compile = run(["gcc", *STRICT_FLAGS, str(current_source), "-o", str(bootstrap_compiler)],
+                          stdout=logs / "bootstrap-current-build.out", stderr=logs / "bootstrap-current-build.err")
+    if current_compile.returncode != 0:
+        raise RuntimeError(f"Current Bootstrap C build failed; see {logs / 'bootstrap-current-build.err'}")
     bootstrap_generated = compile_basalt(bootstrap_compiler, source, sources, logs, "bootstrap")
 
     artifacts = {

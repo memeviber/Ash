@@ -3,9 +3,10 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 BOOT_SOURCE="$ROOT/src/bootstrap/basaltc.bsl"
-MODERN_C="$ROOT/src/bootstrap/basaltc.modern.c"
 BOOT_BIN="$ROOT/.tmp/bootstrap.bin"
 OUT="$ROOT/.tmp/regression"
+source "$ROOT/scripts/bootstrap_stage.sh"
+STRICT_FLAGS=(-std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror)
 mkdir -p "$OUT"
 
 GENERATED_SOURCES=()
@@ -17,9 +18,11 @@ cleanup_generated() {
 }
 trap cleanup_generated EXIT
 
-# The stored C compiler is the only compiler used for modern development.
-# Never invoke or build the frozen OCaml Host compiler.
-gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror "$MODERN_C" -o "$BOOT_BIN"
+# The stored C compiler builds the current Bootstrap compiler; tests use the
+# resulting current-generation binary, never the frozen Host compiler.
+BOOT_BIN=$(bootstrap_stage "$ROOT" "$ROOT/.tmp/bootstrap-stage" "${STRICT_FLAGS[@]}")
+cp "$BOOT_BIN" "$ROOT/.tmp/bootstrap.bin"
+BOOT_BIN="$ROOT/.tmp/bootstrap.bin"
 
 assert_single_runtime_prologue() {
   local c_file=$1 label=$2
@@ -53,6 +56,39 @@ compile_run() {
   printf 'PASS %s\n' "$label"
 }
 
+compile_run_with_input() {
+  local source=$1 label=$2 input=$3 expected=$4
+  track_source "$source"
+  local boot_c="$OUT/${label}.boot.c"
+  local boot_bin="$OUT/${label}.boot.bin"
+  local stdout_file="$OUT/${label}.stdout"
+  rm -f "$boot_c" "$boot_bin" "$stdout_file" "$ROOT"/$(basename "$source").c
+  "$BOOT_BIN" "$source" "$boot_c" >/dev/null
+  gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror "$boot_c" -o "$boot_bin"
+  printf '%s' "$input" | "$boot_bin" >"$stdout_file"
+  diff -u <(printf '%s' "$expected") "$stdout_file"
+  printf 'PASS %s (stdin/stdout)\n' "$label"
+}
+
+expect_runtime_failure_with_input() {
+  local source=$1 label=$2 input=$3 expected_code=$4
+  track_source "$source"
+  local boot_c="$OUT/${label}.boot.c"
+  local boot_bin="$OUT/${label}.boot.bin"
+  rm -f "$boot_c" "$boot_bin" "$ROOT"/$(basename "$source").c
+  "$BOOT_BIN" "$source" "$boot_c" >/dev/null
+  gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror "$boot_c" -o "$boot_bin"
+  set +e
+  printf '%s' "$input" | "$boot_bin" >"$OUT/${label}.stdout" 2>"$OUT/${label}.stderr"
+  local actual_code=$?
+  set -e
+  if [[ "$actual_code" -ne "$expected_code" ]]; then
+    echo "FAIL $label: expected runtime exit $expected_code, got $actual_code" >&2
+    return 1
+  fi
+  printf 'PASS %s (runtime rejected)\n' "$label"
+}
+
 expect_reject() {
   local source=$1 label=$2
   track_source "$source"
@@ -79,6 +115,9 @@ compile_run "$ROOT/tests/regression/option_test.bsl" option_test
 compile_run "$ROOT/tests/regression/option_result_combinators_test.bsl" option_result_combinators_test
 compile_run "$ROOT/tests/regression/string_builder_iter_test.bsl" string_builder_iter_test
 compile_run "$ROOT/tests/regression/numeric_compound_test.bsl" numeric_compound_test
+compile_run_with_input "$ROOT/tests/regression/io_safe_test.bsl" io_safe_test $'42\nbad-number\nBasalt-OVERFLOW\nok\n' $'safe-io\n42\nBasalt-\n'
+compile_run_with_input "$ROOT/tests/regression/io_safe_edge_test.bsl" io_safe_edge_test $'-17\n999999999999999999999999999999999999999999999\n' ''
+expect_runtime_failure_with_input "$ROOT/tests/regression/io_invalid_limit.bsl" io_invalid_limit '' 2
 compile_run "$ROOT/tests/regression/builtin_join_test.bsl" builtin_join_test
 compile_run "$ROOT/tests/regression/stdlib_slice_only_test.bsl" stdlib_slice_only_test
 compile_run "$ROOT/tests/regression/stdlib_map_only_test.bsl" stdlib_map_only_test

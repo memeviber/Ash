@@ -3,8 +3,9 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 BOOT_SOURCE="$ROOT/src/bootstrap/basaltc.bsl"
-MODERN_C="$ROOT/src/bootstrap/basaltc.modern.c"
 OUT="$ROOT/.tmp/stress"
+source "$ROOT/scripts/bootstrap_stage.sh"
+STRICT_FLAGS=(-std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror)
 rm -rf "$OUT"
 mkdir -p "$OUT"
 
@@ -17,9 +18,8 @@ cleanup_generated() {
 }
 trap cleanup_generated EXIT
 
-# Use the stored compiler from the previous Bootstrap generation. Never
-# invoke or build the frozen Host.
-gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror "$MODERN_C" -o "$OUT/bootstrap.bin"
+# The frozen C compiler creates the current-generation Bootstrap compiler.
+BOOT_BIN=$(bootstrap_stage "$ROOT" "$OUT" "${STRICT_FLAGS[@]}")
 
 run_valid() {
   local source=$1 name=$2
@@ -27,7 +27,7 @@ run_valid() {
   local boot_c="$OUT/${name}.boot.c"
   local boot_bin="$OUT/${name}.boot.bin"
   rm -f "${source}.c" "$boot_c" "$boot_bin"
-  "$OUT/bootstrap.bin" "$source" "$boot_c" >/dev/null
+  "$BOOT_BIN" "$source" "$boot_c" >/dev/null
   gcc -std=c11 -O1 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror "$boot_c" -o "$boot_bin"
   "$boot_bin" >"$OUT/${name}.boot.out"
 }
@@ -36,7 +36,7 @@ run_negative() {
   local source=$1 name=$2
   track_source "$source"
   rm -f "${source}.c" "$OUT/${name}.boot.c"
-  if "$OUT/bootstrap.bin" "$source" "$OUT/${name}.boot.c" >"$OUT/${name}.boot.log" 2>&1; then return 1; fi
+  if "$BOOT_BIN" "$source" "$OUT/${name}.boot.c" >"$OUT/${name}.boot.log" 2>&1; then return 1; fi
   test ! -e "${source}.c" && test ! -e "$OUT/${name}.boot.c"
 }
 

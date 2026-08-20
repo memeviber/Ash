@@ -8,10 +8,11 @@ The repository keeps two C artifacts with distinct roles:
 
 | Artifact | Role | Policy |
 |---|---|---|
-| `src/bootstrap/basaltc.bsl.c` | Frozen C seed preserved from the previous development generation | Never overwrite it during modern development |
-| `src/bootstrap/basaltc.modern.c` | Self-translated modern Bootstrap compiler | Use it as the compiler for current Basalt source and tests |
+| `src/bootstrap/basaltc.bsl.c` | Historical C artifact preserved from the previous development generation | Never overwrite it during modern development |
+| `src/bootstrap/basaltc.modern.c` | Immutable C compiler seed used as the previous-generation boundary | Compile it only to translate the current Bootstrap source |
+| `.tmp/*/basaltc.current.c` | Current-generation C compiler generated from `basaltc.bsl` | Temporary; compile it to produce the compiler used by modern tests |
 
-Every active runner compiles `basaltc.modern.c` directly with strict C11 GCC flags and uses the resulting binary for all modern work. The current `src/bootstrap/basaltc.bsl` is intentionally allowed to evolve beyond the stored compiler's source generation capabilities; the next compiler generation is produced only when the new source is ready to be translated by that stored compiler.
+Every active runner performs two stages. First, strict C11 GCC compiles `basaltc.modern.c` into a seed binary. Second, that seed binary translates the current `src/bootstrap/basaltc.bsl` into a current-generation C compiler, which is then compiled and used for all new language, standard-library, and fixture work. The current Bootstrap source is therefore free to evolve; it is not required to match the stored seed's source text.
 
 ## Development loop
 
@@ -31,13 +32,13 @@ New language features must be implemented in `src/bootstrap/basaltc.bsl`, and ne
 
 `scripts/fixed_point.sh` uses the stored modern compiler and performs the contemporary self-hosting loop:
 
-1. `basaltc.modern.c` is compiled to `n1.bin`.
-2. `n1.bin` translates the current `basaltc.bsl` to `n2.c`.
-3. `n2.c` is compiled to `n2.bin`.
-4. `n2.bin` translates the same current source to `n3.c`.
-5. The runner requires `n2.c == n3.c` and checks the production SHA-256 value.
+1. The frozen `basaltc.modern.c` is compiled to a seed binary.
+2. The seed translates the current `basaltc.bsl` to `n2.c`; this may differ from the frozen seed because the source is allowed to evolve.
+3. `n2.c` is compiled to `n2.bin`, which translates the source to `n3.c`.
+4. `n3.c` is compiled to `n3.bin`, which translates the source to `n4.c`.
+5. The runner requires `n3.c == n4.c`, checks the immutable seed SHA-256 value, and reports the current stable compiler SHA-256 separately.
 
-The stored C compiler is never regenerated or replaced by any runner. It is the deliberate compiler boundary between the previous generation and modern source development.
+The stored C compiler is never regenerated or replaced by any runner. It is the deliberate compiler boundary between the previous generation and modern source development; generated current-generation compilers remain temporary unless explicitly promoted as a future seed.
 
 ## Validation policy
 

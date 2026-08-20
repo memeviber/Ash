@@ -2,10 +2,9 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-MODERN_C="$ROOT/src/bootstrap/basaltc.modern.c"
 OUT="$ROOT/.tmp/bootstrap-build"
-mkdir -p "$OUT"
+source "$ROOT/scripts/bootstrap_stage.sh"
 
-# The stored C compiler is the sole modern compiler; the Host is frozen.
-gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror "$MODERN_C" -o "$OUT/basaltc"
-printf 'Bootstrap compiler: %s\n' "$OUT/basaltc"
+STRICT_FLAGS=(-std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror)
+BOOT_BIN=$(bootstrap_stage "$ROOT" "$OUT" "${STRICT_FLAGS[@]}")
+printf 'Bootstrap compiler (current generation): %s\n' "$BOOT_BIN"

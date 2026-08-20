@@ -1,0 +1,27 @@
+include "../../src/stdlib/io.bsl"
+include "../../src/stdlib/string.bsl"
+
+func main(): int {
+  let value: int = io::read_int(-99);
+  if value != 42 then { return 1; }
+  if io::status() != 0 then { return 2; }
+
+  let bad_value: int = io::read_int(-7);
+  if bad_value != -7 then { return 3; }
+  if io::status() != 2 then { return 4; }
+
+  let bounded: string = io::read_line(8);
+  if str::eq(bounded, "Basalt-") == false then { return 5; }
+  if io::status() != 3 then { return 6; }
+
+  let tail: string = io::read_line(32);
+  if str::eq(tail, "ok") == false then { return 7; }
+  if io::status() != 0 then { return 8; }
+
+  let newline: char = '\n';
+  io::writeln("safe-io");
+  io::write_int(value);
+  io::write_char(newline);
+  io::writeln(bounded);
+  return 0;
+}

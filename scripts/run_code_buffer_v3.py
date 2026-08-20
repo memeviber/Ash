@@ -3,7 +3,8 @@
 The generated source deliberately contains enough assignments to force several
 geometric code-buffer reallocations and to exceed the former 65536-token
 snapshot limit. The source is temporary and never becomes a repository test
-artifact. Only the stored modern Bootstrap compiler is used.
+artifact. The stored C compiler creates the current Bootstrap compiler; the workload is
+compiled only by that current-generation binary.
 """
 from __future__ import annotations
 
@@ -40,15 +41,19 @@ def main() -> int:
     lines.extend(["  print total;", "  return 0;", "}", ""])
     source.write_text("\n".join(lines), encoding="utf-8")
 
-    modern_bin = OUT / "modern.bin"
-    boot_c = OUT / "bootstrap.c"
-    boot_bin = OUT / "bootstrap.bin"
+    seed_bin = OUT / "bootstrap.seed.bin"
+    current_c = OUT / "basaltc.current.c"
+    boot_bin = OUT / "bootstrap.current.bin"
+    boot_c = OUT / "workload.c"
 
-    run(["gcc", *STRICT, str(MODERN_C), "-o", str(modern_bin)])
-    run([str(modern_bin), str(source), str(boot_c)])
-    run(["gcc", *STRICT, str(boot_c), "-o", str(boot_bin)])
+    run(["gcc", *STRICT, str(MODERN_C), "-o", str(seed_bin)])
+    run([str(seed_bin), str(ROOT / "src" / "bootstrap" / "basaltc.bsl"), str(current_c)])
+    run(["gcc", *STRICT, str(current_c), "-o", str(boot_bin)])
+    run([str(boot_bin), str(source), str(boot_c)])
+    workload_bin = OUT / "workload.bin"
+    run(["gcc", *STRICT, str(boot_c), "-o", str(workload_bin)])
 
-    output = subprocess.run([str(boot_bin)], check=True, text=True, capture_output=True).stdout
+    output = subprocess.run([str(workload_bin)], check=True, text=True, capture_output=True).stdout
     if output != EXPECTED:
         raise SystemExit(f"Bootstrap output mismatch: expected {EXPECTED!r}, got {output!r}")
 

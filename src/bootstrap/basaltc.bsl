@@ -1252,7 +1252,7 @@ func generator_regression_main(): void {
     if code_value[i] != snapshot_value[i] then same = 0;
     i = i + 1;
   }
-  if same == 1 then print 1; else print 0;
+  if same == 1 then print "generator_regression: PASS"; else print "generator_regression: FAIL";
 }
 
 
@@ -2233,6 +2233,13 @@ let BI_TC_PTR_VOID: int = 5;
 let BI_TC_MEM_ALLOC: int = 6;
 let BI_TC_MEM_RESIZE: int = 7;
 let BI_TC_MEM_FREE: int = 8;
+let BI_TC_READ_LINE: int = 9;
+let BI_TC_READ_INT: int = 10;
+let BI_TC_WRITE_STRING: int = 11;
+let BI_TC_WRITE_LINE: int = 12;
+let BI_TC_WRITE_INT: int = 13;
+let BI_TC_WRITE_CHAR: int = 14;
+let BI_TC_IO_STATUS: int = 15;
 let BI_FLAG_RESERVED: int = 1;
 let BI_FLAG_OWNED: int = 2;
 let BI_FLAG_CONSUME: int = 4;
@@ -2373,6 +2380,13 @@ func bi_has_flag(name: int, flag: int): int {
 
 func bi_init(): void {
   bi_register("printf", BI_TC_NONE, BI_FLAG_RESERVED);
+  bi_register("runtime_read_line", BI_TC_READ_LINE, BI_FLAG_RESERVED + BI_FLAG_OWNED);
+  bi_register("runtime_read_int", BI_TC_READ_INT, BI_FLAG_RESERVED);
+  bi_register("runtime_write_string", BI_TC_WRITE_STRING, BI_FLAG_RESERVED);
+  bi_register("runtime_write_line", BI_TC_WRITE_LINE, BI_FLAG_RESERVED);
+  bi_register("runtime_write_int", BI_TC_WRITE_INT, BI_FLAG_RESERVED);
+  bi_register("runtime_write_char", BI_TC_WRITE_CHAR, BI_FLAG_RESERVED);
+  bi_register("runtime_io_status", BI_TC_IO_STATUS, BI_FLAG_RESERVED);
   bi_register("memory_alloc", BI_TC_MEM_ALLOC, BI_FLAG_RESERVED + BI_FLAG_OWNED);
   bi_register("memory_resize", BI_TC_MEM_RESIZE, BI_FLAG_RESERVED + BI_FLAG_OWNED);
   bi_register("memory_free", BI_TC_MEM_FREE, BI_FLAG_RESERVED + BI_FLAG_CONSUME);
@@ -2811,9 +2825,13 @@ func load_tokens_from_file(path: string): void {
   let k: int = lexer_next();
   while k != L_EOF {
     if debug_tokens == 1 then {
+      print "token.kind";
       print map_token(k);
+      print "token.start";
       print tok_start;
+      print "token.length";
       print tok_length;
+      print "token.value";
       print tok_value;
     }
     input_put(map_token(k), tok_value);
@@ -3501,6 +3519,51 @@ func tc_expr(id: int): void {
       if tc_kind != TY_PTR then { tc_fail(8); return; }
       tc_kind = TY_VOID; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0; tc_result_type = 0; return;
     }
+    if btag == BI_TC_READ_LINE then {
+      let aa: int = node_a[id];
+      if aa == 0 || node_next[aa] != 0 then { tc_fail(13); return; }
+      tc_expr(aa);
+      if tc_kind != TY_INT then { tc_fail(17); return; }
+      tc_kind = TY_STRING; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0;
+      return;
+    }
+    if btag == BI_TC_READ_INT then {
+      let aa: int = node_a[id];
+      if aa == 0 || node_next[aa] != 0 then { tc_fail(13); return; }
+      tc_expr(aa);
+      if tc_kind != TY_INT then { tc_fail(17); return; }
+      tc_kind = TY_INT; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0;
+      return;
+    }
+    if btag == BI_TC_WRITE_STRING || btag == BI_TC_WRITE_LINE then {
+      let aa: int = node_a[id];
+      if aa == 0 || node_next[aa] != 0 then { tc_fail(13); return; }
+      tc_expr(aa);
+      if tc_kind != TY_STRING then { tc_fail(17); return; }
+      tc_kind = TY_VOID; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0;
+      return;
+    }
+    if btag == BI_TC_WRITE_INT then {
+      let aa: int = node_a[id];
+      if aa == 0 || node_next[aa] != 0 then { tc_fail(13); return; }
+      tc_expr(aa);
+      if tc_kind != TY_INT then { tc_fail(17); return; }
+      tc_kind = TY_VOID; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0;
+      return;
+    }
+    if btag == BI_TC_WRITE_CHAR then {
+      let aa: int = node_a[id];
+      if aa == 0 || node_next[aa] != 0 then { tc_fail(13); return; }
+      tc_expr(aa);
+      if tc_kind != TY_CHAR then { tc_fail(17); return; }
+      tc_kind = TY_VOID; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0;
+      return;
+    }
+    if btag == BI_TC_IO_STATUS then {
+      if node_a[id] != 0 then { tc_fail(13); return; }
+      tc_kind = TY_INT; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0;
+      return;
+    }
     let fun_node: int = tc_find_function_ctx(node_value[id], node_scope[id]);
     if fun_node == 0 then {
       if tc_lookup_var(node_value[id]) == 1 && tc_kind == TY_FUN then {
@@ -3808,7 +3871,9 @@ func tc_diag(): void {
   if tc_error_code == 3 then print "type error: duplicate declaration";
   else if tc_error_code == 5 then print "type error: unknown name";
   else if tc_error_code == 12 then print "type error: invalid function arguments";
+  else if tc_error_code == 13 then print "type error: invalid argument count";
   else if tc_error_code == 14 then print "type error: string concatenation requires strings";
+  else if tc_error_code == 17 then print "type error: invalid built-in argument type";
   else if tc_error_code == 18 then print "type error: invalid arithmetic operands";
   else if tc_error_code == 20 then print "type error: initializer type mismatch";
   else if tc_error_code == 21 then print "type error: assignment type mismatch";
@@ -3828,7 +3893,11 @@ func tc_diag(): void {
   else if tc_error_code == 45 then print "type error: array index out of bounds";
   else if tc_error_code == 44 then print "type error: distinct functions collide after C mangling";
   else print "type error: invalid expression";
+  print "diagnostic.code";
+  print tc_error_code;
+  print "diagnostic.line";
   print tc_diag_line(tc_error_pos);
+  print "diagnostic.column";
   print tc_diag_col(tc_error_pos);
 }
 func tc_check_function_symbols(root: int): int {
@@ -3901,7 +3970,11 @@ func pipeline_main(path: string): int {
   if parsed == 0 then {
     if tc_error_code == 0 then {
       print "parse error";
+      print "diagnostic.code";
+      print 0;
+      print "diagnostic.line";
       print tc_diag_line(source_pos);
+      print "diagnostic.column";
       print tc_diag_col(source_pos);
     }
   }
@@ -4040,7 +4113,7 @@ func emit_c_token(out: int*, kind: int, value: int): void {
 }
 
 func emit_runtime(out: int*): void {
-  write_string(out, "#if defined(_WIN32)\n#include <direct.h>\n#else\n#define _POSIX_C_SOURCE 200809L\n#define _XOPEN_SOURCE 700\n#endif\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n#include <limits.h>\n#if defined(__GNUC__) || defined(__clang__)\n#define BASALT_UNUSED __attribute__((unused))\n#else\n#define BASALT_UNUSED\n#endif\nstatic void basalt_panic(int code){(void)code;exit(2);}\nstatic size_t basalt_checked_bytes(int count,size_t elem_size){if(count<0)basalt_panic(1);if(elem_size!=0&&(size_t)count>(size_t)-1/elem_size)basalt_panic(1);return(size_t)count*elem_size;}\nstatic void* basalt_track(void*);\n");
+  write_string(out, "#if defined(_WIN32)\n#include <direct.h>\n#else\n#define _POSIX_C_SOURCE 200809L\n#define _XOPEN_SOURCE 700\n#endif\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n#include <limits.h>\n#include <errno.h>\n#if defined(__GNUC__) || defined(__clang__)\n#define BASALT_UNUSED __attribute__((unused))\n#else\n#define BASALT_UNUSED\n#endif\nstatic void basalt_panic(int code){(void)code;exit(2);}\nstatic size_t basalt_checked_bytes(int count,size_t elem_size){if(count<0)basalt_panic(1);if(elem_size!=0&&(size_t)count>(size_t)-1/elem_size)basalt_panic(1);return(size_t)count*elem_size;}\nstatic void* basalt_track(void*);\n");
   write_string(out, "static char** basalt_inc_active=NULL;static size_t basalt_inc_active_n=0,basalt_inc_active_cap=0;static char** basalt_inc_loaded=NULL;static size_t basalt_inc_loaded_n=0,basalt_inc_loaded_cap=0;static int basalt_inc_status=0;\n");
   write_string(out, "static BASALT_UNUSED int basalt_inc_eq(const char*a,const char*b){return strcmp(a,b)==0;}\n");
   write_string(out, "static BASALT_UNUSED size_t basalt_inc_find(char**v,size_t n,const char*p){size_t i;for(i=0;i<n;i++)if(basalt_inc_eq(v[i],p))return i;return (size_t)-1;}\n");
@@ -4066,6 +4139,14 @@ func emit_runtime(out: int*): void {
   write_string(out, "static BASALT_UNUSED void basalt_cleanup(void){size_t i;basalt_validate();for(i=0;i<basalt_live_n;i++)free(basalt_live[i]);free(basalt_live);basalt_live=NULL;basalt_live_n=basalt_live_cap=0;}\n");
   write_string(out, "static BASALT_UNUSED void* basalt_track(void* p){size_t c;void**q;if(!p)return NULL;if(basalt_find(p)!=(size_t)-1)basalt_panic(2);if(basalt_live_n==basalt_live_cap){if(basalt_live_cap>(size_t)-1/2)c=(size_t)-1;else c=basalt_live_cap?basalt_live_cap*2:32;if(c>(size_t)-1/sizeof(void*))basalt_panic(2);q=(void**)realloc(basalt_live,c*sizeof(void*));if(!q)basalt_panic(2);basalt_live=q;basalt_live_cap=c;}basalt_live[basalt_live_n++]=p;atexit(basalt_cleanup);return p;}\n");
   write_string(out, "static BASALT_UNUSED void basalt_release(void* p){size_t i;if(!p)return;i=basalt_find(p);if(i==(size_t)-1)basalt_panic(2);free(p);basalt_live[i]=basalt_live[--basalt_live_n];}\n");
+  write_string(out, "static int basalt_io_status=0;\n");
+  write_string(out, "static BASALT_UNUSED int runtime_io_status(void){return basalt_io_status;}\n");
+  write_string(out, "static BASALT_UNUSED char* runtime_read_line(int max_len){size_t n=0;int c=EOF;char*p;if(max_len<2||max_len>1048576)basalt_panic(7);p=(char*)malloc((size_t)max_len);if(!p)basalt_panic(5);while(n+1<(size_t)max_len){c=fgetc(stdin);if(c==EOF)break;if(c=='\\n')break;p[n++]=(char)c;}p[n]=0;if(c!=EOF&&c!='\\n'&&n+1==(size_t)max_len){basalt_io_status=3;do{c=fgetc(stdin);}while(c!=EOF&&c!='\\n');}else if(c==EOF&&n==0)basalt_io_status=1;else basalt_io_status=0;return(char*)basalt_track(p);}\n");
+  write_string(out, "static BASALT_UNUSED int runtime_read_int(int fallback){char buf[128];size_t n=0;int c=EOF;char*end;long v;while(n+1<sizeof(buf)){c=fgetc(stdin);if(c==EOF||c=='\\n')break;if(c!='\\r')buf[n++]=(char)c;}buf[n]=0;if(c!=EOF&&c!='\\n'&&n+1==sizeof(buf)){basalt_io_status=3;do{c=fgetc(stdin);}while(c!=EOF&&c!='\\n');return fallback;}if(c==EOF&&n==0){basalt_io_status=1;return fallback;}errno=0;v=strtol(buf,&end,10);while(*end==' '||*end=='\\t'||*end=='\\r')end++;if(end==buf||*end!=0){basalt_io_status=2;return fallback;}if(errno==ERANGE||v<(long)INT_MIN||v>(long)INT_MAX){basalt_io_status=4;return fallback;}basalt_io_status=0;return(int)v;}\n");
+  write_string(out, "static BASALT_UNUSED void runtime_write_string(const char*s){if(!s)basalt_panic(4);if(fputs(s,stdout)==EOF||fflush(stdout)!=0)basalt_panic(8);}\n");
+  write_string(out, "static BASALT_UNUSED void runtime_write_line(const char*s){if(!s)basalt_panic(4);if(fputs(s,stdout)==EOF||fputc('\\n',stdout)==EOF||fflush(stdout)!=0)basalt_panic(8);}\n");
+  write_string(out, "static BASALT_UNUSED void runtime_write_int(int value){if(fprintf(stdout,\"%d\",value)<0||fflush(stdout)!=0)basalt_panic(8);}\n");
+  write_string(out, "static BASALT_UNUSED void runtime_write_char(char value){if(fputc((unsigned char)value,stdout)==EOF||fflush(stdout)!=0)basalt_panic(8);}\n");
   write_string(out, "static BASALT_UNUSED void* basalt_memory_alloc(int count,size_t elem_size){size_t bytes=basalt_checked_bytes(count,elem_size);void*p=calloc(1,bytes?bytes:1);if(!p)basalt_panic(5);return basalt_track(p);}\n");
   write_string(out, "static BASALT_UNUSED void* basalt_memory_resize(void* old,int old_count,int new_count,size_t elem_size){size_t slot=(size_t)-1;size_t old_bytes;size_t new_bytes;void*p;if(old_count<0||new_count<0||new_count<old_count)basalt_panic(1);if(old){slot=basalt_find(old);if(slot==(size_t)-1)basalt_panic(2);}old_bytes=basalt_checked_bytes(old_count,elem_size);new_bytes=basalt_checked_bytes(new_count,elem_size);p=realloc(old,new_bytes?new_bytes:1);if(!p)basalt_panic(6);if(slot==(size_t)-1)basalt_track(p);else basalt_live[slot]=p;if(new_bytes>old_bytes)memset((char*)p+old_bytes,0,new_bytes-old_bytes);return p;}\n");
   write_string(out, "static BASALT_UNUSED void basalt_memory_free(void*p){basalt_release(p);}\n");

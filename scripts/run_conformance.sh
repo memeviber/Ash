@@ -3,9 +3,10 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 BOOT_SOURCE="$ROOT/src/bootstrap/basaltc.bsl"
-MODERN_C="$ROOT/src/bootstrap/basaltc.modern.c"
 OUT="$ROOT/.tmp/conformance"
 GENERATED="$ROOT/tests/conformance/generated"
+source "$ROOT/scripts/bootstrap_stage.sh"
+STRICT_FLAGS=(-std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror)
 rm -rf "$OUT"
 mkdir -p "$OUT"
 
@@ -27,8 +28,8 @@ trap cleanup_generated EXIT
 
 python3 "$ROOT/scripts/generate_longterm_tests.py"
 
-# The corpus is compiled only by the stored Bootstrap compiler.
-gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror "$MODERN_C" -o "$OUT/bootstrap.bin"
+# The frozen C compiler creates the current-generation Bootstrap compiler.
+BOOT_BIN=$(bootstrap_stage "$ROOT" "$OUT" "${STRICT_FLAGS[@]}")
 
 pass=0
 fail=0
@@ -38,7 +39,7 @@ for source in "$ROOT"/tests/conformance/*.bsl "$ROOT"/tests/conformance/generate
   track_source "$source"
   boot_c="$OUT/${name}.boot.c"
   boot_bin="$OUT/${name}.boot.bin"
-  if "$OUT/bootstrap.bin" "$source" "$boot_c" >"$OUT/${name}.boot.log" 2>&1 && gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror "$boot_c" -o "$boot_bin" && "$boot_bin" >"$OUT/${name}.boot.out"; then
+  if "$BOOT_BIN" "$source" "$boot_c" >"$OUT/${name}.boot.log" 2>&1 && gcc "${STRICT_FLAGS[@]}" "$boot_c" -o "$boot_bin" && "$boot_bin" >"$OUT/${name}.boot.out"; then
     pass=$((pass + 1))
   else
     fail=$((fail + 1)); echo "FAIL valid $name" >&2
@@ -49,7 +50,7 @@ for source in "$ROOT"/tests/conformance/generated/bad_*.bsl; do
   name=$(basename "$source" .bsl)
   track_source "$source"
   rm -f "${source}.c" "$OUT/${name}.boot.c"
-  if ! "$OUT/bootstrap.bin" "$source" "$OUT/${name}.boot.c" >"$OUT/${name}.boot.log" 2>&1 && [ ! -e "${source}.c" ] && [ ! -e "$OUT/${name}.boot.c" ]; then
+  if ! "$BOOT_BIN" "$source" "$OUT/${name}.boot.c" >"$OUT/${name}.boot.log" 2>&1 && [ ! -e "${source}.c" ] && [ ! -e "$OUT/${name}.boot.c" ]; then
     pass=$((pass + 1))
   else
     fail=$((fail + 1)); echo "FAIL negative $name" >&2
