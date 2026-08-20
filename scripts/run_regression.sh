@@ -133,6 +133,9 @@ compile_run "$ROOT/tests/regression/numeric_compound_test.bsl" numeric_compound_
 compile_run "$ROOT/tests/regression/compound_assignment_side_effect_test.bsl" compound_assignment_side_effect_test
 compile_run "$ROOT/tests/regression/source_mapping_test.bsl" source_mapping_test
 compile_run "$ROOT/tests/regression/tagged_union_test.bsl" tagged_union_test
+compile_run "$ROOT/tests/regression/defer_test.bsl" defer_test
+compile_run "$ROOT/tests/regression/match_test.bsl" match_test
+compile_run "$ROOT/tests/regression/tuple_test.bsl" tuple_test
 compile_run "$ROOT/tests/regression/concurrency_test.bsl" concurrency_test
 compile_run "$ROOT/tests/regression/aligned_alloc_test.bsl" aligned_alloc_test
 compile_run "$ROOT/tests/regression/fixed_width_integer_test.bsl" fixed_width_integer_test
@@ -141,6 +144,9 @@ expect_reject "$ROOT/tests/regression/aligned_invalid_power.bsl" aligned_invalid
 expect_reject "$ROOT/tests/regression/concurrency_invalid_atomic.bsl" concurrency_invalid_atomic
 expect_reject "$ROOT/tests/regression/concurrency_invalid_callback.bsl" concurrency_invalid_callback
 expect_reject "$ROOT/tests/regression/tagged_union_arity_invalid.bsl" tagged_union_arity_invalid
+expect_reject "$ROOT/tests/regression/match_non_exhaustive.bsl" match_non_exhaustive
+expect_reject "$ROOT/tests/regression/match_payload_arity_invalid.bsl" match_payload_arity_invalid
+expect_reject "$ROOT/tests/regression/tuple_binding_count_invalid.bsl" tuple_binding_count_invalid
 expect_reject "$ROOT/tests/regression/tagged_union_type_invalid.bsl" tagged_union_type_invalid
 compile_run_with_input "$ROOT/tests/regression/io_safe_test.bsl" io_safe_test $'42\nbad-number\nBasalt-OVERFLOW\nok\n' $'safe-io\n42\nBasalt-\n'
 compile_run_with_input "$ROOT/tests/regression/io_safe_edge_test.bsl" io_safe_edge_test $'-17\n999999999999999999999999999999999999999999999\n' ''

@@ -47,6 +47,11 @@ let N_EXTERN: int = 34;
 let N_GENERIC_STRUCT: int = 35;
 let N_GENERIC_FUNC: int = 36;
 let N_VARIANT: int = 39;
+let N_DEFER: int = 40;
+let N_MATCH: int = 41;
+let N_MATCH_ARM: int = 42;
+let N_TUPLE: int = 43;
+let N_TUPLE_BIND: int = 44;
 
 let OP_ADD: int = 1;
 let OP_SUB: int = 2;
@@ -92,6 +97,7 @@ let TY_I16: int = 24;
 let TY_I32: int = 25;
 let TY_I64: int = 26;
 let TY_USIZE: int = 27;
+let TY_TUPLE: int = 28;
 
 let node_kind: int* = 0;
 let node_a: int* = 0;
@@ -290,6 +296,16 @@ let code_pos: int* = 0;
 let code_epoch: int* = 0;
 let code_count: int = 0;
 let emit_for_step: int = 0;
+let emit_defer_expr: int* = 0;
+let emit_defer_scope_start: int* = 0;
+let emit_scope_start: int* = 0;
+let emit_defer_count: int = 0;
+let emit_defer_cap: int = 0;
+let emit_scope_depth: int = 0;
+let emit_scope_cap: int = 0;
+let emit_loop_base: int* = 0;
+let emit_loop_depth: int = 0;
+let emit_loop_cap: int = 0;
 // v3 regression snapshots are growable as well; no fixed 65536-token limit.
 let snapshot_kind: int* = 0;
 let snapshot_value: int* = 0;
@@ -311,6 +327,11 @@ let gen_bind_type: int* = 0;
 let gen_bind_count: int = 0;
 let gen_bind_cap: int = 0;
 let gen_active_function: int = 0;
+let gen_match_serial: int = 0;
+let gen_tuple_type: int* = 0;
+let gen_tuple_name: int* = 0;
+let gen_tuple_count: int = 0;
+let gen_tuple_cap: int = 0;
 let gen_mangle_start: int = 0;
 let gen_mangle_len: int = 0;
 
@@ -331,6 +352,13 @@ func gen_bind_add(name: int, ty: int): void {
   let i: int = 0;
   while i < gen_bind_count { if gen_bind_name[i] == name then { gen_bind_type[i] = ty; return; } i = i + 1; }
   ensure_gen_bind(gen_bind_count); gen_bind_name[gen_bind_count] = name; gen_bind_type[gen_bind_count] = ty; gen_bind_count = gen_bind_count + 1;
+}
+func ensure_gen_tuple(need: int): void {
+  if need < gen_tuple_cap then return;
+  let n: int = next_capacity(gen_tuple_cap, need);
+  gen_tuple_type = grow_ints(gen_tuple_type, gen_tuple_cap, n);
+  gen_tuple_name = grow_ints(gen_tuple_name, gen_tuple_cap, n);
+  gen_tuple_cap = n;
 }
 func gen_append_char(c: int): void { let pos: int = source_len + sym_text_len + gen_mangle_len; ensure_source(pos); source[pos] = c; gen_mangle_len = gen_mangle_len + 1; }
 func gen_append_char_text(c: char): void { let pos: int = source_len + sym_text_len + gen_mangle_len; ensure_source(pos); source[pos] = c; gen_mangle_len = gen_mangle_len + 1; }
@@ -356,6 +384,15 @@ func sym_c_symbol(id: int): int {
   gen_mangle_start = source_len + sym_text_len; gen_mangle_len = 0; gen_append_c_symbol(id);
   return gen_mangle_intern(L_ID);
 }
+func gen_append_uint(value: int): void {
+  if value > 9 then gen_append_uint(value / 10);
+  gen_append_char(48 + (value % 10));
+}
+func gen_tuple_field_name(index: int): int {
+  gen_mangle_start = source_len + sym_text_len; gen_mangle_len = 0;
+  gen_append_text("item"); gen_append_uint(index);
+  return gen_mangle_intern(L_ID);
+}
 func gen_mangle_type(ty: int): void {
   if ty == 0 then { gen_append_text("void"); return; }
   if node_kind[ty] == TY_PARAM then { let b: int = gen_bind_find(node_value[ty]); if b != 0 then { gen_mangle_type(b); return; } gen_append_c_symbol(node_value[ty]); return; }
@@ -377,16 +414,34 @@ func gen_mangle_type(ty: int): void {
   else if node_kind[ty] == TY_VOID then gen_append_text("void");
   else if node_kind[ty] == TY_NAMED then gen_append_c_symbol(node_value[ty]);
   else if node_kind[ty] == TY_PTR then { gen_append_text("ptr_"); gen_mangle_type(node_a[ty]); }
-  else if node_kind[ty] == TY_ARRAY || node_kind[ty] == TY_DYN_ARRAY then { gen_append_text("array_"); gen_mangle_type(node_a[ty]); }
-  else if node_kind[ty] == TY_GENERIC then {
+  else if node_kind[ty] == TY_ARRAY || node_kind[ty] == TY_DYN_ARRAY then { gen_append_text("array_"); gen_mangle_type(node_a[ty]);   } else if node_kind[ty] == TY_GENERIC then {
     gen_append_c_symbol(node_value[ty]); gen_append_text("__");
     let a: int = node_a[ty];
     while a != 0 { gen_mangle_type(a); if node_next[a] != 0 then gen_append_text("__"); a = node_next[a]; }
+  } else if node_kind[ty] == TY_TUPLE then {
+    gen_append_text("tuple");
+    let t: int = node_a[ty];
+    while t != 0 { gen_append_text("__"); gen_mangle_type(t); t = node_next[t]; }
   } else gen_append_text("int");
 }
 func gen_mangled_type_symbol(ty: int): int {
   gen_mangle_start = source_len + sym_text_len; gen_mangle_len = 0; gen_mangle_type(ty);
   return gen_mangle_intern(0);
+}
+func gen_add_tuple_type(ty: int): void {
+  if ty == 0 || node_kind[ty] != TY_TUPLE then return;
+  let name: int = gen_mangled_type_symbol(ty);
+  let i: int = 0;
+  while i < gen_tuple_count {
+    if gen_tuple_name[i] == name then return;
+    i = i + 1;
+  }
+  let item: int = node_a[ty];
+  while item != 0 { gen_collect_type(item); item = node_next[item]; }
+  ensure_gen_tuple(gen_tuple_count);
+  gen_tuple_type[gen_tuple_count] = ty;
+  gen_tuple_name[gen_tuple_count] = name;
+  gen_tuple_count = gen_tuple_count + 1;
 }
 func gen_mangled_function_symbol(base: int, args: int): int {
   gen_mangle_start = source_len + sym_text_len; gen_mangle_len = 0; gen_append_c_symbol(base); gen_append_text("__");
@@ -406,6 +461,35 @@ func code_emit(kind: int, value: int): void {
 func code_reset(): void {
   code_count = 0;
 }
+func ensure_emit_defer(need: int): void {
+  if need < emit_defer_cap then return;
+  let n: int = next_capacity(emit_defer_cap, need);
+  emit_defer_expr = grow_ints(emit_defer_expr, emit_defer_cap, n);
+  emit_defer_scope_start = grow_ints(emit_defer_scope_start, emit_defer_cap, n);
+  emit_defer_cap = n;
+}
+func ensure_emit_scope(need: int): void {
+  if need < emit_scope_cap then return;
+  let n: int = next_capacity(emit_scope_cap, need);
+  emit_scope_start = grow_ints(emit_scope_start, emit_scope_cap, n);
+  emit_scope_cap = n;
+}
+func ensure_emit_loop(need: int): void {
+  if need < emit_loop_cap then return;
+  let n: int = next_capacity(emit_loop_cap, need);
+  emit_loop_base = grow_ints(emit_loop_base, emit_loop_cap, n);
+  emit_loop_cap = n;
+}
+func gen_defer_push(expr: int): void {
+  ensure_emit_defer(emit_defer_count);
+  emit_defer_expr[emit_defer_count] = expr;
+  emit_defer_count = emit_defer_count + 1;
+}
+func gen_emit_defer_from(base: int): void {
+  let i: int = emit_defer_count - 1;
+  while i + 1 > base { gen_expr(emit_defer_expr[i]); code_emit(C_PUNCT, 12); code_emit(C_NEWLINE, 0); i = i - 1; }
+}
+func gen_emit_all_defers(): void { gen_emit_defer_from(0); }
 
 let gen_spec_kind: int* = 0;
 let gen_spec_decl: int* = 0;
@@ -509,6 +593,7 @@ func gen_add_fun_spec(decl: int, args: int): void {
 func gen_collect_type(ty: int): void {
   if ty == 0 then { return; }
   if node_kind[ty] == TY_GENERIC then { gen_add_struct_spec(ty); }
+  else if node_kind[ty] == TY_TUPLE then { gen_add_tuple_type(ty); }
   else if (node_kind[ty] == TY_PTR || node_kind[ty] == TY_ARRAY || node_kind[ty] == TY_DYN_ARRAY) then { gen_collect_type(node_a[ty]); }
 }
 func gen_collect_expr(id: int): void {
@@ -530,11 +615,16 @@ func gen_collect_expr(id: int): void {
   }
   if k == N_INDIRECT_CALL then { gen_collect_expr(node_a[id]); let aa: int = node_b[id]; while aa != 0 { gen_collect_expr(aa); aa = node_next[aa]; } return; }
   if k == N_BINOP then { gen_collect_expr(node_a[id]); gen_collect_expr(node_b[id]); return; }
+  if k == N_TUPLE then { let item: int = node_a[id]; while item != 0 { gen_collect_expr(item); item = node_next[item]; } return; }
   if k == N_FIELD_ACCESS || k == N_INDEX || k == N_DEREF || k == N_ADDRESS then { gen_collect_expr(node_a[id]); gen_collect_expr(node_b[id]); return; }
 }
 func gen_collect_stmt(id: int): void {
   if id == 0 then return;
   let k: int = node_kind[id];
+  if k == N_DEFER then { gen_collect_expr(node_a[id]); return; }
+  if k == N_TUPLE_BIND then { gen_collect_type(node_b[id]); gen_collect_expr(node_c[id]); return; }
+  if k == N_TUPLE then { gen_collect_expr(node_a[id]); return; }
+  if k == N_MATCH then { gen_collect_expr(node_a[id]); let ma: int = node_b[id]; while ma != 0 { gen_collect_stmt(node_b[ma]); ma = node_next[ma]; } return; }
   if k == N_LET || k == N_CONST then { gen_collect_type(node_b[id]); gen_collect_expr(node_c[id]); return; }
   if k == N_GLOBAL then { gen_collect_type(node_b[id]); gen_collect_expr(node_c[id]); return; }
   if k == N_ASSIGN || k == N_COMPOUND_ASSIGN then { gen_collect_expr(node_a[id]); gen_collect_expr(node_b[id]); return; }
@@ -587,6 +677,10 @@ func gen_type(kind: int, child: int, size: int): void {
     code_emit(C_IDENT, sym_c_symbol(node_value[child]));
     code_emit(C_PUNCT, 18);
   } else if kind == TY_GENERIC then {
+    code_emit(C_IDENT, gen_mangled_type_symbol(child));
+    code_emit(C_PUNCT, 18);
+  } else if kind == TY_TUPLE then {
+    code_emit(C_KW, 12);
     code_emit(C_IDENT, gen_mangled_type_symbol(child));
     code_emit(C_PUNCT, 18);
   } else if kind == TY_PARAM then {
@@ -922,6 +1016,30 @@ func gen_expr(id: int): void {
   else if k == N_STRING then code_emit(C_STRING, node_value[id]);
   else if k == N_CHAR then code_emit(C_INT, node_value[id]);
   else if k == N_VARIANT then gen_variant_expr(id);
+  else if k == N_TUPLE then {
+    let tuple_ty: int = node_aux[id];
+    if tuple_ty == 0 then { tc_expr(id); tuple_ty = tc_result_type; }
+    if tuple_ty == 0 then { code_emit(C_PUNCT, 24); code_emit(C_PUNCT, 25); }
+    else {
+      code_emit(C_PUNCT, 4);
+      code_emit(C_KW, 12);
+      code_emit(C_IDENT, gen_mangled_type_symbol(tuple_ty));
+      code_emit(C_PUNCT, 5);
+      code_emit(C_PUNCT, 24);
+      let item: int = node_a[id];
+      let index: int = 0;
+      while item != 0 {
+        code_emit(C_PUNCT, 17);
+        code_emit(C_IDENT, gen_tuple_field_name(index));
+        code_emit(C_PUNCT, 11);
+        gen_expr(item);
+        if node_next[item] != 0 then code_emit(C_PUNCT, 7);
+        item = node_next[item];
+        index = index + 1;
+      }
+      code_emit(C_PUNCT, 25);
+    }
+  }
   else if k == N_NULL then { code_emit(C_INT, 0); }
   else if k == N_VAR then code_emit(C_IDENT, sym_c_symbol(node_value[id]));
   else if k == N_BINOP then {
@@ -952,6 +1070,7 @@ func gen_expr(id: int): void {
 func gen_expr_kind(id: int): int {
   let k: int = node_kind[id];
   if k == N_INT || k == N_BOOL then return TY_INT;
+  if k == N_TUPLE then return TY_TUPLE;
   if k == N_VARIANT then { if node_aux[id] != 0 then return node_kind[node_aux[id]]; return TY_NAMED; }
   if k == N_CHAR then return TY_CHAR;
   if k == N_FLOAT then return TY_DOUBLE;
@@ -1127,31 +1246,71 @@ func gen_stmt(id: int): void {
     code_emit(C_PUNCT, 8);
     code_emit(C_PUNCT, 12);
     code_emit(C_NEWLINE, 0);
+  } else if k == N_DEFER then {
+    gen_defer_push(node_a[id]);
+  } else if k == N_TUPLE_BIND then {
+    let binding: int = node_a[id];
+    let index: int = 0;
+    let tuple_ty: int = node_b[id];
+    let rhs_temp: int = gen_match_temp_symbol();
+    gen_type(node_kind[tuple_ty], tuple_ty, 0);
+    code_emit(C_IDENT, rhs_temp);
+    code_emit(C_PUNCT, 11);
+    gen_expr(node_c[id]);
+    code_emit(C_PUNCT, 12);
+    code_emit(C_NEWLINE, 0);
+    while binding != 0 {
+      let elem_ty: int = node_a[tuple_ty];
+      let i: int = 0;
+      while i < index && elem_ty != 0 { elem_ty = node_next[elem_ty]; i = i + 1; }
+      if elem_ty != 0 then gen_type(node_kind[elem_ty], elem_ty, 0);
+      else code_emit(C_KW, 1);
+      code_emit(C_IDENT, sym_c_symbol(node_value[binding]));
+      code_emit(C_PUNCT, 11);
+      code_emit(C_IDENT, rhs_temp);
+      code_emit(C_PUNCT, 17);
+      code_emit(C_IDENT, gen_tuple_field_name(index));
+      code_emit(C_PUNCT, 12);
+      code_emit(C_NEWLINE, 0);
+      binding = node_next[binding];
+      index = index + 1;
+    }
+  } else if k == N_MATCH then {
+    gen_match_stmt(id);
   } else if k == N_EXPR then {
     gen_expr(node_a[id]);
     code_emit(C_PUNCT, 12);
     code_emit(C_NEWLINE, 0);
   } else if k == N_RETURN then {
+    gen_emit_all_defers();
     code_emit(C_KW, 5);
     if node_a[id] != 0 then gen_expr(node_a[id]);
     code_emit(C_PUNCT, 12);
     code_emit(C_NEWLINE, 0);
   } else if k == N_BREAK then {
+    if emit_loop_depth > 0 then gen_emit_defer_from(emit_loop_base[emit_loop_depth - 1]);
     code_emit(C_KW, 9);
     code_emit(C_PUNCT, 12);
     code_emit(C_NEWLINE, 0);
   } else if k == N_CONTINUE then {
+    if emit_loop_depth > 0 then gen_emit_defer_from(emit_loop_base[emit_loop_depth - 1]);
     if emit_for_step != 0 then gen_stmt(emit_for_step);
     code_emit(C_KW, 10);
     code_emit(C_PUNCT, 12);
     code_emit(C_NEWLINE, 0);
   } else if k == N_BLOCK then {
     code_emit(C_PUNCT, 13);
+    ensure_emit_scope(emit_scope_depth);
+    emit_scope_start[emit_scope_depth] = emit_defer_count;
+    emit_scope_depth = emit_scope_depth + 1;
     let item: int = node_a[id];
     while item != 0 {
       gen_stmt(item);
       item = node_next[item];
     }
+    emit_scope_depth = emit_scope_depth - 1;
+    gen_emit_defer_from(emit_scope_start[emit_scope_depth]);
+    emit_defer_count = emit_scope_start[emit_scope_depth];
     code_emit(C_PUNCT, 14);
   } else if k == N_IF then {
     code_emit(C_KW, 6);
@@ -1170,16 +1329,27 @@ func gen_stmt(id: int): void {
     code_emit(C_PUNCT, 12);
     gen_for_clause(node_value[id]);
     code_emit(C_PUNCT, 5);
+    ensure_emit_loop(emit_loop_depth);
+    emit_loop_base[emit_loop_depth] = emit_defer_count;
+    emit_loop_depth = emit_loop_depth + 1;
+    let old_step: int = emit_for_step;
+    emit_for_step = node_value[id];
     gen_stmt(node_c[id]);
+    emit_for_step = old_step;
+    emit_loop_depth = emit_loop_depth - 1;
   } else if k == N_WHILE then {
     code_emit(C_KW, 8);
     code_emit(C_PUNCT, 4);
     gen_expr(node_a[id]);
     code_emit(C_PUNCT, 5);
+    ensure_emit_loop(emit_loop_depth);
+    emit_loop_base[emit_loop_depth] = emit_defer_count;
+    emit_loop_depth = emit_loop_depth + 1;
     let old_step: int = emit_for_step;
     emit_for_step = node_aux[id];
     gen_stmt(node_b[id]);
     emit_for_step = old_step;
+    emit_loop_depth = emit_loop_depth - 1;
   }
 }
 
@@ -1231,6 +1401,86 @@ func gen_function_specialized(decl: int, inst: int, cname: int): void {
   gen_stmt(node_a[decl]);
   gen_active_function = old_active_function;
   gen_bind_clear();
+}
+
+func gen_match_temp_symbol(): int {
+  gen_mangle_start = source_len + sym_text_len; gen_mangle_len = 0;
+  gen_append_text("__basalt_match_"); gen_append_uint(gen_match_serial);
+  gen_match_serial = gen_match_serial + 1;
+  return gen_mangle_intern(L_ID);
+}
+
+func gen_match_binding(temp: int, variant: int, binding: int, field: int): void {
+  gen_decl(node_b[field], node_value[binding]);
+  code_emit(C_PUNCT, 11);
+  code_emit(C_IDENT, temp);
+  code_emit(C_PUNCT, 17);
+  code_emit(C_IDENT, sym_c_symbol(node_a[variant]));
+  code_emit(C_PUNCT, 17);
+  code_emit(C_IDENT, sym_c_symbol(node_a[field]));
+  code_emit(C_PUNCT, 12);
+  code_emit(C_NEWLINE, 0);
+}
+
+func gen_match_stmt(id: int): void {
+  let subject: int = node_a[id];
+  let subject_ty: int = tc_emit_arg_type(subject);
+  if subject_ty == 0 then { tc_expr(subject); subject_ty = tc_result_type; }
+  if subject_ty == 0 then return;
+  subject_ty = gen_substitute_type(subject_ty);
+  let enum_decl: int = tc_match_enum_decl(subject_ty);
+  if enum_decl == 0 then return;
+  let enum_name: int = node_value[enum_decl];
+  let temp: int = gen_match_temp_symbol();
+  gen_type(node_kind[subject_ty], subject_ty, node_value[subject_ty]);
+  code_emit(C_IDENT, temp);
+  code_emit(C_PUNCT, 11);
+  gen_expr(subject);
+  code_emit(C_PUNCT, 12);
+  code_emit(C_NEWLINE, 0);
+  let arm: int = node_b[id];
+  while arm != 0 {
+    let variant: int = tc_match_variant_member(enum_decl, node_value[arm]);
+    if variant != 0 then {
+      code_emit(C_KW, 6);
+      code_emit(C_PUNCT, 4);
+      code_emit(C_IDENT, temp);
+      code_emit(C_PUNCT, 17);
+      code_emit(C_IDENT, sym_tag_id());
+      code_emit(C_OP, OP_EQ);
+      code_emit(C_IDENT, sym_c_symbol(sym_qualified(enum_name, node_a[variant])));
+      code_emit(C_PUNCT, 5);
+      code_emit(C_PUNCT, 13);
+      let field: int = node_b[variant];
+      let binding: int = node_a[arm];
+      while field != 0 && binding != 0 {
+        gen_match_binding(temp, variant, binding, field);
+        field = node_next[field]; binding = node_next[binding];
+      }
+      gen_stmt(node_b[arm]);
+      code_emit(C_PUNCT, 14);
+    }
+    arm = node_next[arm];
+  }
+}
+
+func gen_tuple_decl(ty: int, name: int): void {
+  code_emit(C_KW, 12);
+  code_emit(C_IDENT, name);
+  code_emit(C_PUNCT, 13);
+  let field: int = node_a[ty];
+  let index: int = 0;
+  while field != 0 {
+    gen_type(node_kind[field], field, node_value[field]);
+    code_emit(C_IDENT, gen_tuple_field_name(index));
+    code_emit(C_PUNCT, 12);
+    code_emit(C_NEWLINE, 0);
+    field = node_next[field];
+    index = index + 1;
+  }
+  code_emit(C_PUNCT, 14);
+  code_emit(C_PUNCT, 12);
+  code_emit(C_NEWLINE, 0);
 }
 
 func gen_struct_decl(id: int): void {
@@ -1373,11 +1623,14 @@ func gen_function(id: int): void {
   gen_function_signature(id);
   if bi_has_flag(node_value[id], BI_FLAG_MAIN) == 1 && node_kind[node_a[id]] == N_BLOCK then {
     code_emit(C_PUNCT, 13);
+    ensure_emit_scope(emit_scope_depth);
+    emit_scope_start[emit_scope_depth] = emit_defer_count;
+    emit_scope_depth = emit_scope_depth + 1;
     let item: int = node_a[node_a[id]];
-    while item != 0 {
-      gen_stmt(item);
-      item = node_next[item];
-    }
+    while item != 0 { gen_stmt(item); item = node_next[item]; }
+    emit_scope_depth = emit_scope_depth - 1;
+    gen_emit_defer_from(emit_scope_start[emit_scope_depth]);
+    emit_defer_count = emit_scope_start[emit_scope_depth];
     code_emit(C_KW, 5);
     code_emit(C_INT, 0);
     code_emit(C_PUNCT, 12);
@@ -1390,7 +1643,9 @@ func gen_program(id: int): void {
   let gen_saved_node_count: int = node_count;
   gen_source_pos = 0;
   gen_source_epoch = 0;
-  code_reset(); gen_spec_count = 0; gen_name_override = 0;
+  gen_match_serial = 0;
+  gen_tuple_count = 0;
+  code_reset(); gen_spec_count = 0; gen_name_override = 0; emit_defer_count = 0; emit_scope_depth = 0; emit_loop_depth = 0;
   let item: int = node_a[id];
   while item != 0 {
     if node_kind[item] == N_GLOBAL || node_kind[item] == N_CONST then gen_collect_stmt(item);
@@ -1400,6 +1655,11 @@ func gen_program(id: int): void {
       gen_collect_stmt(node_a[item]);
     }
     item = node_next[item];
+  }
+  let tuple_i: int = 0;
+  while tuple_i < gen_tuple_count {
+    gen_tuple_decl(gen_tuple_type[tuple_i], gen_tuple_name[tuple_i]);
+    tuple_i = tuple_i + 1;
   }
   // Forward declarations for ordinary and specialized structs.
   item = node_a[id];
@@ -1564,6 +1824,9 @@ let T_TI16: int = 80;
 let T_TI32: int = 81;
 let T_TI64: int = 82;
 let T_TUSIZE: int = 83;
+let T_DEFER: int = 84;
+let T_MATCH: int = 85;
+let T_FATARROW: int = 86;
 
 let input_kind: int* = 0;
 let input_value: int* = 0;
@@ -1633,6 +1896,32 @@ func ast_type(): int {
   let base: int = 0;
   let named: int = 0;
   let ty: int = 0;
+  if input_take(T_LPAREN) == 1 then {
+    let first: int = ast_type();
+    if first == 0 then return 0;
+    if input_take(T_COMMA) == 1 then {
+      let items: int = first;
+      while 1 == 1 {
+        let item: int = ast_type();
+        if item == 0 then return 0;
+        items = ast_link(items, item);
+        if input_take(T_COMMA) == 0 then { break; }
+      }
+      if input_take(T_RPAREN) == 0 then return 0;
+      ty = ast_node(TY_TUPLE, items, 0, 0, 0, 0);
+    } else {
+      if input_take(T_RPAREN) == 0 then return 0;
+      ty = first;
+    }
+    while input_take(T_STAR) == 1 { ty = ast_node(TY_PTR, ty, 0, 0, 0, 0); }
+    while input_take(T_LBRACK) == 1 {
+      if input_peek() != T_INT then return 0;
+      let size: int = input_payload(); input_pos = input_pos + 1;
+      if input_take(T_RBRACK) == 0 then return 0;
+      ty = ast_node(TY_ARRAY, ty, 0, 0, size, 0);
+    }
+    return ty;
+  }
   if input_take(T_FN) == 1 then {
     if input_take(T_LPAREN) == 0 then return 0;
     let args: int = 0;
@@ -1798,6 +2087,17 @@ func ast_primary(): int {
   if input_take(T_LPAREN) == 1 then {
     let e: int = ast_expr();
     if e < 0 then return (0 - 1);
+    if input_take(T_COMMA) == 1 then {
+      let items: int = e;
+      while 1 == 1 {
+        let item: int = ast_expr();
+        if item < 0 then return (0 - 1);
+        items = ast_link(items, item);
+        if input_take(T_COMMA) == 0 then { break; }
+      }
+      if input_take(T_RPAREN) == 0 then return (0 - 1);
+      return ast_node(N_TUPLE, items, 0, 0, 0, 0);
+    }
     if input_take(T_RPAREN) == 0 then return (0 - 1);
     if input_take(T_LPAREN) == 1 then {
       let args: int = ast_call_args();
@@ -1974,6 +2274,42 @@ func ast_alignment(): int {
 }
 
 func ast_stmt(): int {
+  if input_take(T_DEFER) == 1 then {
+    let cleanup: int = ast_expr();
+    if cleanup < 0 then return (0 - 1);
+    if input_take(T_SEMI) == 0 then return (0 - 1);
+    return ast_node(N_DEFER, cleanup, 0, 0, 0, 0);
+  }
+  if input_take(T_MATCH) == 1 then {
+    let subject: int = ast_expr();
+    if subject < 0 then return (0 - 1);
+    if input_take(T_LBRACE) == 0 then return (0 - 1);
+    let arms: int = 0;
+    while input_peek() != T_RBRACE {
+      if input_peek() == T_EOF || input_peek() != T_ID then return (0 - 1);
+      let variant: int = input_payload(); input_pos = input_pos + 1;
+      let bindings: int = 0;
+      if input_take(T_LPAREN) == 1 then {
+        if input_peek() != T_ID then return (0 - 1);
+        let binding_name: int = input_payload(); input_pos = input_pos + 1;
+        bindings = ast_node(N_VAR, 0, 0, 0, binding_name, 0);
+        if input_take(T_COMMA) == 1 then {
+          if input_peek() != T_ID then return (0 - 1);
+          let second_binding_name: int = input_payload(); input_pos = input_pos + 1;
+          let second_binding: int = ast_node(N_VAR, 0, 0, 0, second_binding_name, 0);
+          bindings = ast_link(bindings, second_binding);
+        }
+        if input_take(T_RPAREN) == 0 then return (0 - 1);
+      }
+      if input_take(T_FATARROW) == 0 then return (0 - 1);
+      let body: int = ast_stmt();
+      if body < 0 then return (0 - 1);
+      let arm: int = ast_node(N_MATCH_ARM, bindings, body, 0, variant, 0);
+      if arms == 0 then arms = arm; else arms = ast_link(arms, arm);
+    }
+    if input_take(T_RBRACE) == 0 then return (0 - 1);
+    return ast_node(N_MATCH, subject, arms, 0, 0, 0);
+  }
   if input_take(T_BREAK) == 1 then {
     if input_take(T_SEMI) == 0 then return (0 - 1);
     return ast_node(N_BREAK, 0, 0, 0, 0, 0);
@@ -1988,6 +2324,24 @@ func ast_stmt(): int {
     return ast_node(N_CONTINUE, 0, 0, 0, 0, 0);
   }
   if input_take(T_LET) == 1 then {
+    if input_take(T_LPAREN) == 1 then {
+      if input_peek() != T_ID then return (0 - 1);
+      let first_name: int = input_payload(); input_pos = input_pos + 1;
+      if input_take(T_COMMA) == 0 then return (0 - 1);
+      if input_peek() != T_ID then return (0 - 1);
+      let second_name: int = input_payload(); input_pos = input_pos + 1;
+      if input_take(T_RPAREN) == 0 then return (0 - 1);
+      if input_take(T_COLON) == 0 then return (0 - 1);
+      let tuple_ty: int = ast_type();
+      if tuple_ty == 0 then return (0 - 1);
+      if input_take(T_EQUAL) == 0 then return (0 - 1);
+      let tuple_value: int = ast_expr();
+      if tuple_value < 0 then return (0 - 1);
+      if input_take(T_SEMI) == 0 then return (0 - 1);
+      let first_binding: int = ast_node(N_VAR, 0, 0, 0, first_name, 0);
+      let second_binding: int = ast_node(N_VAR, 0, 0, 0, second_name, 0);
+      return ast_node(N_TUPLE_BIND, ast_link(first_binding, second_binding), tuple_ty, tuple_value, 0, 0);
+    }
     if input_peek() != T_ID then return (0 - 1);
     let name: int = input_payload();
     input_pos = input_pos + 1;
@@ -2441,6 +2795,9 @@ let L_BITOR_EQ: int = 72;
 let L_BITXOR_EQ: int = 73;
 let L_SHL_EQ: int = 74;
 let L_SHR_EQ: int = 75;
+let L_DEFER: int = 86;
+let L_MATCH: int = 87;
+let L_FATARROW: int = 88;
 
 let source: int* = 0;
 let source_len: int = 0;
@@ -2916,6 +3273,8 @@ func word_code(start: int, length: int): int {
     if h == 505674 then return L_WHILE;
     if h == 600380 then return L_FALSE;
     if h == 405464 then return L_BREAK;
+    if source[start] == 100 && source[start + 1] == 101 && source[start + 2] == 102 && source[start + 3] == 101 && source[start + 4] == 114 then return L_DEFER;
+    if source[start] == 109 && source[start + 1] == 97 && source[start + 2] == 116 && source[start + 3] == 99 && source[start + 4] == 104 then return L_MATCH;
   }
   if length == 8 then {
     if source[start] == 99 then {
@@ -3097,6 +3456,7 @@ func lexer_next(): int {
   else if c == 126 then tok_kind = L_BITNOT;
   else if c == 61 then {
     if source_peek() == 61 then { source_take(); tok_kind = L_EQEQ; }
+    else if source_peek() == 62 then { source_take(); tok_kind = L_FATARROW; }
     else tok_kind = L_EQ;
   }
   else if c == 33 then {
@@ -3198,6 +3558,9 @@ func map_token(k: int): int {
   if k == L_LET then return T_LET;
   if k == L_PRINT then return T_PRINT;
   if k == L_RETURN then return T_RETURN;
+  if k == L_DEFER then return T_DEFER;
+  if k == L_MATCH then return T_MATCH;
+  if k == L_FATARROW then return T_FATARROW;
   if k == L_IF then return T_IF;
   if k == L_ELSE then return T_ELSE;
   if k == L_WHILE then return T_WHILE;
@@ -3487,6 +3850,12 @@ func tc_type_equal(a: int, b: int): int {
     if x != 0 || y != 0 then return 0;
     return 1;
   }
+  if ak == TY_TUPLE then {
+    let x: int = node_a[a]; let y: int = node_a[b];
+    while x != 0 && y != 0 { if tc_type_equal(x, y) == 0 then return 0; x = node_next[x]; y = node_next[y]; }
+    if x != 0 || y != 0 then return 0;
+    return 1;
+  }
   if ak == TY_FUN then {
     if tc_type_equal(node_b[a], node_b[b]) == 0 then return 0;
     let x: int = node_a[a]; let y: int = node_a[b];
@@ -3513,7 +3882,8 @@ func tc_signature_type(entry: int): int {
 }
 
 func tc_type_node_from_summary(kind: int, name: int, elem_kind: int, elem_name: int): int {
-  if kind == TY_GENERIC && name != 0 then return name;
+  if kind == TY_GENERIC then { if name != 0 then return name; }
+  if kind == TY_TUPLE then { if name != 0 then return name; }
   if kind == TY_NAMED then return ast_node(TY_NAMED, 0, 0, 0, name, 0);
   if kind == TY_VARIANT then return ast_node(TY_VARIANT, 0, 0, 0, name, elem_name);
   if kind == TY_PTR then return ast_node(TY_PTR, tc_type_node_from_summary(elem_kind, elem_name, 0, 0), 0, 0, 0, 0);
@@ -3551,6 +3921,13 @@ func tc_match_generic(formal: int, actual: int): void {
     if f != 0 || a != 0 then tc_fail(13);
     return;
   }
+  if node_kind[formal] == TY_TUPLE then {
+    if node_kind[actual] != TY_TUPLE then { tc_fail(12); return; }
+    let f: int = node_a[formal]; let a: int = node_a[actual];
+    while f != 0 && a != 0 { tc_match_generic(f, a); f = node_next[f]; a = node_next[a]; }
+    if f != 0 || a != 0 then tc_fail(13);
+    return;
+  }
   if node_kind[formal] == TY_FUN && node_kind[actual] == TY_FUN then {
     let fp: int = node_a[formal]; let ap: int = node_a[actual];
     while fp != 0 && ap != 0 { tc_match_generic(fp, ap); fp = node_next[fp]; ap = node_next[ap]; }
@@ -3581,6 +3958,11 @@ func tc_substitute_type(ty: int): int {
     let result: int = ast_node(TY_GENERIC, args, 0, 0, node_value[ty], 0);
     node_scope[result] = node_scope[ty];
     return result;
+  }
+  if node_kind[ty] == TY_TUPLE then {
+    let items: int = 0; let p: int = node_a[ty];
+    while p != 0 { let q: int = tc_substitute_type(p); if items == 0 then items = q; else items = ast_link(items, q); p = node_next[p]; }
+    return ast_node(TY_TUPLE, items, 0, 0, 0, 0);
   }
   return ast_node(node_kind[ty], node_a[ty], node_b[ty], node_c[ty], node_value[ty], node_aux[ty]);
 }
@@ -3614,6 +3996,10 @@ func tc_same_full(a_kind: int, a_name: int, a_elem_kind: int, a_elem_name: int, 
   }
   if a_kind == TY_GENERIC || b_kind == TY_GENERIC then {
     if a_kind == TY_GENERIC && b_kind == TY_GENERIC then return tc_type_equal(a_name, b_name);
+    return 0;
+  }
+  if a_kind == TY_TUPLE || b_kind == TY_TUPLE then {
+    if a_kind == TY_TUPLE && b_kind == TY_TUPLE then return tc_type_equal(a_name, b_name);
     return 0;
   }
   if a_kind == TY_PTR && b_kind == TY_PTR then {
@@ -3754,7 +4140,10 @@ func tc_check_type(ty: int): void {
   } else if k == TY_PTR then tc_check_type(node_a[ty]);
   else if k == TY_ARRAY then tc_check_type(node_a[ty]);
   else if k == TY_DYN_ARRAY then tc_check_type(node_a[ty]);
-  else if k == TY_FUN then {
+  else if k == TY_TUPLE then {
+    let item: int = node_a[ty];
+    while item != 0 { tc_check_type(item); item = node_next[item]; }
+  } else if k == TY_FUN then {
 
     let p: int = node_a[ty];
     while p != 0 { tc_check_type(p); p = node_next[p]; }
@@ -3921,7 +4310,7 @@ func tc_type_node(ty: int): void {
   if ty == 0 then { tc_kind = TY_VOID; tc_name = 0; return; }
   tc_kind = node_kind[ty];
   if tc_kind == TY_NAMED then { tc_name = node_value[ty]; }
-  else if (tc_kind == TY_GENERIC || tc_kind == TY_PARAM) then { tc_name = ty; }
+  else if (tc_kind == TY_GENERIC || tc_kind == TY_TUPLE || tc_kind == TY_PARAM) then { tc_name = ty; }
   else { tc_name = 0; }
   if tc_kind == TY_PTR && node_a[ty] != 0 then {
     tc_elem_kind = node_kind[node_a[ty]];
@@ -4001,6 +4390,26 @@ func tc_expr(id: int): void {
   if k == N_BOOL then { tc_kind = TY_BOOL; tc_result_type = ast_node(TY_BOOL, 0, 0, 0, 0, 0); return; }
   if k == N_STRING then { tc_kind = TY_STRING; tc_result_type = ast_node(TY_STRING, 0, 0, 0, 0, 0); return; }
   if k == N_VARIANT then { tc_check_variant(id); return; }
+  if k == N_TUPLE then {
+    let item: int = node_a[id];
+    let types: int = 0;
+    while item != 0 {
+      tc_expr(item);
+      let elem_ty: int = tc_result_type;
+      if elem_ty == 0 then elem_ty = tc_type_node_from_summary(tc_kind, tc_name, tc_elem_kind, tc_elem_name);
+      if elem_ty == 0 then { tc_fail(19); return; }
+      if types == 0 then types = elem_ty; else types = ast_link(types, elem_ty);
+      item = node_next[item];
+    }
+    let tuple_ty: int = ast_node(TY_TUPLE, types, 0, 0, 0, 0);
+    tc_kind = TY_TUPLE;
+    tc_name = tuple_ty;
+    tc_elem_kind = 0;
+    tc_elem_name = 0;
+    tc_result_type = tuple_ty;
+    node_aux[id] = tuple_ty;
+    return;
+  }
   if k == N_VAR then {
     if tc_lookup_var(node_value[id]) == 1 then { if tc_last_var_moved == 1 then tc_fail(33); tc_expr_borrow_source = tc_var_borrow_source[tc_last_var_index]; tc_result_type = tc_last_var_type; node_aux[id] = tc_last_var_type; return; }
     let e: int = tc_find_enum_value(node_value[id]);
@@ -4465,6 +4874,47 @@ func tc_find_enum_variant(name: int): int {
   return 0;
 }
 
+func tc_match_enum_decl(ty: int): int {
+  if ty == 0 || node_kind[ty] != TY_NAMED then return 0;
+  let decl: int = tc_find_enum_ctx(node_value[ty], node_scope[ty]);
+  if decl == 0 then decl = tc_find_enum(node_value[ty]);
+  return decl;
+}
+
+func tc_match_variant_member(decl: int, name: int): int {
+  if decl == 0 || node_kind[decl] != N_ENUM then return 0;
+  let field: int = node_a[decl];
+  while field != 0 {
+    if node_a[field] == name then return field;
+    let qualified: int = sym_qualified(node_value[decl], node_a[field]);
+    if qualified == name || sym_suffix_equal(qualified, name) == 1 then return field;
+    field = node_next[field];
+  }
+  return 0;
+}
+
+func tc_match_seen_variant(head: int, member: int): int {
+  let arm: int = head;
+  while arm != 0 {
+    if node_aux[arm] == member then return 1;
+    arm = node_next[arm];
+  }
+  return 0;
+}
+
+func tc_match_check_arm_bindings(variant: int, bindings: int): void {
+  let field: int = node_b[variant];
+  let binding: int = bindings;
+  while field != 0 && binding != 0 {
+    tc_type_node(node_b[field]);
+    let bk: int = tc_kind; let bn: int = tc_name; let bek: int = tc_elem_kind; let ben: int = tc_elem_name;
+    tc_add_var(node_value[binding], bk, bn, bek, ben, node_b[field]);
+    binding = node_next[binding];
+    field = node_next[field];
+  }
+  if field != 0 || binding != 0 then tc_fail(50);
+}
+
 func tc_emit_field_type(id: int): int {
   if id == 0 || node_kind[id] != N_FIELD_ACCESS then return 0;
   let base_ty: int = tc_emit_arg_type(node_a[id]);
@@ -4514,6 +4964,11 @@ func tc_emit_arg_type(id: int): int {
   if node_kind[id] == N_CHAR then return ast_node(TY_CHAR, 0, 0, 0, 0, 0);
   if node_kind[id] == N_FLOAT then return ast_node(TY_DOUBLE, 0, 0, 0, 0, 0);
   if node_kind[id] == N_NULL then return ast_node(TY_PTR, ast_node(TY_VOID, 0, 0, 0, 0, 0), 0, 0, 0, 0);
+  if node_kind[id] == N_TUPLE then {
+    if node_aux[id] != 0 then return gen_substitute_type(node_aux[id]);
+    tc_expr(id);
+    return tc_result_type;
+  }
   let ek: int = gen_expr_kind(id);
   return tc_type_node_from_summary(ek, 0, tc_elem_kind, tc_elem_name);
 }
@@ -4601,6 +5056,57 @@ func tc_stmt(id: int, expected_kind: int, expected_name: int): void {
       tc_var_borrow_source[lhs_index] = 0 - 1;
       if rhs_borrow_assign < 0 then { } else tc_record_borrow(lhs_index, rhs_borrow_assign);
     }
+  } else if k == N_DEFER then {
+    tc_expr(node_a[id]);
+    if tc_kind != TY_VOID then tc_fail(46);
+  } else if k == N_TUPLE_BIND then {
+    tc_type_node(node_b[id]);
+    let declared_ty: int = tc_result_type;
+    let declared_kind: int = tc_kind;
+    tc_expr(node_c[id]);
+    let rhs_ty: int = tc_result_type;
+    if declared_kind != TY_TUPLE || tc_kind != TY_TUPLE then tc_fail(52);
+    else if declared_ty == 0 || rhs_ty == 0 || tc_type_equal(declared_ty, rhs_ty) == 0 then tc_fail(20);
+    else {
+      let elem: int = node_a[declared_ty];
+      let binding: int = node_a[id];
+      while elem != 0 && binding != 0 {
+        tc_type_node(elem);
+        let ek: int = tc_kind; let en: int = tc_name; let eek: int = tc_elem_kind; let een: int = tc_elem_name;
+        tc_add_var(node_value[binding], ek, en, eek, een, elem);
+        elem = node_next[elem];
+        binding = node_next[binding];
+      }
+      if elem != 0 || binding != 0 then tc_fail(53);
+    }
+  } else if k == N_MATCH then {
+    tc_expr(node_a[id]);
+    let subject_kind: int = tc_kind;
+    let subject_type: int = tc_result_type;
+    let enum_decl: int = 0;
+    if subject_kind == TY_NAMED && subject_type != 0 then enum_decl = tc_match_enum_decl(subject_type);
+    if enum_decl == 0 then tc_fail(47);
+    else {
+      let arm: int = node_b[id];
+      while arm != 0 {
+        let member: int = tc_match_variant_member(enum_decl, node_value[arm]);
+        if member == 0 then tc_fail(48);
+        else {
+          if tc_match_seen_variant(node_b[id], member) == 1 then tc_fail(49);
+          node_aux[arm] = member;
+          tc_enter_scope();
+          tc_match_check_arm_bindings(member, node_a[arm]);
+          tc_stmt(node_b[arm], expected_kind, expected_name);
+          tc_leave_scope();
+        }
+        arm = node_next[arm];
+      }
+      let variant: int = node_a[enum_decl];
+      while variant != 0 {
+        if tc_match_seen_variant(node_b[id], variant) == 0 then tc_fail(51);
+        variant = node_next[variant];
+      }
+    }
   } else if k == N_PRINT then tc_expr(node_a[id]);
   else if k == N_EXPR then { tc_expr(node_a[id]); if node_kind[node_a[id]] == N_CALL then tc_consume_call(node_a[id]); }
   else if k == N_RETURN then {
@@ -4661,6 +5167,14 @@ func tc_diag(): void {
   else if tc_error_code == 42 then print "type error: cannot call non-function value";
   else if tc_error_code == 43 then print "type error: function name is reserved by the C runtime";
   else if tc_error_code == 45 then print "type error: array index out of bounds";
+  else if tc_error_code == 46 then print "type error: defer expression must return void";
+  else if tc_error_code == 47 then print "type error: match subject must be an enum";
+  else if tc_error_code == 48 then print "type error: unknown variant in match arm";
+  else if tc_error_code == 49 then print "type error: duplicate variant in match";
+  else if tc_error_code == 50 then print "type error: match arm payload arity mismatch";
+  else if tc_error_code == 51 then print "type error: match is not exhaustive";
+  else if tc_error_code == 52 then print "type error: tuple destructuring requires tuple type";
+  else if tc_error_code == 53 then print "type error: tuple binding count mismatch";
   else if tc_error_code == 44 then print "type error: distinct functions collide after C mangling";
   else print "type error: invalid expression";
   print "diagnostic.code";
