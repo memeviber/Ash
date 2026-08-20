@@ -2533,6 +2533,20 @@ let BI_TC_WRITE_LINE: int = 12;
 let BI_TC_WRITE_INT: int = 13;
 let BI_TC_WRITE_CHAR: int = 14;
 let BI_TC_IO_STATUS: int = 15;
+let BI_TC_ATOMIC_MAKE: int = 16;
+let BI_TC_ATOMIC_LOAD: int = 17;
+let BI_TC_ATOMIC_STORE: int = 18;
+let BI_TC_ATOMIC_FETCH_ADD: int = 19;
+let BI_TC_ATOMIC_CAS: int = 20;
+let BI_TC_ATOMIC_FREE: int = 21;
+let BI_TC_CHANNEL_MAKE: int = 22;
+let BI_TC_CHANNEL_SEND: int = 23;
+let BI_TC_CHANNEL_RECV: int = 24;
+let BI_TC_CHANNEL_CLOSE: int = 25;
+let BI_TC_CHANNEL_FREE: int = 26;
+let BI_TC_THREAD_SPAWN: int = 27;
+let BI_TC_THREAD_JOIN: int = 28;
+let BI_TC_THREAD_YIELD: int = 29;
 let BI_FLAG_RESERVED: int = 1;
 let BI_FLAG_OWNED: int = 2;
 let BI_FLAG_CONSUME: int = 4;
@@ -2726,6 +2740,20 @@ func bi_init(): void {
   bi_register("basalt_include_open_line", BI_TC_PTR_INT, BI_FLAG_RESERVED + BI_FLAG_OWNED);
   bi_register("basalt_include_last_status", BI_TC_INT, BI_FLAG_RESERVED);
   bi_register("basalt_include_reset_session", BI_TC_VOID, BI_FLAG_RESERVED);
+  bi_register("basalt_atomic_make", BI_TC_ATOMIC_MAKE, BI_FLAG_RESERVED + BI_FLAG_OWNED);
+  bi_register("basalt_atomic_load", BI_TC_ATOMIC_LOAD, BI_FLAG_RESERVED);
+  bi_register("basalt_atomic_store", BI_TC_ATOMIC_STORE, BI_FLAG_RESERVED);
+  bi_register("basalt_atomic_fetch_add", BI_TC_ATOMIC_FETCH_ADD, BI_FLAG_RESERVED);
+  bi_register("basalt_atomic_compare_exchange", BI_TC_ATOMIC_CAS, BI_FLAG_RESERVED);
+  bi_register("basalt_atomic_free", BI_TC_ATOMIC_FREE, BI_FLAG_RESERVED);
+  bi_register("basalt_channel_make", BI_TC_CHANNEL_MAKE, BI_FLAG_RESERVED + BI_FLAG_OWNED);
+  bi_register("basalt_channel_send", BI_TC_CHANNEL_SEND, BI_FLAG_RESERVED);
+  bi_register("basalt_channel_recv", BI_TC_CHANNEL_RECV, BI_FLAG_RESERVED);
+  bi_register("basalt_channel_close", BI_TC_CHANNEL_CLOSE, BI_FLAG_RESERVED);
+  bi_register("basalt_channel_free", BI_TC_CHANNEL_FREE, BI_FLAG_RESERVED);
+  bi_register("basalt_thread_spawn", BI_TC_THREAD_SPAWN, BI_FLAG_RESERVED + BI_FLAG_OWNED);
+  bi_register("basalt_thread_join", BI_TC_THREAD_JOIN, BI_FLAG_RESERVED);
+  bi_register("basalt_thread_yield", BI_TC_THREAD_YIELD, BI_FLAG_RESERVED);
   bi_register("malloc", BI_TC_NONE, BI_FLAG_RESERVED);
   bi_register("calloc", BI_TC_NONE, BI_FLAG_RESERVED);
   bi_register("realloc", BI_TC_NONE, BI_FLAG_RESERVED);
@@ -3308,7 +3336,29 @@ func tc_type_equal(a: int, b: int): int {
     if x != 0 || y != 0 then return 0;
     return 1;
   }
+  if ak == TY_FUN then {
+    if tc_type_equal(node_b[a], node_b[b]) == 0 then return 0;
+    let x: int = node_a[a]; let y: int = node_a[b];
+    while x != 0 && y != 0 { if tc_type_equal(x, y) == 0 then return 0; x = node_next[x]; y = node_next[y]; }
+    if x != 0 || y != 0 then return 0;
+    return 1;
+  }
   return 1;
+}
+
+func tc_signature_type(entry: int): int {
+  if entry == 0 then return 0;
+  let args: int = 0;
+  let p: int = node_c[entry];
+  while p != 0 {
+    let src: int = node_b[p];
+    let q: int = ast_node(node_kind[src], node_a[src], node_b[src], node_c[src], node_value[src], node_aux[src]);
+    if args == 0 then args = q; else args = ast_link(args, q);
+    p = node_next[p];
+  }
+  let ret: int = node_b[entry];
+  if ret != 0 then ret = ast_node(node_kind[ret], node_a[ret], node_b[ret], node_c[ret], node_value[ret], node_aux[ret]);
+  return ast_node(TY_FUN, args, ret, 0, 0, 0);
 }
 
 func tc_type_node_from_summary(kind: int, name: int, elem_kind: int, elem_name: int): int {
@@ -3340,6 +3390,13 @@ func tc_match_generic(formal: int, actual: int): void {
     let f: int = node_a[formal]; let a: int = node_a[actual];
     while f != 0 && a != 0 { tc_match_generic(f, a); f = node_next[f]; a = node_next[a]; }
     if f != 0 || a != 0 then tc_fail(13);
+    return;
+  }
+  if node_kind[formal] == TY_FUN && node_kind[actual] == TY_FUN then {
+    let fp: int = node_a[formal]; let ap: int = node_a[actual];
+    while fp != 0 && ap != 0 { tc_match_generic(fp, ap); fp = node_next[fp]; ap = node_next[ap]; }
+    if fp != 0 || ap != 0 then { tc_fail(13); return; }
+    tc_match_generic(node_b[formal], node_b[actual]);
     return;
   }
   if node_kind[formal] == TY_PTR && node_kind[actual] == TY_PTR then { tc_match_generic(node_a[formal], node_a[actual]); return; }
@@ -3756,8 +3813,9 @@ func tc_expr(id: int): void {
     tc_error_symbol = node_value[id]; tc_fail(5); return;
   }
   if k == N_ADDRESS then {
-    if node_kind[node_a[id]] == N_VAR && tc_find_function_ctx(node_value[node_a[id]], node_scope[node_a[id]]) != 0 then
- { tc_kind = TY_FUN; tc_name = 0; return; }
+    let address_entry: int = 0;
+    if node_kind[node_a[id]] == N_VAR then address_entry = tc_find_function_ctx(node_value[node_a[id]], node_scope[node_a[id]]);
+    if address_entry != 0 then { tc_kind = TY_FUN; tc_name = 0; tc_result_type = tc_signature_type(address_entry); return; }
     tc_expr(node_a[id]); let oldk: int = tc_kind; let oldn: int = tc_name; let olde: int = tc_elem_kind; let olden: int = tc_elem_name; if node_kind[node_a[id]] == N_VAR && tc_lookup_var(node_value[node_a[id]]) == 1 then tc_expr_borrow_source = tc_last_var_index; tc_kind = TY_PTR; tc_name = oldn; tc_elem_kind = oldk; tc_elem_name = oldn; if oldk == TY_PTR then { tc_elem_kind = olde; tc_elem_name = olden; } return;
   }
   if k == N_DEREF then {
@@ -3935,6 +3993,99 @@ func tc_expr(id: int): void {
       tc_kind = TY_INT; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0;
       return;
     }
+    if btag == BI_TC_ATOMIC_MAKE then {
+      let aa: int = node_a[id];
+      if aa == 0 || node_next[aa] != 0 then { tc_fail(13); return; }
+      tc_expr(aa); if tc_kind != TY_INT then { tc_fail(17); return; }
+      tc_kind = TY_PTR; tc_name = 0; tc_elem_kind = TY_VOID; tc_elem_name = 0;
+      tc_result_type = ast_node(TY_PTR, ast_node(TY_VOID, 0, 0, 0, 0, 0), 0, 0, 0, 0); return;
+    }
+    if btag == BI_TC_ATOMIC_LOAD || btag == BI_TC_ATOMIC_FREE then {
+      let aa: int = node_a[id];
+      if aa == 0 || node_next[aa] != 0 then { tc_fail(13); return; }
+      tc_expr(aa); if tc_kind != TY_PTR || tc_elem_kind != TY_VOID then { tc_fail(8); return; }
+      if btag == BI_TC_ATOMIC_FREE then { tc_kind = TY_VOID; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0; tc_result_type = 0; }
+      else { tc_kind = TY_INT; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0; tc_result_type = ast_node(TY_INT, 0, 0, 0, 0, 0); }
+      return;
+    }
+    if btag == BI_TC_ATOMIC_FETCH_ADD then {
+      let aa: int = node_a[id];
+      if aa == 0 || node_next[aa] == 0 || node_next[node_next[aa]] != 0 then { tc_fail(13); return; }
+      tc_expr(aa); if tc_kind != TY_PTR || tc_elem_kind != TY_VOID then { tc_fail(8); return; }
+      aa = node_next[aa]; tc_expr(aa); if tc_kind != TY_INT then { tc_fail(17); return; }
+      tc_kind = TY_INT; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0; tc_result_type = ast_node(TY_INT, 0, 0, 0, 0, 0); return;
+    }
+    if btag == BI_TC_ATOMIC_STORE then {
+      let aa: int = node_a[id];
+      if aa == 0 || node_next[aa] == 0 || node_next[node_next[aa]] != 0 then { tc_fail(13); return; }
+      tc_expr(aa); if tc_kind != TY_PTR || tc_elem_kind != TY_VOID then { tc_fail(8); return; }
+      aa = node_next[aa]; tc_expr(aa); if tc_kind != TY_INT then { tc_fail(17); return; }
+      tc_kind = TY_VOID; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0; tc_result_type = 0; return;
+    }
+    if btag == BI_TC_ATOMIC_CAS then {
+      let aa: int = node_a[id];
+      if aa == 0 || node_next[aa] == 0 || node_next[node_next[aa]] == 0 || node_next[node_next[node_next[aa]]] != 0 then { tc_fail(13); return; }
+      tc_expr(aa); if tc_kind != TY_PTR || tc_elem_kind != TY_VOID then { tc_fail(8); return; }
+      aa = node_next[aa]; tc_expr(aa); if tc_kind != TY_INT then { tc_fail(17); return; }
+      aa = node_next[aa]; tc_expr(aa); if tc_kind != TY_INT then { tc_fail(17); return; }
+      tc_kind = TY_INT; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0; tc_result_type = ast_node(TY_INT, 0, 0, 0, 0, 0); return;
+    }
+    if btag == BI_TC_CHANNEL_MAKE then {
+      let aa: int = node_a[id];
+      if aa == 0 || node_next[aa] != 0 then { tc_fail(13); return; }
+      tc_expr(aa); if tc_kind != TY_INT then { tc_fail(17); return; }
+      tc_kind = TY_PTR; tc_name = 0; tc_elem_kind = TY_VOID; tc_elem_name = 0;
+      tc_result_type = ast_node(TY_PTR, ast_node(TY_VOID, 0, 0, 0, 0, 0), 0, 0, 0, 0); return;
+    }
+    if btag == BI_TC_CHANNEL_SEND || btag == BI_TC_CHANNEL_RECV then {
+      let aa: int = node_a[id];
+      if aa == 0 || node_next[aa] == 0 || node_next[node_next[aa]] != 0 then { tc_fail(13); return; }
+      tc_expr(aa); if tc_kind != TY_PTR || tc_elem_kind != TY_VOID then { tc_fail(8); return; }
+      aa = node_next[aa]; tc_expr(aa);
+      if btag == BI_TC_CHANNEL_SEND then { if tc_kind != TY_INT then { tc_fail(17); return; } }
+      else if tc_kind != TY_PTR || tc_elem_kind != TY_INT then { tc_fail(8); return; }
+      tc_kind = TY_INT; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0; tc_result_type = ast_node(TY_INT, 0, 0, 0, 0, 0); return;
+    }
+    if btag == BI_TC_CHANNEL_CLOSE || btag == BI_TC_CHANNEL_FREE then {
+      let aa: int = node_a[id];
+      if aa == 0 || node_next[aa] != 0 then { tc_fail(13); return; }
+      tc_expr(aa); if tc_kind != TY_PTR || tc_elem_kind != TY_VOID then { tc_fail(8); return; }
+      tc_kind = TY_VOID; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0; tc_result_type = 0; return;
+    }
+    if btag == BI_TC_THREAD_SPAWN then {
+      let aa: int = node_a[id];
+      if aa == 0 || node_next[aa] == 0 || node_next[node_next[aa]] != 0 then { tc_fail(13); return; }
+      let callback_ok: int = 0;
+      if node_kind[aa] == N_ADDRESS && node_kind[node_a[aa]] == N_VAR then {
+        let entry: int = tc_find_function_ctx(node_value[node_a[aa]], node_scope[node_a[aa]]);
+        if entry != 0 && node_b[entry] != 0 && node_kind[node_b[entry]] == TY_INT then {
+          let ep: int = node_c[entry];
+          if ep != 0 && node_next[ep] == 0 && node_kind[node_b[ep]] == TY_PTR && node_a[node_b[ep]] != 0 && node_kind[node_a[node_b[ep]]] == TY_VOID then callback_ok = 1;
+        }
+      } else {
+        tc_expr(aa);
+        let callback_ty: int = tc_result_type;
+        if tc_kind == TY_FUN && callback_ty != 0 && node_kind[callback_ty] == TY_FUN && node_b[callback_ty] != 0 && node_kind[node_b[callback_ty]] == TY_INT then {
+          let ep: int = node_a[callback_ty];
+          if ep != 0 && node_next[ep] == 0 && node_kind[ep] == TY_PTR && node_a[ep] != 0 && node_kind[node_a[ep]] == TY_VOID then callback_ok = 1;
+        }
+      }
+      if callback_ok == 0 then { tc_fail(12); return; }
+      let arg: int = node_next[aa]; tc_expr(arg);
+      if tc_kind != TY_PTR || tc_elem_kind != TY_VOID then { tc_fail(8); return; }
+      tc_kind = TY_PTR; tc_name = 0; tc_elem_kind = TY_VOID; tc_elem_name = 0;
+      tc_result_type = ast_node(TY_PTR, ast_node(TY_VOID, 0, 0, 0, 0, 0), 0, 0, 0, 0); return;
+    }
+    if btag == BI_TC_THREAD_JOIN then {
+      let aa: int = node_a[id];
+      if aa == 0 || node_next[aa] != 0 then { tc_fail(13); return; }
+      tc_expr(aa); if tc_kind != TY_PTR || tc_elem_kind != TY_VOID then { tc_fail(8); return; }
+      tc_kind = TY_INT; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0; tc_result_type = ast_node(TY_INT, 0, 0, 0, 0, 0); return;
+    }
+    if btag == BI_TC_THREAD_YIELD then {
+      if node_a[id] != 0 then { tc_fail(13); return; }
+      tc_kind = TY_VOID; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0; tc_result_type = 0; return;
+    }
     let fun_node: int = tc_find_function_ctx(node_value[id], node_scope[id]);
     if fun_node == 0 then {
       if tc_lookup_var(node_value[id]) == 1 && tc_kind == TY_FUN then {
@@ -3979,10 +4130,15 @@ func tc_expr(id: int): void {
     }
     let arg: int = node_a[id]; let p: int = node_c[fun_node];
     while arg != 0 && p != 0 {
-      tc_expr(arg); let ak: int = tc_kind; let an: int = tc_name; let aek: int = tc_elem_kind; let aen: int = tc_elem_name;
-      tc_type_node(node_b[p]); let pek: int = tc_kind; let pen: int = tc_name; let peek: int = tc_elem_kind; let peen: int = tc_elem_name;
+      tc_expr(arg); let ak: int = tc_kind; let an: int = tc_name; let aek: int = tc_elem_kind; let aen: int = tc_elem_name; let actual_type: int = tc_result_type;
+      tc_type_node(node_b[p]); let pek: int = tc_kind; let pen: int = tc_name; let peek: int = tc_elem_kind; let peen: int = tc_elem_name; let formal_type: int = tc_result_type;
       if pek == TY_DYN_ARRAY && ak == TY_DYN_ARRAY then tc_move_value(arg);
       if tc_same_full(ak, an, aek, aen, pek, pen, peek, peen) == 0 then tc_fail(12);
+      if ak == TY_FUN && pek == TY_FUN then {
+        if actual_type == 0 then tc_fail(12);
+        if formal_type == 0 then tc_fail(12);
+        if actual_type != 0 && formal_type != 0 && tc_type_equal(actual_type, formal_type) == 0 then tc_fail(12);
+      }
       arg = node_next[arg]; p = node_next[p];
     }
     if arg != 0 || p != 0 then tc_fail(13);
@@ -4552,7 +4708,8 @@ func emit_c_token(out: int*, kind: int, value: int): void {
 }
 
 func emit_runtime(out: int*): void {
-  write_string(out, "#if defined(_WIN32)\n#include <direct.h>\n#else\n#define _POSIX_C_SOURCE 200809L\n#define _XOPEN_SOURCE 700\n#endif\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n#include <limits.h>\n#include <errno.h>\n#if defined(__GNUC__) || defined(__clang__)\n#define BASALT_UNUSED __attribute__((unused))\n#else\n#define BASALT_UNUSED\n#endif\nstatic void basalt_panic(int code){(void)code;exit(2);}\nstatic size_t basalt_checked_bytes(int count,size_t elem_size){if(count<0)basalt_panic(1);if(elem_size!=0&&(size_t)count>(size_t)-1/elem_size)basalt_panic(1);return(size_t)count*elem_size;}\nstatic void* basalt_track(void*);\n");
+  write_string(out, "#if defined(_WIN32)\n#include <direct.h>\n#else\n#define _POSIX_C_SOURCE 200809L\n#define _XOPEN_SOURCE 700\n#endif\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n#include <limits.h>\n#include <errno.h>\n#include <stdatomic.h>\n#include <threads.h>\n#if defined(__GNUC__) || defined(__clang__)\n#define BASALT_UNUSED __attribute__((unused))\n#else\n#define BASALT_UNUSED\n#endif\nstatic void basalt_panic(int code){(void)code;exit(2);}\nstatic size_t basalt_checked_bytes(int count,size_t elem_size){if(count<0)basalt_panic(1);if(elem_size!=0&&(size_t)count>(size_t)-1/elem_size)basalt_panic(1);return(size_t)count*elem_size;}\nstatic void* basalt_track(void*);static void basalt_release(void*);\n");
+  write_string(out, "typedef struct basalt_atomic_int { atomic_int value; } basalt_atomic_int;\nstatic BASALT_UNUSED void* basalt_atomic_make(int initial){basalt_atomic_int*a=(basalt_atomic_int*)calloc(1,sizeof(*a));if(!a)basalt_panic(5);atomic_init(&a->value,initial);return basalt_track(a);}\nstatic BASALT_UNUSED int basalt_atomic_load(void*p){basalt_atomic_int*a=(basalt_atomic_int*)p;if(!a)basalt_panic(4);return atomic_load_explicit(&a->value,memory_order_acquire);}\nstatic BASALT_UNUSED void basalt_atomic_store(void*p,int value){basalt_atomic_int*a=(basalt_atomic_int*)p;if(!a)basalt_panic(4);atomic_store_explicit(&a->value,value,memory_order_release);}\nstatic BASALT_UNUSED int basalt_atomic_fetch_add(void*p,int delta){basalt_atomic_int*a=(basalt_atomic_int*)p;if(!a)basalt_panic(4);return atomic_fetch_add_explicit(&a->value,delta,memory_order_acq_rel);}\nstatic BASALT_UNUSED int basalt_atomic_compare_exchange(void*p,int expected,int desired){basalt_atomic_int*a=(basalt_atomic_int*)p;int old;if(!a)basalt_panic(4);old=expected;return atomic_compare_exchange_strong_explicit(&a->value,&old,desired,memory_order_acq_rel,memory_order_acquire);}\nstatic BASALT_UNUSED void basalt_atomic_free(void*p){basalt_release(p);}\ntypedef struct basalt_channel { _Atomic size_t head; _Atomic size_t tail; atomic_int closed; size_t capacity; int data[]; } basalt_channel;\nstatic BASALT_UNUSED void* basalt_channel_make(int requested){size_t cap=2;size_t bytes;basalt_channel*c;if(requested<1||requested>1073741824)basalt_panic(7);while(cap<(size_t)requested){if(cap>(size_t)-1/2)basalt_panic(1);cap*=2;}if(cap>(size_t)-1/sizeof(int))basalt_panic(1);bytes=sizeof(*c)+cap*sizeof(int);if(bytes<sizeof(*c))basalt_panic(1);c=(basalt_channel*)calloc(1,bytes);if(!c)basalt_panic(5);c->capacity=cap;atomic_init(&c->head,0);atomic_init(&c->tail,0);atomic_init(&c->closed,0);return basalt_track(c);}\nstatic BASALT_UNUSED int basalt_channel_send(void*p,int value){basalt_channel*c=(basalt_channel*)p;size_t head,tail;if(!c)basalt_panic(4);if(atomic_load_explicit(&c->closed,memory_order_acquire)!=0)return -1;head=atomic_load_explicit(&c->head,memory_order_relaxed);tail=atomic_load_explicit(&c->tail,memory_order_acquire);if(head-tail>=c->capacity)return 0;c->data[head&(c->capacity-1)]=value;atomic_store_explicit(&c->head,head+1,memory_order_release);return 1;}\nstatic BASALT_UNUSED int basalt_channel_recv(void*p,int*out){basalt_channel*c=(basalt_channel*)p;size_t head,tail;if(!c||!out)basalt_panic(4);tail=atomic_load_explicit(&c->tail,memory_order_relaxed);head=atomic_load_explicit(&c->head,memory_order_acquire);if(tail==head){if(atomic_load_explicit(&c->closed,memory_order_acquire)!=0)return -1;return 0;}*out=c->data[tail&(c->capacity-1)];atomic_store_explicit(&c->tail,tail+1,memory_order_release);return 1;}\nstatic BASALT_UNUSED void basalt_channel_close(void*p){basalt_channel*c=(basalt_channel*)p;if(!c)basalt_panic(4);atomic_store_explicit(&c->closed,1,memory_order_release);}\nstatic BASALT_UNUSED void basalt_channel_free(void*p){basalt_release(p);}\ntypedef struct basalt_thread_handle { thrd_t thread; } basalt_thread_handle;\nstatic BASALT_UNUSED void* basalt_thread_spawn(int(*entry)(void*),void*arg){basalt_thread_handle*h=(basalt_thread_handle*)calloc(1,sizeof(*h));if(!h)basalt_panic(5);if(thrd_create(&h->thread,entry,arg)!=thrd_success){free(h);return NULL;}return basalt_track(h);}\nstatic BASALT_UNUSED int basalt_thread_join(void*p){basalt_thread_handle*h=(basalt_thread_handle*)p;int result;if(!h)basalt_panic(4);if(thrd_join(h->thread,&result)!=thrd_success)basalt_panic(8);basalt_release(h);return result;}\nstatic BASALT_UNUSED void basalt_thread_yield(void){thrd_yield();}\n");
   write_string(out, "static char** basalt_inc_active=NULL;static size_t basalt_inc_active_n=0,basalt_inc_active_cap=0;static char** basalt_inc_loaded=NULL;static size_t basalt_inc_loaded_n=0,basalt_inc_loaded_cap=0;static int basalt_inc_status=0;\n");
   write_string(out, "static BASALT_UNUSED int basalt_inc_eq(const char*a,const char*b){return strcmp(a,b)==0;}\n");
   write_string(out, "static BASALT_UNUSED size_t basalt_inc_find(char**v,size_t n,const char*p){size_t i;for(i=0;i<n;i++)if(basalt_inc_eq(v[i],p))return i;return (size_t)-1;}\n");
