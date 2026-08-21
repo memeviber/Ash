@@ -130,6 +130,7 @@ compile_run "$ROOT/tests/regression/option_test.bsl" option_test
 compile_run "$ROOT/tests/regression/option_result_combinators_test.bsl" option_result_combinators_test
 compile_run "$ROOT/tests/regression/string_builder_iter_test.bsl" string_builder_iter_test
 compile_run "$ROOT/tests/regression/numeric_compound_test.bsl" numeric_compound_test
+compile_run "$ROOT/tests/regression/f32_f64_test.bsl" f32_f64_test
 compile_run "$ROOT/tests/regression/compound_assignment_side_effect_test.bsl" compound_assignment_side_effect_test
 compile_run "$ROOT/tests/regression/source_mapping_test.bsl" source_mapping_test
 compile_run "$ROOT/tests/regression/tagged_union_test.bsl" tagged_union_test
@@ -146,6 +147,7 @@ expect_reject "$ROOT/tests/regression/integer_literal_u64_overflow_invalid.bsl" 
 expect_reject "$ROOT/tests/regression/integer_literal_u8_overflow_invalid.bsl" integer_literal_u8_overflow_invalid
 expect_reject "$ROOT/tests/regression/integer_literal_global_invalid.bsl" integer_literal_global_invalid
 expect_reject "$ROOT/tests/regression/integer_literal_indirect_invalid.bsl" integer_literal_indirect_invalid
+expect_reject "$ROOT/tests/regression/f32_f64_mismatch_invalid.bsl" f32_f64_mismatch_invalid
 expect_reject "$ROOT/tests/regression/fixed_width_invalid_generic.bsl" fixed_width_invalid_generic
 expect_reject "$ROOT/tests/regression/aligned_invalid_power.bsl" aligned_invalid_power
 expect_reject "$ROOT/tests/regression/concurrency_invalid_atomic.bsl" concurrency_invalid_atomic

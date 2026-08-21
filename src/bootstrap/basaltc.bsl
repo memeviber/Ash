@@ -1029,7 +1029,10 @@ func gen_expr(id: int): void {
     } else code_emit(C_INT, node_value[id]);
   }
   else if k == N_BOOL then code_emit(C_INT, node_value[id]);
-  else if k == N_FLOAT then code_emit(C_IDENT, node_value[id]);
+  else if k == N_FLOAT then {
+    code_emit(C_IDENT, node_value[id]);
+    if node_aux[id] == TY_FLOAT then code_emit(C_IDENT, -1021);
+  }
   else if k == N_STRING then code_emit(C_STRING, node_value[id]);
   else if k == N_CHAR then code_emit(C_INT, node_value[id]);
   else if k == N_VARIANT then gen_variant_expr(id);
@@ -1083,9 +1086,11 @@ func gen_expr(id: int): void {
     } else code_emit(C_IDENT, sym_c_symbol(node_value[id]));
   }
   else if k == N_BINOP then {
+    if node_c[id] == TY_FLOAT then { code_emit(C_PUNCT, 4); code_emit(C_KW, 18); code_emit(C_PUNCT, 5); code_emit(C_PUNCT, 4); }
     if node_value[id] == OP_CONCAT then { code_emit(C_IDENT, -1002); code_emit(C_PUNCT, 6); gen_expr(node_a[id]); code_emit(C_PUNCT, 7); gen_expr(node_b[id]); code_emit(C_PUNCT, 8); }
     else if node_value[id] == OP_SUB && gen_expr_kind(node_a[id]) == TY_PTR && gen_expr_kind(node_b[id]) == TY_PTR then { code_emit(C_PUNCT, 4); code_emit(C_KW, 1); code_emit(C_PUNCT, 5); code_emit(C_PUNCT, 4); gen_expr(node_a[id]); code_emit(C_OP, node_value[id]); gen_expr(node_b[id]); code_emit(C_PUNCT, 5); }
     else { code_emit(C_PUNCT, 4); gen_expr(node_a[id]); code_emit(C_OP, node_value[id]); gen_expr(node_b[id]); code_emit(C_PUNCT, 5); }
+    if node_c[id] == TY_FLOAT then code_emit(C_PUNCT, 5);
   } else if k == N_CALL then {
     let call_name: int = node_value[id];
     let btag: int = bi_tag(call_name);
@@ -1113,10 +1118,15 @@ func gen_expr_kind(id: int): int {
   if k == N_TUPLE then return TY_TUPLE;
   if k == N_VARIANT then { if node_aux[id] != 0 then return node_kind[node_aux[id]]; return TY_NAMED; }
   if k == N_CHAR then return TY_CHAR;
-  if k == N_FLOAT then return TY_DOUBLE;
+  if k == N_FLOAT then { if node_aux[id] == TY_FLOAT then return TY_FLOAT; return TY_DOUBLE; }
   if k == N_STRING then return TY_STRING;
   if k == N_NULL then return TY_PTR;
   if k == N_VAR then {
+    let formal_type: int = gen_active_param_type(node_value[id]);
+    if formal_type != 0 then {
+      let resolved_type: int = gen_substitute_type(formal_type);
+      if resolved_type != 0 then return node_kind[resolved_type];
+    }
     let vt: int = sym_type[node_value[id]];
     if vt > 99 then {
       tc_elem_kind = sym_elem_kind[node_value[id]];
@@ -3305,6 +3315,8 @@ func word_code(start: int, length: int): int {
     if h == 312968 then return L_TINT;
     if h == 310114 then return L_FOR;
     if source[start] == 117 && source[start + 1] == 49 && source[start + 2] == 54 then return L_TU16;
+    if source[start] == 102 && source[start + 1] == 51 && source[start + 2] == 50 then return L_TFLOAT;
+    if source[start] == 102 && source[start + 1] == 54 && source[start + 2] == 52 then return L_TDOUBLE;
     if source[start] == 117 && source[start + 1] == 51 && source[start + 2] == 50 then return L_TU32;
     if source[start] == 117 && source[start + 1] == 54 && source[start + 2] == 52 then return L_TU64;
     if source[start] == 105 && source[start + 1] == 49 && source[start + 2] == 54 then return L_TI16;
@@ -3996,10 +4008,21 @@ func tc_generic_moves_array(fun_node: int): int {
   return 0;
 }
 
+func tc_mark_float_expr(id: int, expected_kind: int): void {
+  if id == 0 then return;
+  if node_kind[id] == N_FLOAT then {
+    if expected_kind == TY_FLOAT then node_aux[id] = TY_FLOAT;
+    else if expected_kind == TY_DOUBLE then node_aux[id] = 0;
+  } else if expected_kind == TY_FLOAT && node_kind[id] == N_BINOP then {
+    tc_mark_float_expr(node_a[id], TY_FLOAT);
+    tc_mark_float_expr(node_b[id], TY_FLOAT);
+  }
+}
+
 func tc_match_generic_call_arg(formal: int, actual: int, expr: int): void {
-  if formal != 0 && expr != 0 && node_kind[formal] == TY_PARAM && node_kind[expr] == N_INT then {
+  if formal != 0 && expr != 0 && node_kind[formal] == TY_PARAM then {
     let bound: int = tc_bind_find(node_value[formal]);
-    if bound != 0 && tc_is_integer_kind(node_kind[bound]) == 1 then return;
+    if node_kind[expr] == N_INT && bound != 0 && tc_is_integer_kind(node_kind[bound]) == 1 then return;
   }
   tc_match_generic(formal, actual);
 }
@@ -4069,14 +4092,12 @@ func tc_same(a_kind: int, a_name: int, b_kind: int, b_name: int): int {
     }
     return 1;
   }
-  if (a_kind == TY_FLOAT || a_kind == TY_DOUBLE) && (b_kind == TY_FLOAT || b_kind == TY_DOUBLE) then return 1;
   if tc_is_integer_kind(a_kind) == 1 && tc_is_integer_kind(b_kind) == 1 then return 1;
   if (a_kind == TY_VOID && b_kind == TY_INT) then return 1;
   if (a_kind == TY_INT && b_kind == TY_VOID) then return 1;
     return 0;
 }
 func tc_array_elem_same(a_kind: int, a_name: int, b_kind: int, b_name: int): int {
-  if (a_kind == TY_FLOAT || a_kind == TY_DOUBLE) && (b_kind == TY_FLOAT || b_kind == TY_DOUBLE) then return 1;
   if tc_is_legacy_integer_kind(a_kind) == 1 && tc_is_legacy_integer_kind(b_kind) == 1 then return 1;
   if a_kind != b_kind then return 0;
   if a_kind == TY_NAMED then { if a_name == b_name then return 1; return 0; }
@@ -4109,7 +4130,6 @@ func tc_same_full(a_kind: int, a_name: int, a_elem_kind: int, a_elem_name: int, 
     }
     return 1;
   }
-  if (a_kind == TY_FLOAT || a_kind == TY_DOUBLE) && (b_kind == TY_FLOAT || b_kind == TY_DOUBLE) then return 1;
   if tc_is_integer_kind(a_kind) == 1 && tc_is_integer_kind(b_kind) == 1 then return 1;
   if (a_kind == TY_CHAR && (b_kind == TY_INT || b_kind == TY_BOOL || b_kind == TY_LONG || b_kind == TY_LLONG)) || (b_kind == TY_CHAR && (a_kind == TY_INT || a_kind == TY_BOOL || a_kind == TY_LONG || a_kind == TY_LLONG)) then return 1;
   if (a_kind == TY_VOID && b_kind == TY_INT) || (a_kind == TY_INT && b_kind == TY_VOID) then return 1;
@@ -4455,11 +4475,11 @@ func tc_check_variant(id: int): int {
   let arg: int = node_a[id];
   let field: int = node_b[tc_variant_member];
   while arg != 0 && field != 0 {
-    tc_expr(arg);
-    let ak: int = tc_kind; let an: int = tc_name; let aek: int = tc_elem_kind; let aen: int = tc_elem_name;
-    tc_type_node(node_b[field]);
-    if tc_literal_fits(arg, tc_kind) == 0 then tc_fail(54);
-    if tc_same_full(ak, an, aek, aen, tc_kind, tc_name, tc_elem_kind, tc_elem_name) == 0 then { tc_fail(12); return 1; }
+    tc_type_node(node_b[field]); let fk: int = tc_kind; let f_name: int = tc_name; let fek: int = tc_elem_kind; let f_elem_name: int = tc_elem_name;
+    tc_mark_float_expr(arg, fk);
+    tc_expr(arg); let ak: int = tc_kind; let an: int = tc_name; let aek: int = tc_elem_kind; let aen: int = tc_elem_name;
+    if tc_literal_fits(arg, fk) == 0 then tc_fail(54);
+    if tc_same_full(ak, an, aek, aen, fk, f_name, fek, f_elem_name) == 0 then { tc_fail(12); return 1; }
     arg = node_next[arg]; field = node_next[field];
   }
   if arg != 0 || field != 0 then { tc_fail(13); return 1; }
@@ -4478,7 +4498,7 @@ func tc_expr(id: int): void {
   if id == 0 then { tc_fail(4); return; }
   let k: int = node_kind[id];
   if k == N_INT then { tc_kind = TY_INT; tc_result_type = ast_node(TY_INT, 0, 0, 0, 0, 0); return; }
-  if k == N_FLOAT then { tc_kind = TY_DOUBLE; tc_result_type = ast_node(TY_DOUBLE, 0, 0, 0, 0, 0); return; }
+  if k == N_FLOAT then { if node_aux[id] == TY_FLOAT then { tc_kind = TY_FLOAT; tc_result_type = ast_node(TY_FLOAT, 0, 0, 0, 0, 0); } else { tc_kind = TY_DOUBLE; tc_result_type = ast_node(TY_DOUBLE, 0, 0, 0, 0, 0); } return; }
   if k == N_CHAR then { tc_kind = TY_CHAR; tc_result_type = ast_node(TY_CHAR, 0, 0, 0, 0, 0); return; }
   if k == N_NULL then { tc_kind = TY_PTR; tc_name = 0; tc_elem_kind = TY_VOID; tc_elem_name = 0; tc_result_type = ast_node(TY_PTR, ast_node(TY_VOID, 0, 0, 0, 0, 0), 0, 0, 0, 0); return; }
   if k == N_BOOL then { tc_kind = TY_BOOL; tc_result_type = ast_node(TY_BOOL, 0, 0, 0, 0, 0); return; }
@@ -4832,12 +4852,18 @@ func tc_expr(id: int): void {
       let generic_moves_array: int = tc_generic_moves_array(fun_node);
       let ga: int = node_a[id]; let gp: int = node_c[fun_node];
       while ga != 0 && gp != 0 {
+        let formal_arg: int = node_b[gp];
+        if node_kind[formal_arg] == TY_PARAM then {
+          let bound_arg: int = tc_bind_find(node_value[formal_arg]);
+          if bound_arg != 0 && node_kind[bound_arg] == TY_FLOAT then tc_mark_float_expr(ga, TY_FLOAT);
+          else if bound_arg != 0 && node_kind[bound_arg] == TY_DOUBLE then tc_mark_float_expr(ga, TY_DOUBLE);
+        }
         tc_expr(ga);
         let actual_kind: int = tc_kind;
         let actual_ty: int = tc_result_type;
         if generic_moves_array == 1 && actual_kind == TY_DYN_ARRAY then tc_move_value(ga);
         if actual_ty == 0 then actual_ty = tc_type_node_from_summary(tc_kind, tc_name, tc_elem_kind, tc_elem_name);
-        tc_match_generic_call_arg(node_b[gp], actual_ty, ga);
+        tc_match_generic_call_arg(formal_arg, actual_ty, ga);
         ga = node_next[ga]; gp = node_next[gp];
       }
       if ga != 0 || gp != 0 then tc_fail(13);
@@ -4848,8 +4874,9 @@ func tc_expr(id: int): void {
     }
     let arg: int = node_a[id]; let p: int = node_c[fun_node];
     while arg != 0 && p != 0 {
-      tc_expr(arg); let ak: int = tc_kind; let an: int = tc_name; let aek: int = tc_elem_kind; let aen: int = tc_elem_name; let actual_type: int = tc_result_type;
       tc_type_node(node_b[p]); let pek: int = tc_kind; let pen: int = tc_name; let peek: int = tc_elem_kind; let peen: int = tc_elem_name; let formal_type: int = tc_result_type;
+      tc_mark_float_expr(arg, pek);
+      tc_expr(arg); let ak: int = tc_kind; let an: int = tc_name; let aek: int = tc_elem_kind; let aen: int = tc_elem_name; let actual_type: int = tc_result_type;
       if tc_literal_fits(arg, pek) == 0 then tc_fail(54);
       if pek == TY_DYN_ARRAY && ak == TY_DYN_ARRAY then tc_move_value(arg);
       if tc_same_full(ak, an, aek, aen, pek, pen, peek, peen) == 0 then tc_fail(12);
@@ -4869,8 +4896,9 @@ func tc_expr(id: int): void {
     let fty: int = tc_result_type;
     let arg: int = node_b[id]; let param: int = node_a[fty];
     while arg != 0 && param != 0 {
-      tc_expr(arg); let ak: int = tc_kind; let an: int = tc_name; let aek: int = tc_elem_kind; let aen: int = tc_elem_name;
       tc_type_node(param); let pk: int = tc_kind; let pn: int = tc_name; let pek: int = tc_elem_kind; let pen: int = tc_elem_name;
+      tc_mark_float_expr(arg, pk);
+      tc_expr(arg); let ak: int = tc_kind; let an: int = tc_name; let aek: int = tc_elem_kind; let aen: int = tc_elem_name;
       if tc_literal_fits(arg, pk) == 0 then tc_fail(54);
       if tc_same_full(ak, an, aek, aen, pk, pn, pek, pen) == 0 then tc_fail(12);
       arg = node_next[arg]; param = node_next[param];
@@ -5059,7 +5087,7 @@ func tc_emit_arg_type(id: int): int {
   if node_kind[id] == N_INT then return ast_node(TY_INT, 0, 0, 0, 0, 0);
   if node_kind[id] == N_BOOL then return ast_node(TY_BOOL, 0, 0, 0, 0, 0);
   if node_kind[id] == N_CHAR then return ast_node(TY_CHAR, 0, 0, 0, 0, 0);
-  if node_kind[id] == N_FLOAT then return ast_node(TY_DOUBLE, 0, 0, 0, 0, 0);
+  if node_kind[id] == N_FLOAT then { if node_aux[id] == TY_FLOAT then return ast_node(TY_FLOAT, 0, 0, 0, 0, 0); return ast_node(TY_DOUBLE, 0, 0, 0, 0, 0); }
   if node_kind[id] == N_NULL then return ast_node(TY_PTR, ast_node(TY_VOID, 0, 0, 0, 0, 0), 0, 0, 0, 0);
   if node_kind[id] == N_TUPLE then {
     if node_aux[id] != 0 then return gen_substitute_type(node_aux[id]);
@@ -5119,13 +5147,16 @@ func tc_stmt(id: int, expected_kind: int, expected_name: int): void {
   let k: int = node_kind[id];
   if k == N_CONST then {
     tc_type_node(node_b[id]); let ck: int = tc_kind; let cn: int = tc_name; let ce: int = tc_elem_kind; let cen: int = tc_elem_name;
+    tc_mark_float_expr(node_c[id], ck);
     tc_expr(node_c[id]);
     if tc_literal_fits(node_c[id], ck) == 0 then tc_fail(54);
     if tc_same_full(ck, cn, ce, cen, tc_kind, tc_name, tc_elem_kind, tc_elem_name) == 0 then { if node_kind[node_c[id]] != N_INT || node_value[node_c[id]] != 0 then if node_kind[node_c[id]] != N_NULL then tc_fail(30); }
     tc_add_var(node_a[id], ck, cn, ce, cen, node_b[id]); sym_type[node_a[id]] = ck + 100;
   } else   if k == N_LET then {
     tc_type_node(node_b[id]); let dk: int = tc_kind; let dn: int = tc_name; let de: int = tc_elem_kind; let den: int = tc_elem_name;
-    tc_expr(node_c[id]); let ek: int = tc_kind; let en: int = tc_name; let ee: int = tc_elem_kind; let een: int = tc_elem_name; let rhs_borrow: int = tc_expr_borrow_source;
+    tc_mark_float_expr(node_c[id], dk);
+    tc_expr(node_c[id]);
+    let ek: int = tc_kind; let en: int = tc_name; let ee: int = tc_elem_kind; let een: int = tc_elem_name; let rhs_borrow: int = tc_expr_borrow_source;
     if tc_is_owner_kind(dk) == 1 && node_kind[node_c[id]] == N_VAR then tc_fail(40);
 
     if tc_literal_fits(node_c[id], dk) == 0 then tc_fail(54);
@@ -5140,7 +5171,9 @@ func tc_stmt(id: int, expected_kind: int, expected_name: int): void {
     if node_kind[node_a[id]] == N_VAR && sym_type[node_value[node_a[id]]] > 100 then tc_fail(31);
     tc_expr(node_a[id]); let lk: int = tc_kind; let ln: int = tc_name; let le: int = tc_elem_kind; let len: int = tc_elem_name; let lhs_borrow: int = tc_expr_borrow_source; let lhs_index: int = tc_last_var_index;
     tc_require_mutable(node_a[id]);
-    tc_expr(node_b[id]); let rhs_borrow_assign: int = tc_expr_borrow_source;
+    tc_mark_float_expr(node_b[id], lk);
+    tc_expr(node_b[id]);
+    let rhs_borrow_assign: int = tc_expr_borrow_source;
     if k == N_COMPOUND_ASSIGN then {
       let combined: int = ast_node(N_BINOP, node_a[id], node_b[id], 0, node_value[id], 0);
       tc_expr(combined);
@@ -5212,7 +5245,7 @@ func tc_stmt(id: int, expected_kind: int, expected_name: int): void {
   else if k == N_EXPR then { tc_expr(node_a[id]); if node_kind[node_a[id]] == N_CALL then tc_consume_call(node_a[id]); }
   else if k == N_RETURN then {
     if node_a[id] == 0 then { if expected_kind != TY_VOID then tc_fail(22); }
-    else { tc_expr(node_a[id]); let return_borrow: int = tc_expr_borrow_source; if tc_literal_fits(node_a[id], expected_kind) == 0 then tc_fail(54); if expected_kind == TY_PTR then { if return_borrow < 0 then { } else tc_fail(38); } if tc_same_full(expected_kind, expected_name, tc_expected_elem_kind, tc_expected_elem_name, tc_kind, tc_name, tc_elem_kind, tc_elem_name) == 0 then if node_kind[node_a[id]] != N_NULL then tc_fail(23); }
+    else { tc_mark_float_expr(node_a[id], expected_kind); tc_expr(node_a[id]); let return_borrow: int = tc_expr_borrow_source; if tc_literal_fits(node_a[id], expected_kind) == 0 then tc_fail(54); if expected_kind == TY_PTR then { if return_borrow < 0 then { } else tc_fail(38); } if tc_same_full(expected_kind, expected_name, tc_expected_elem_kind, tc_expected_elem_name, tc_kind, tc_name, tc_elem_kind, tc_elem_name) == 0 then if node_kind[node_a[id]] != N_NULL then tc_fail(23); }
   } else if k == N_BREAK || k == N_CONTINUE then { if tc_loop_depth == 0 then tc_fail(24);   } else if k == N_BLOCK then {
     tc_enter_scope();
     let x: int = node_a[id]; while x != 0 { tc_stmt(x, expected_kind, expected_name); x = node_next[x]; }
@@ -5320,7 +5353,7 @@ func tc_program(root: int): int {
   let item: int = node_a[root];
   while item != 0 { if node_kind[item] == N_STRUCT then { let f: int = node_a[item]; while f != 0 { tc_check_type(node_b[f]); f = node_next[f]; } if tc_cycle_struct(node_value[item]) == 1 then tc_fail(28); } item = node_next[item]; }
   item = node_a[root];
-    while item != 0 { if node_kind[item] == N_GLOBAL || node_kind[item] == N_CONST then { tc_type_node(node_b[item]); let gk: int = tc_kind; let gn: int = tc_name; let ge: int = tc_elem_kind; let gen: int = tc_elem_name; tc_add_var(node_a[item], gk, gn, ge, gen, node_b[item]); if node_kind[item] == N_CONST then sym_type[node_a[item]] = gk + 100; tc_expr(node_c[item]);     if tc_literal_fits(node_c[item], gk) == 0 then tc_fail(54);     if tc_same_full(gk, gn, ge, gen, tc_kind, tc_name, tc_elem_kind, tc_elem_name) == 0 && (node_kind[node_c[item]] != N_INT || node_value[node_c[item]] != 0) && node_kind[node_c[item]] != N_NULL then tc_fail(29); } item = node_next[item]; }
+    while item != 0 { if node_kind[item] == N_GLOBAL || node_kind[item] == N_CONST then { tc_type_node(node_b[item]); let gk: int = tc_kind; let gn: int = tc_name; let ge: int = tc_elem_kind; let gen: int = tc_elem_name; tc_add_var(node_a[item], gk, gn, ge, gen, node_b[item]); if node_kind[item] == N_CONST then sym_type[node_a[item]] = gk + 100;     tc_mark_float_expr(node_c[item], gk); tc_expr(node_c[item]);     if tc_literal_fits(node_c[item], gk) == 0 then tc_fail(54);     if tc_same_full(gk, gn, ge, gen, tc_kind, tc_name, tc_elem_kind, tc_elem_name) == 0 && (node_kind[node_c[item]] != N_INT || node_value[node_c[item]] != 0) && node_kind[node_c[item]] != N_NULL then tc_fail(29); } item = node_next[item]; }
 
     tc_global_count = tc_var_count;
   item = node_a[root];
@@ -5475,6 +5508,7 @@ func emit_c_token(out: int*, kind: int, value: int): void {
     else if value == -1018 then write_string(out, "basalt_memory_free");
     else if value == -1019 then write_string(out, "basalt_memory_alloc_aligned");
     else if value == -1020 then write_string(out, "_Alignas");
+    else if value == -1021 then write_string(out, "f");
     else emit_symbol(out, value);
   } else if kind == C_INT then emit_int_text(out, value);
   else if kind == C_RAW then emit_symbol(out, value);
