@@ -1,0 +1,23 @@
+func main(): int {
+  let a: int = 2;
+  let b: int = 2;
+  if !(a <= b) then return 1;
+  if !(a >= b) then return 2;
+  if a != b then return 3;
+  if a > b then return 4;
+  if !0 then {
+    if !1 then return 5;
+  }
+  if !(!1) then {
+    let checked: int = 1;
+    if checked != 1 then return 6;
+  }
+  let low: double = 1.25;
+  let high: double = 2.5;
+  if !(low <= high) then return 7;
+  if !(high >= low) then return 8;
+  if low == high then return 9;
+  return 0;
+}
+
+// end

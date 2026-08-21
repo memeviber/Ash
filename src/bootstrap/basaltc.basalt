@@ -46,6 +46,7 @@ let N_FLOAT: int = 33;
 let N_EXTERN: int = 34;
 let N_GENERIC_STRUCT: int = 35;
 let N_GENERIC_FUNC: int = 36;
+let N_UNARY: int = 45;
 let N_VARIANT: int = 39;
 let N_DEFER: int = 40;
 let N_MATCH: int = 41;
@@ -70,7 +71,9 @@ let OP_BITXOR: int = 14;
 let OP_SHL: int = 15;
 let OP_SHR: int = 16;
 let OP_MOD: int = 17;
-
+let OP_NOT: int = 29;
+let OP_LE: int = 30;
+let OP_GE: int = 31;
 let TY_INT: int = 1;
 let TY_BOOL: int = 2;
 let TY_STRING: int = 3;
@@ -1128,6 +1131,7 @@ func gen_expr(id: int): void {
     }
   }
   else if k == N_NULL then { code_emit(C_INT, 0); }
+  else if k == N_UNARY then { code_emit(C_OP, OP_NOT); code_emit(C_PUNCT, 4); gen_expr(node_a[id]); code_emit(C_PUNCT, 5); }
   else if k == N_VAR then {
     if node_aux[id] != 0 && node_kind[node_aux[id]] == TY_NAMED then {
       let enum_name: int = node_value[node_aux[id]];
@@ -1188,6 +1192,7 @@ func gen_expr_kind(id: int): int {
   if k == N_FLOAT then { if node_aux[id] == TY_FLOAT then return TY_FLOAT; return TY_DOUBLE; }
   if k == N_STRING then return TY_STRING;
   if k == N_NULL then return TY_PTR;
+  if k == N_UNARY then return TY_BOOL;
   if k == N_VAR then {
     let formal_type: int = gen_active_param_type(node_value[id]);
     if formal_type != 0 then {
@@ -1214,7 +1219,7 @@ func gen_expr_kind(id: int): int {
   if k == N_CALL || k == N_INDIRECT_CALL then return tc_expr_kind_for_emit(id);
   if k == N_BINOP then {
     if node_value[id] == OP_CONCAT then return TY_STRING;
-    if node_value[id] == OP_EQ || node_value[id] == OP_NEQ || node_value[id] == OP_LT || node_value[id] == OP_GT || node_value[id] == OP_AND || node_value[id] == OP_OR then return TY_BOOL;
+    if node_value[id] == OP_EQ || node_value[id] == OP_NEQ || node_value[id] == OP_LT || node_value[id] == OP_GT || node_value[id] == OP_LE || node_value[id] == OP_GE || node_value[id] == OP_AND || node_value[id] == OP_OR then return TY_BOOL;
     if node_value[id] == OP_SUB && gen_expr_kind(node_a[id]) == TY_PTR && gen_expr_kind(node_b[id]) == TY_PTR then return TY_INT;
     let ak: int = gen_expr_kind(node_a[id]); let bk: int = gen_expr_kind(node_b[id]);
     if node_value[id] == OP_BITAND || node_value[id] == OP_BITOR || node_value[id] == OP_BITXOR || node_value[id] == OP_SHL || node_value[id] == OP_SHR then { if ak == TY_LLONG || bk == TY_LLONG then return TY_LLONG; if ak == TY_LONG || bk == TY_LONG then return TY_LONG; return TY_INT; }
@@ -2031,6 +2036,9 @@ let T_TUSIZE: int = 83;
 let T_DEFER: int = 84;
 let T_MATCH: int = 85;
 let T_FATARROW: int = 86;
+let T_LE: int = 87;
+let T_GE: int = 88;
+let T_NOT: int = 89;
 
 let input_kind: int* = 0;
 let input_value: int* = 0;
@@ -2330,6 +2338,11 @@ func ast_unary(): int {
     return ast_node(N_BINOP, zero, e, 0, OP_SUB, 0);
   }
   if input_take(T_BITNOT) == 1 then { let e: int = ast_unary(); if e < 0 then return (0 - 1); let allbits: int = ast_node(N_INT, 0, 0, 0, (0 - 1), 0); return ast_node(N_BINOP, e, allbits, 0, OP_BITXOR, 0); }
+  if input_take(T_NOT) == 1 then {
+    let e: int = ast_unary();
+    if e < 0 then return (0 - 1);
+    return ast_node(N_UNARY, e, 0, 0, OP_NOT, 0);
+  }
   if input_take(T_STAR) == 1 then {
     let e: int = ast_unary();
     if e < 0 then return (0 - 1);
@@ -2350,6 +2363,8 @@ func ast_precedence(kind: int): int {
   if kind == T_NEQ then return 3;
   if kind == T_LT then return 3;
   if kind == T_GT then return 3;
+  if kind == T_LE then return 3;
+  if kind == T_GE then return 3;
   if kind == T_CONCAT then return 4;
   if kind == T_BITOR then return 5;
   if kind == T_BITXOR then return 6;
@@ -2374,6 +2389,8 @@ func ast_operator(kind: int): int {
   if kind == T_NEQ then return OP_NEQ;
   if kind == T_LT then return OP_LT;
   if kind == T_GT then return OP_GT;
+  if kind == T_LE then return OP_LE;
+  if kind == T_GE then return OP_GE;
   if kind == T_AND_AND then return OP_AND;
   if kind == T_OR_OR then return OP_OR;
   if kind == T_CONCAT then return OP_CONCAT;
@@ -3013,6 +3030,9 @@ let L_SHR_EQ: int = 75;
 let L_DEFER: int = 86;
 let L_MATCH: int = 87;
 let L_FATARROW: int = 88;
+let L_LE: int = 89;
+let L_GE: int = 90;
+let L_NOT: int = 91;
 
 let source: int* = 0;
 let source_len: int = 0;
@@ -3676,8 +3696,8 @@ func lexer_next(): int {
   else if c == 91 then tok_kind = L_LBRACK;
   else if c == 93 then tok_kind = L_RBRACK;
   else if c == 46 then tok_kind = L_DOT;
-  else if c == 60 then { if source_peek() == 60 then { source_take(); if source_peek() == 61 then { source_take(); tok_kind = L_SHL_EQ; } else tok_kind = L_SHL; } else tok_kind = L_LT; }
-  else if c == 62 then { if source_peek() == 62 then { source_take(); if source_peek() == 61 then { source_take(); tok_kind = L_SHR_EQ; } else tok_kind = L_SHR; } else tok_kind = L_GT; }
+  else if c == 60 then { if source_peek() == 60 then { source_take(); if source_peek() == 61 then { source_take(); tok_kind = L_SHL_EQ; } else tok_kind = L_SHL; } else if source_peek() == 61 then { source_take(); tok_kind = L_LE; } else tok_kind = L_LT; }
+  else if c == 62 then { if source_peek() == 62 then { source_take(); if source_peek() == 61 then { source_take(); tok_kind = L_SHR_EQ; } else tok_kind = L_SHR; } else if source_peek() == 61 then { source_take(); tok_kind = L_GE; } else tok_kind = L_GT; }
   else if c == 124 then { if source_peek() == 124 then { source_take(); tok_kind = L_OR; } else if source_peek() == 61 then { source_take(); tok_kind = L_BITOR_EQ; } else tok_kind = L_BITOR; }
   else if c == 94 then { if source_peek() == 61 then { source_take(); tok_kind = L_BITXOR_EQ; } else tok_kind = L_BITXOR; }
   else if c == 126 then tok_kind = L_BITNOT;
@@ -3688,7 +3708,7 @@ func lexer_next(): int {
   }
   else if c == 33 then {
     if source_peek() == 61 then { source_take(); tok_kind = L_NEQ; }
-    else tok_kind = L_NEQ;
+    else tok_kind = L_NOT;
   }
   else if c == 38 then {
     if source_peek() == 38 then { source_take(); tok_kind = L_AND; }
@@ -3837,6 +3857,9 @@ func map_token(k: int): int {
   if k == L_NEQ then return T_NEQ;
   if k == L_LT then return T_LT;
   if k == L_GT then return T_GT;
+  if k == L_LE then return T_LE;
+  if k == L_GE then return T_GE;
+  if k == L_NOT then return T_NOT;
   if k == L_COLON then return T_COLON;
   if k == L_LPAREN then return T_LPAREN;
   if k == L_RPAREN then return T_RPAREN;
@@ -4665,6 +4688,13 @@ func tc_expr(id: int): void {
   if k == N_CHAR then { tc_kind = TY_CHAR; tc_result_type = ast_node(TY_CHAR, 0, 0, 0, 0, 0); return; }
   if k == N_NULL then { tc_kind = TY_PTR; tc_name = 0; tc_elem_kind = TY_VOID; tc_elem_name = 0; tc_result_type = ast_node(TY_PTR, ast_node(TY_VOID, 0, 0, 0, 0, 0), 0, 0, 0, 0); return; }
   if k == N_BOOL then { tc_kind = TY_BOOL; tc_result_type = ast_node(TY_BOOL, 0, 0, 0, 0, 0); return; }
+  if k == N_UNARY then {
+    tc_expr(node_a[id]);
+    if tc_is_integer_kind(tc_kind) == 0 then { tc_fail(15); return; }
+    tc_kind = TY_BOOL; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0;
+    tc_result_type = ast_node(TY_BOOL, 0, 0, 0, 0, 0);
+    return;
+  }
   if k == N_STRING then { tc_kind = TY_STRING; tc_result_type = ast_node(TY_STRING, 0, 0, 0, 0, 0); return; }
   if k == N_VARIANT then { tc_check_variant(id); return; }
   if k == N_TUPLE then {
@@ -5084,7 +5114,7 @@ func tc_expr(id: int): void {
       if ak == TY_INT && bk == TY_PTR && node_kind[node_a[id]] == N_INT && node_value[node_a[id]] == 0 then null_cmp = 1;
       if tc_same_full(ak, an, ae, aen, bk, bn, be, ben) == 0 && null_cmp == 0 then tc_fail(16);
       tc_kind = TY_BOOL; tc_name = 0;
-    } else if node_value[id] == OP_LT || node_value[id] == OP_GT then {
+    } else if node_value[id] == OP_LT || node_value[id] == OP_GT || node_value[id] == OP_LE || node_value[id] == OP_GE then {
       if tc_is_numeric_kind(ak) == 0 || tc_is_numeric_kind(bk) == 0 then tc_fail(17);
       tc_kind = TY_BOOL; tc_name = 0;
     } else if node_value[id] == OP_ADD then {
@@ -5817,6 +5847,9 @@ func emit_c_token(out: int*, kind: int, value: int): void {
     else if value == 26 then write_string(out, "^=");
     else if value == 27 then write_string(out, "<<=");
     else if value == 28 then write_string(out, ">>=");
+    else if value == 29 then write_string(out, "!");
+    else if value == 30 then write_string(out, "<=");
+    else if value == 31 then write_string(out, ">=");
 
   } else if kind == C_PUNCT then {
     if value == 1 then write_string(out, "*");

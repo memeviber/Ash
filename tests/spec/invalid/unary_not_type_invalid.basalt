@@ -1,0 +1,8 @@
+// diagnostic.code: 15
+// diagnostic.excerpt: if !"invalid" then return 1;
+func main(): int {
+  if !"invalid" then return 1;
+  return 0;
+}
+
+// end

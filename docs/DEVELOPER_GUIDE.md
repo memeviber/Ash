@@ -233,7 +233,7 @@ The typical workflow for a language-level change, demonstrated by the compile-ti
 
 1. **Host typechecker** (`typechecker.ml`): add the rule. A `const_int` helper recognizes both `5` and the `0 - 1` form of `-1`; indexing `TArray (t, n)` with a constant outside `[0, n)` yields `array index K out of bounds for length N`. Also relax the initializer rules so `let a: int[3] = 0;` is legal (local and global) — previously no fixed array could be declared at all.
 2. **Host emitter** (`compiler.ml`): emit `= {0}` for fixed-array initializers (previously the initializer was dropped, diverging from the Bootstrap, which emitted `= 0`).
-3. **Bootstrap** (`basaltc.basalt`): mirror the check in `tc_expr` using `node_value[tc_result_type]` as the array size, with `tc_fail(45)` and a message. Note the Bootstrap language has **no `>=` operator** — write `ik > size - 1` instead. Mirror the initializer emission in `gen_initializer` (`{0}`).
+3. **Bootstrap** (`basaltc.basalt`): mirror the check in `tc_expr` using `node_value[tc_result_type]` as the array size, with `tc_fail(45)` and a message. Native `<=` and `>=` comparisons are supported by the Bootstrap lexer, parser, type checker, and emitter; unary `!` is represented as `N_UNARY` and produces a boolean result. Mirror the initializer emission in `gen_initializer` (`{0}`).
 4. **Fixtures**: `fixed_array_valid` (boundary indexes), `fixed_array_oob_literal`, `fixed_array_oob_negative`, `fixed_array_oob_struct_field`; register the valid one with `compile_run` and the others with `expect_reject`.
 5. **Verify**: full suite, then regenerate the bootstrap artifact + checksum, then the suite again.
 

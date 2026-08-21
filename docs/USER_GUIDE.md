@@ -158,9 +158,9 @@ Arithmetic: `+`, `-`, `*`, `/`, `%` (modulo). Modulo has multiplicative preceden
 let residue: int = (17 + 8) % 5;   // 0
 ```
 
-Comparison: `==`, `!=`, `<`, `>`. **Note:** Basalt currently has no `<=` or `>=` operators; write `!(a > b)` or `(a < b) || (a == b)` instead.
+Comparison: `==`, `!=`, `<`, `>`, `<=`, `>=`. Logical negation is the unary `!` operator and accepts integer-like scalar values, including `bool` and `char`; it produces a `bool` result.
 
-Logical: `&&`, `||` (scalar operands). Bitwise operators for integer operands: `&` (also used for address-of), `^` (xor), `~` (not). There is no single-`|` operator and no shift operator; use `+`/`*` or comparisons instead.
+Logical: `!`, `&&`, `||` (scalar operands). Bitwise operators for integer operands: `&` (also used for address-of), `^` (xor), `~` (not). There is no single-`|` operator and no shift operator; use `+`/`*` or comparisons instead.
 
 Assignment: `=` (assignment expression), `&` (address-of), `*` (dereference), `[]` (indexing, see 4.7).
 
