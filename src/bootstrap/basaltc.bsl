@@ -513,6 +513,36 @@ func ensure_gen_specs(need: int): void {
   gen_spec_name = grow_ints(gen_spec_name, gen_spec_cap, n);
   gen_spec_cap = n;
 }
+let gen_struct_state: int* = 0;
+let gen_struct_state_cap: int = 0;
+let gen_spec_state: int* = 0;
+let gen_spec_state_cap: int = 0;
+
+func ensure_gen_struct_state(need: int): void {
+  if need < gen_struct_state_cap then return;
+  let n: int = next_capacity(gen_struct_state_cap, need);
+  gen_struct_state = grow_ints(gen_struct_state, gen_struct_state_cap, n);
+  gen_struct_state_cap = n;
+}
+func ensure_gen_spec_state(need: int): void {
+  if need < gen_spec_state_cap then return;
+  let n: int = next_capacity(gen_spec_state_cap, need);
+  gen_spec_state = grow_ints(gen_spec_state, gen_spec_state_cap, n);
+  gen_spec_state_cap = n;
+}
+func gen_find_spec_index(decl: int, name: int): int {
+  let i: int = 0;
+  while i < gen_spec_count {
+    if gen_spec_kind[i] == 1 then {
+      if gen_spec_decl[i] == decl then {
+        if gen_spec_name[i] == name then return i;
+      }
+    }
+    i = i + 1;
+  }
+  return (0 - 1);
+}
+
 func gen_substitute_type(ty: int): int {
   if ty == 0 then return 0;
   if node_kind[ty] == TY_PARAM then { let b: int = gen_bind_find(node_value[ty]); if b != 0 then return gen_substitute_type(b); return ast_node(TY_PARAM, node_a[ty], node_b[ty], node_c[ty], node_value[ty], node_aux[ty]); }
@@ -1590,6 +1620,80 @@ func gen_struct_decl(id: int): void {
   code_emit(C_NEWLINE, 0);
 }
 
+func gen_emit_complete_struct(decl: int): void {
+  if decl == 0 then return;
+  ensure_gen_struct_state(decl);
+  if gen_struct_state[decl] == 2 then return;
+  if gen_struct_state[decl] == 1 then return;
+  gen_struct_state[decl] = 1;
+  let field: int = node_a[decl];
+  while field != 0 {
+    gen_emit_complete_type(node_b[field]);
+    field = node_next[field];
+  }
+  gen_struct_decl(decl);
+  gen_struct_state[decl] = 2;
+}
+
+func gen_emit_complete_spec(index: int): void {
+  if index < 0 then return;
+  ensure_gen_spec_state(index);
+  if gen_spec_state[index] == 2 then return;
+  if gen_spec_state[index] == 1 then return;
+  gen_spec_state[index] = 1;
+  let decl: int = gen_spec_decl[index];
+  let inst: int = gen_spec_type[index];
+  let saved_count: int = gen_bind_count;
+  ensure_gen_bind(saved_count + saved_count);
+  let save_i: int = 0;
+  while save_i < saved_count {
+    gen_bind_name[saved_count + save_i] = gen_bind_name[save_i];
+    gen_bind_type[saved_count + save_i] = gen_bind_type[save_i];
+    save_i = save_i + 1;
+  }
+  gen_bind_decl(decl, inst);
+  let field: int = node_a[decl];
+  while field != 0 {
+    gen_emit_complete_type(gen_substitute_type(node_b[field]));
+    field = node_next[field];
+  }
+  gen_bind_clear();
+  let restore_i: int = 0;
+  while restore_i < saved_count {
+    gen_bind_name[restore_i] = gen_bind_name[saved_count + restore_i];
+    gen_bind_type[restore_i] = gen_bind_type[saved_count + restore_i];
+    restore_i = restore_i + 1;
+  }
+  gen_bind_count = saved_count;
+  gen_struct_decl_specialized(decl, inst, gen_spec_name[index]);
+  gen_bind_clear();
+  let restore_j: int = 0;
+  while restore_j < saved_count {
+    gen_bind_name[restore_j] = gen_bind_name[saved_count + restore_j];
+    gen_bind_type[restore_j] = gen_bind_type[saved_count + restore_j];
+    restore_j = restore_j + 1;
+  }
+  gen_bind_count = saved_count;
+  gen_spec_state[index] = 2;
+}
+
+func gen_emit_complete_type(ty: int): void {
+  let q: int = gen_substitute_type(ty);
+  if q == 0 then return;
+  if node_kind[q] == TY_PTR then return;
+  if node_kind[q] == TY_ARRAY then { gen_emit_complete_type(node_a[q]); return; }
+  if node_kind[q] == TY_DYN_ARRAY then return;
+  if node_kind[q] == TY_NAMED then {
+    gen_emit_complete_struct(tc_find_struct(node_value[q]));
+    return;
+  }
+  if node_kind[q] == TY_GENERIC then {
+    let decl: int = tc_find_struct(node_value[q]);
+    let index: int = gen_find_spec_index(decl, gen_mangled_type_symbol(q));
+    if index > (0 - 1) then gen_emit_complete_spec(index);
+  }
+}
+
 func gen_tagged_enum_decl(id: int): void {
   let enum_name: int = node_value[id];
   let c_enum_name: int = sym_c_symbol(enum_name);
@@ -1738,6 +1842,10 @@ func gen_program(id: int): void {
   let item: int = node_a[id];
   while item != 0 {
     if node_kind[item] == N_GLOBAL || node_kind[item] == N_CONST then gen_collect_stmt(item);
+    else if node_kind[item] == N_STRUCT then {
+      let sf: int = node_a[item];
+      while sf != 0 { gen_collect_type(node_b[sf]); sf = node_next[sf]; }
+    }
     else if node_kind[item] == N_FUNC then {
       gen_collect_type(node_b[item]);
       let pp: int = node_c[item]; while pp != 0 { gen_collect_type(node_b[pp]); pp = node_next[pp]; }
@@ -1774,10 +1882,16 @@ func gen_program(id: int): void {
     }
     scan_si = scan_si + 1;
   }
-  // Definitions for ordinary and specialized structs.
+  // Definitions for ordinary and specialized structs in dependency order.
+  ensure_gen_struct_state(node_count + 1);
+  ensure_gen_spec_state(gen_spec_count);
+  let reset_struct: int = 0;
+  while reset_struct < gen_struct_state_cap { gen_struct_state[reset_struct] = 0; reset_struct = reset_struct + 1; }
+  let reset_spec: int = 0;
+  while reset_spec < gen_spec_count { gen_spec_state[reset_spec] = 0; reset_spec = reset_spec + 1; }
   item = node_a[id];
-  while item != 0 { if node_kind[item] == N_STRUCT then gen_struct_decl(item); else if node_kind[item] == N_ENUM then gen_enum_decl(item); item = node_next[item]; }
-  si = 0; while si < gen_spec_count { if gen_spec_kind[si] == 1 then gen_struct_decl_specialized(gen_spec_decl[si], gen_spec_type[si], gen_spec_name[si]); si = si + 1; }
+  while item != 0 { if node_kind[item] == N_STRUCT then gen_emit_complete_struct(item); else if node_kind[item] == N_ENUM then gen_enum_decl(item); item = node_next[item]; }
+  si = 0; while si < gen_spec_count { if gen_spec_kind[si] == 1 then gen_emit_complete_spec(si); si = si + 1; }
   // Prototypes for ordinary functions, externs and all generic specializations.
   item = node_a[id];
   while item != 0 { if node_kind[item] == N_FUNC || node_kind[item] == N_EXTERN then gen_prototype(item); item = node_next[item]; }
