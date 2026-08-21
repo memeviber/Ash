@@ -128,6 +128,8 @@ compile_run "$ROOT/tests/regression/stdlib_growth_test.basalt" stdlib_growth_tes
 compile_run "$ROOT/tests/regression/stdlib_containers_test.basalt" stdlib_containers_test
 compile_run "$ROOT/tests/regression/option_test.basalt" option_test
 compile_run "$ROOT/tests/regression/option_result_combinators_test.basalt" option_result_combinators_test
+compile_run "$ROOT/tests/regression/stdlib_stabilization_test.basalt" stdlib_stabilization_test
+compile_run "$ROOT/tests/regression/stdlib_stabilization_edge_test.basalt" stdlib_stabilization_edge_test
 compile_run "$ROOT/tests/regression/string_builder_iter_test.basalt" string_builder_iter_test
 compile_run "$ROOT/tests/regression/numeric_compound_test.basalt" numeric_compound_test
 compile_run "$ROOT/tests/regression/f32_f64_test.basalt" f32_f64_test

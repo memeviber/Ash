@@ -247,6 +247,35 @@ func main(): int {
 
 A closure that borrows a block-local binding MUST NOT be returned from that block or stored where it outlives the binding. A move capture is also a compile-time ownership transfer, not a runtime copy. The Bootstrap compiler reports code **60** for a borrowed capture that escapes its source lifetime and code **61** when a moved-capture source is used again.
 
+### Option and Result
+
+Basalt’s standard library provides total, generic absence and error values. `option::Option<T>` uses `option::some(value)` for a present value and `option::none(zero)` for an absent value. Because generic structs are fully materialized in generated C, `none` takes an explicit zero value of `T`:
+
+```basalt
+include "../../src/stdlib/option.basalt"
+
+let present: option::Option<int> = option::some(42);
+let absent: option::Option<int> = option::none(0);
+print option::value_or(present, 0);   // 42
+print option::value_or(absent, 99);   // 99
+```
+
+The canonical Option helpers are `is_some`, `is_none`, `unwrap_or`, `value_or`, `map`, `map_or`, `filter`, `contains`, `or_else`, and `and_option`. They are total: an absent value never causes a panic and callbacks are not invoked for an absent branch. Existing programs may continue to use the historical `result::Option<T>` compatibility names, but new code SHOULD use the `option` namespace.
+
+`result::Result<T, E>` represents success or failure. Both constructors initialize the inactive payload explicitly:
+
+```basalt
+include "../../src/stdlib/result.basalt"
+
+let success: result::Result<int, string> = result::ok(7, "");
+let failure: result::Result<int, string> = result::err(0, "not found");
+print result::value_or(success, 0);              // 7
+print result::value_or(failure, 0);              // 0
+print result::error_or(failure, "no error");    // not found
+```
+
+Use `map` and `map_error` to transform one branch, `map_or` and `map_error_or` for total fallback-based transformations, and `and_result` or `or_result` to compose results without manually inspecting the tag. `is_ok` and `is_err` expose the branch state. Result and Option operations return initialized values by value, so callers should assign the updated container or value when using a mutating standard-library operation.
+
 ### 4.8 Arrays: fixed and dynamic
 
 **Fixed arrays** have a compile-time length and are zero-initialized with `= 0`:

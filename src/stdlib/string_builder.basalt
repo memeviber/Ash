@@ -44,7 +44,9 @@ namespace string_builder {
   }
 
   func length(b: Builder): int { return b.len; }
+  func len(b: Builder): int { return b.len; }
   func capacity(b: Builder): int { return b.cap; }
+  func is_empty(b: Builder): bool { return b.len == 0; }
   // Returns a non-owning pointer to the NUL-terminated buffer.
   func view(b: Builder): char* { return b.data; }
 

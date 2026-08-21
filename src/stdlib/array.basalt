@@ -96,6 +96,10 @@ namespace array {
     return a.len;
   }
 
+  func len<T>(a: Array<T>): int {
+    return a.len;
+  }
+
   func capacity<T>(a: Array<T>): int {
     return a.cap;
   }

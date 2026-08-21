@@ -1,4 +1,6 @@
 namespace option {
+  // Option<T> is a fully materialized tagged value. The payload is always
+  // initialized, including for none(), so every operation remains total.
   struct Option<T> {
     present: int;
     value: T;
@@ -27,9 +29,20 @@ namespace option {
     return fallback;
   }
 
+  // value_or is the non-panicking spelling used by generic code that treats
+  // Option and Result uniformly. unwrap_or remains a compatibility alias.
+  func value_or<T>(o: Option<T>, fallback: T): T {
+    return option::unwrap_or(o, fallback);
+  }
+
   func map<T, U>(o: Option<T>, transform: fn(T): U, zero_u: U): Option<U> {
     if o.present == 1 then return option::some(transform(o.value));
     return option::none(zero_u);
+  }
+
+  func map_or<T, U>(o: Option<T>, fallback: U, transform: fn(T): U): U {
+    if o.present == 1 then return transform(o.value);
+    return fallback;
   }
 
   func filter<T>(o: Option<T>, predicate: fn(T): bool, zero: T): Option<T> {
@@ -42,5 +55,15 @@ namespace option {
   func contains<T>(o: Option<T>, value: T): bool {
     if o.present == 0 then return false;
     return o.value == value;
+  }
+
+  func or_else<T>(o: Option<T>, fallback: Option<T>): Option<T> {
+    if o.present == 1 then return o;
+    return fallback;
+  }
+
+  func and_option<T, U>(o: Option<T>, next: Option<U>, zero_u: U): Option<U> {
+    if o.present == 1 then return next;
+    return option::none(zero_u);
   }
 }

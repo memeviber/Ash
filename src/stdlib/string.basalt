@@ -7,6 +7,10 @@ namespace str {
     return i;
   }
 
+  func len(s: string): int {
+    return byte_len(s);
+  }
+
   func byte_at(s: string, index: int): int {
     return s[index] & 255;
   }
@@ -18,6 +22,10 @@ namespace str {
       i = i + 1;
     }
     return a[i] == b[i];
+  }
+
+  func equals(a: string, b: string): int {
+    return eq(a, b);
   }
 
   func concat(a: string, b: string): string {

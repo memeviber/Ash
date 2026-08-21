@@ -1,0 +1,56 @@
+include "../../src/stdlib/option.basalt"
+include "../../src/stdlib/result.basalt"
+include "../../src/stdlib/array.basalt"
+include "../../src/stdlib/slice.basalt"
+include "../../src/stdlib/map.basalt"
+include "../../src/stdlib/string.basalt"
+include "../../src/stdlib/string_builder.basalt"
+
+func mark_error(value: string): string { return value ++ "!"; }
+
+func main(): int {
+  let status: int = 0;
+
+  let absent: option::Option<string> = option::none("");
+  if option::is_some(absent) then status = 1;
+  if str::eq(option::value_or(absent, "fallback"), "fallback") == false then status = 2;
+  if str::eq(option::map_or(absent, "fallback", &mark_error), "fallback") == false then status = 3;
+
+  let failure: result::Result<int, string> = result::err(0, "bad");
+  if result::is_ok(failure) then status = 4;
+  if str::eq(result::error_or(failure, "fallback"), "bad") == false then status = 5;
+  if str::eq(result::map_error_or(failure, "fallback", &mark_error), "bad!") == false then status = 6;
+
+  let a: array::Array<int> = array::new(0, 0);
+  let empty_part: array::Array<int> = array::slice(a, -3, 8, 0);
+  if array::len(empty_part) != 0 then status = 7;
+  if array::get_or(a, -1, 77) != 77 then status = 8;
+
+  let s: slice::Slice<int> = slice::new(0);
+  if slice::get(s, -1) != 0 then status = 9;
+  if slice::last_or(s, 88) != 88 then status = 10;
+  if slice::is_empty(s) == false then status = 11;
+
+  let m: map::HashMap<int, string> = map::new(0, "");
+  if str::eq(map::get(m, 42), "") == false then status = 12;
+  if map::is_empty(m) == false then status = 13;
+  if map::remove(m, 42).len != 0 then status = 14;
+
+  if str::utf8_validate("é") == false then status = 15;
+  if str::codepoint_len("é") != 1 then status = 16;
+  if str::utf8_decode_at("Basalt", -1) != (0 - 1) then status = 17;
+  if str::codepoint_at("Basalt", 99) != (0 - 1) then status = 18;
+
+  let builder: string_builder::Builder = string_builder::new();
+  if string_builder::is_empty(builder) == false then status = 19;
+  if string_builder::len(builder) != 0 then status = 20;
+
+  builder = string_builder::free(builder);
+  m = map::free(m);
+  s = slice::free(s);
+  empty_part = array::free(empty_part);
+  a = array::free(a);
+  return status;
+}
+// diagnostic: valid
+// end

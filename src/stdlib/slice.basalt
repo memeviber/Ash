@@ -83,9 +83,31 @@ namespace slice {
 
   func clear<T>(s: Slice<T>): Slice<T> { s.len = 0; return s; }
   func length<T>(s: Slice<T>): int { return s.len; }
+  func len<T>(s: Slice<T>): int { return s.len; }
   func capacity<T>(s: Slice<T>): int { return s.cap; }
   func is_empty<T>(s: Slice<T>): bool { return s.len == 0; }
   func is_full<T>(s: Slice<T>): bool { return s.cap < s.len || s.cap == s.len; }
+
+  func map<T, U>(s: Slice<T>, transform: fn(T): U, zero_u: U): Slice<U> {
+    let out: Slice<U> = slice::with_capacity(s.len, zero_u);
+    let i: int = 0;
+    while i < s.len {
+      out = slice::push(out, transform(slice::get(s, i)));
+      i = i + 1;
+    }
+    return out;
+  }
+
+  func filter<T>(s: Slice<T>, predicate: fn(T): bool): Slice<T> {
+    let out: Slice<T> = slice::with_capacity(s.len, s.zero);
+    let i: int = 0;
+    while i < s.len {
+      let value: T = slice::get(s, i);
+      if predicate(value) then out = slice::push(out, value);
+      i = i + 1;
+    }
+    return out;
+  }
 
   func free<T>(s: Slice<T>): Slice<T> {
     if s.data != 0 then memory_free(s.data);

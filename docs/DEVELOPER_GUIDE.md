@@ -233,6 +233,18 @@ Rules of thumb:
 - `none` requires a zero value of `T` because every struct is fully materialized.
 - Add a fixture that exercises **every** function, including nested generic calls: `option::unwrap_or(option::none("zero"), "fallback")`.
 
+### Stabilization contract for Option, Result, and containers
+
+The canonical `option` module and the `result` module use fully materialized generic structs. Every constructor initializes both the active and inactive payloads, including the explicit `zero` witness required by Bootstrap for a generic value. This makes predicates, fallback access, mapping, filtering, and composition total without panic paths or reads from uninitialized storage.
+
+`option::Option<T>` exposes `some`, `none`, `is_some`, `is_none`, `unwrap_or`, `value_or`, `map`, `map_or`, `filter`, `contains`, `or_else`, and `and_option`. `result::Result<T,E>` exposes `ok`, `err`, `is_ok`, `is_err`, `unwrap_or`, `value_or`, `error_or`, `map`, `map_or`, `map_error`, `map_error_or`, `contains`, `and_result`, and `or_result`. Higher-order functions use the existing `fn(...)` function-pointer type; they must not be reimplemented as closure-only APIs.
+
+The old `result::Option<T>` surface remains intentionally available for source compatibility. New modules and examples should include `option.basalt` and use `option::Option<T>`. Compatibility aliases are preferred over breaking renames while the standard library is still being stabilized.
+
+Container modules follow the same low-surprise conventions. `array::len`, `slice::len`, `map::len`, and `string_builder::len` are stable aliases for the established length operations; `slice::map` and `slice::filter` return initialized values by value; `map::is_empty` and the corresponding container helpers report state without exposing internal capacity. Growth, hashing, ownership, and cleanup remain inside their existing implementations rather than being duplicated in compatibility wrappers.
+
+Every standard-library change must be exercised in three ways: a normal fixture covering each public function, an edge fixture covering empty/absent/out-of-range behavior and zero-length cleanup, and the full Bootstrap regression and sanitizer suites. Generic tests must include nested calls and at least two distinct element/error types so specialization and inactive-payload initialization are both tested.
+
 **Nested generic calls exposed a real compiler bug.** The fixture above was the first program to call a generic function inside the argument of another generic function. The Host collected instantiations recursively (`compiler.ml` `scan_expr`), but the Bootstrap's `gen_collect_expr` only recursed into arguments for *non-generic* calls — generic calls computed their own spec and then returned, so `option__none__char_ptr` was never generated and the emitted C failed to compile. Fix: always recurse into arguments after computing the generic spec:
 
 ```basalt

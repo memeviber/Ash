@@ -1,4 +1,7 @@
 namespace result {
+  // Result<T, E> is a fully materialized tagged value. Both payloads are
+  // initialized by ok() and err() so inspection never reads an uninitialized
+  // field and all public operations are total.
   struct Result<T, E> {
     ok: int;
     value: T;
@@ -29,6 +32,10 @@ namespace result {
     return fallback;
   }
 
+  func value_or<T, E>(r: Result<T, E>, fallback: T): T {
+    return result::unwrap_or(r, fallback);
+  }
+
   func error_or<T, E>(r: Result<T, E>, fallback: E): E {
     if r.ok == 0 then { return r.error; }
     return fallback;
@@ -39,11 +46,38 @@ namespace result {
     return result::err(value_zero, r.error);
   }
 
+  func map_or<T, U, E>(r: Result<T, E>, fallback: U, transform: fn(T): U): U {
+    if r.ok == 1 then return transform(r.value);
+    return fallback;
+  }
+
   func map_error<T, E, F>(r: Result<T, E>, transform: fn(E): F, error_zero: F): Result<T, F> {
     if r.ok == 1 then return result::ok(r.value, error_zero);
     return result::err(r.value, transform(r.error));
   }
 
+  func map_error_or<T, E, F>(r: Result<T, E>, fallback: F, transform: fn(E): F): F {
+    if r.ok == 0 then return transform(r.error);
+    return fallback;
+  }
+
+  func contains<T, E>(r: Result<T, E>, value: T): bool {
+    if r.ok == 0 then return false;
+    return r.value == value;
+  }
+
+  func and_result<T, U, E>(r: Result<T, E>, next: Result<U, E>, value_zero: U): Result<U, E> {
+    if r.ok == 1 then return next;
+    return result::err(value_zero, r.error);
+  }
+
+  func or_result<T, E, F>(r: Result<T, E>, next: Result<T, F>, error_zero: F): Result<T, F> {
+    if r.ok == 1 then return result::ok(r.value, error_zero);
+    return next;
+  }
+
+  // Legacy compatibility surface. New code should include option.basalt and
+  // use option::Option; these names remain available for existing programs.
   struct Option<T> {
     present: int;
     value: T;

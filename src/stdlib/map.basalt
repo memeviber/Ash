@@ -172,6 +172,10 @@ namespace map {
     return fallback;
   }
 
+  func get<K, V>(m: HashMap<K, V>, key: K): V {
+    return map::get_or(m, key, m.value_zero);
+  }
+
   func remove<K, V>(m: HashMap<K, V>, key: K): HashMap<K, V> {
     let found: int = map::find(m, key);
     if found > (0 - 1) then {
@@ -190,7 +194,10 @@ namespace map {
   }
 
   func length<K, V>(m: HashMap<K, V>): int { return m.len; }
+  func len<K, V>(m: HashMap<K, V>): int { return m.len; }
   func capacity<K, V>(m: HashMap<K, V>): int { return m.cap; }
+  func is_empty<K, V>(m: HashMap<K, V>): bool { return m.len == 0; }
+  func is_full<K, V>(m: HashMap<K, V>): bool { return m.used * 4 > m.cap * 3 || m.used * 4 == m.cap * 3; }
 
   func free<K, V>(m: HashMap<K, V>): HashMap<K, V> {
     if m.keys != 0 then memory_free(m.keys);
