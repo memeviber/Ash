@@ -139,6 +139,13 @@ compile_run "$ROOT/tests/regression/tuple_test.bsl" tuple_test
 compile_run "$ROOT/tests/regression/concurrency_test.bsl" concurrency_test
 compile_run "$ROOT/tests/regression/aligned_alloc_test.bsl" aligned_alloc_test
 compile_run "$ROOT/tests/regression/fixed_width_integer_test.bsl" fixed_width_integer_test
+compile_run "$ROOT/tests/regression/integer_literal_boundary_test.bsl" integer_literal_boundary_test
+compile_run "$ROOT/tests/regression/integer_literal_usize_boundary_test.bsl" integer_literal_usize_boundary_test
+expect_reject "$ROOT/tests/regression/integer_literal_overflow_invalid.bsl" integer_literal_overflow_invalid
+expect_reject "$ROOT/tests/regression/integer_literal_u64_overflow_invalid.bsl" integer_literal_u64_overflow_invalid
+expect_reject "$ROOT/tests/regression/integer_literal_u8_overflow_invalid.bsl" integer_literal_u8_overflow_invalid
+expect_reject "$ROOT/tests/regression/integer_literal_global_invalid.bsl" integer_literal_global_invalid
+expect_reject "$ROOT/tests/regression/integer_literal_indirect_invalid.bsl" integer_literal_indirect_invalid
 expect_reject "$ROOT/tests/regression/fixed_width_invalid_generic.bsl" fixed_width_invalid_generic
 expect_reject "$ROOT/tests/regression/aligned_invalid_power.bsl" aligned_invalid_power
 expect_reject "$ROOT/tests/regression/concurrency_invalid_atomic.bsl" concurrency_invalid_atomic
@@ -173,6 +180,7 @@ compile_run "$ROOT/tests/regression/fixed_array_valid.bsl" fixed_array_valid
 expect_reject "$ROOT/tests/regression/fixed_array_oob_literal.bsl" fixed_array_oob_literal
 expect_reject "$ROOT/tests/regression/fixed_array_oob_negative.bsl" fixed_array_oob_negative
 compile_run "$ROOT/tests/regression/enum_typechecker_valid.bsl" enum_typechecker_valid
+compile_run "$ROOT/tests/regression/plain_enum_match_test.bsl" plain_enum_match_test
 expect_reject "$ROOT/tests/regression/enum_typechecker_invalid.bsl" enum_typechecker_invalid
 expect_reject "$ROOT/tests/regression/fixed_array_oob_struct_field.bsl" fixed_array_oob_struct_field
 expect_collision_reject "$ROOT/tests/regression/mangle_collision.bsl" mangle_collision
