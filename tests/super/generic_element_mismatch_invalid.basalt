@@ -1,0 +1,11 @@
+include "../../src/stdlib/array.basalt"
+
+func main(): int {
+  let values: array::Array<int> = array::new(0, 0);
+  let wrong: string = "not an integer";
+  let rejected: array::Array<int> = array::push(values, wrong, 0);
+  return array::len(rejected);
+}
+// diagnostic: invalid
+// expected: array element type int, found string
+// end

@@ -115,6 +115,7 @@ let node_value: int* = 0;
 let node_aux: int* = 0;
 let node_pos: int* = 0;
 let node_scope: int* = 0;
+let node_type: int* = 0;
 let ast_parse_mode: int = 0;
 let node_count: int = 1;
 let ast_namespace_scope: int = 0;
@@ -168,6 +169,7 @@ func ensure_node(need: int): void {
   node_aux = grow_ints(node_aux, node_cap, n);
   node_pos = grow_ints(node_pos, node_cap, n);
   node_scope = grow_ints(node_scope, node_cap, n);
+  node_type = grow_ints(node_type, node_cap, n);
   node_cap = n;
 }
 
@@ -279,6 +281,7 @@ func ast_node(kind: int, a: int, b: int, c: int, value: int, aux: int): int {
   node_aux[id] = aux;
   node_pos[id] = parse_pos;
   node_scope[id] = ast_namespace_scope;
+  node_type[id] = 0;
   node_count = node_count + 1;
   return id;
 }
@@ -705,6 +708,54 @@ func gen_active_param_type(name: int): int {
     p = node_next[p];
   }
   return 0;
+}
+
+// Generic bodies are collected before a concrete specialization is emitted.
+// Their local N_VAR nodes therefore cannot rely on type-checker side metadata,
+// which is shared by repeated specializations. Recover the declaration type
+// from the active function body and substitute the current generic bindings.
+func gen_local_decl_type(id: int, name: int): int {
+  if id == 0 then return 0;
+  let k: int = node_kind[id];
+  if k == N_LET || k == N_CONST then {
+    if node_a[id] == name then return node_b[id];
+    return gen_local_decl_type(node_next[id], name);
+  }
+  if k == N_BLOCK then {
+    let item: int = node_a[id];
+    while item != 0 {
+      let found: int = gen_local_decl_type(item, name);
+      if found != 0 then return found;
+      item = node_next[item];
+    }
+    return 0;
+  }
+  if k == N_IF then {
+    let found_if: int = gen_local_decl_type(node_b[id], name);
+    if found_if != 0 then return found_if;
+    return gen_local_decl_type(node_c[id], name);
+  }
+  if k == N_WHILE then return gen_local_decl_type(node_b[id], name);
+  if k == N_FOR then {
+    let found_for: int = gen_local_decl_type(node_a[id], name);
+    if found_for != 0 then return found_for;
+    found_for = gen_local_decl_type(node_c[id], name);
+    if found_for != 0 then return found_for;
+    return gen_local_decl_type(node_value[id], name);
+  }
+  if k == N_MATCH then {
+    let arm: int = node_b[id];
+    while arm != 0 {
+      let found_arm: int = gen_local_decl_type(node_b[arm], name);
+      if found_arm != 0 then return found_arm;
+      arm = node_next[arm];
+    }
+  }
+  return gen_local_decl_type(node_next[id], name);
+}
+func gen_active_local_decl_type(name: int): int {
+  if gen_active_function == 0 then return 0;
+  return gen_local_decl_type(node_a[gen_active_function], name);
 }
 
 func gen_spec_exists(kind: int, decl: int, name: int): int {
@@ -1679,6 +1730,12 @@ func gen_unify_formal(formal: int, actual: int): void {
   if node_kind[formal] == TY_PTR && node_kind[actual] == TY_PTR then { gen_unify_formal(node_a[formal], node_a[actual]); return; }
   if node_kind[formal] == TY_ARRAY && node_kind[actual] == TY_ARRAY then { gen_unify_formal(node_a[formal], node_a[actual]); return; }
   if node_kind[formal] == TY_DYN_ARRAY && node_kind[actual] == TY_DYN_ARRAY then { gen_unify_formal(node_a[formal], node_a[actual]); return; }
+  if (node_kind[formal] == TY_FUN || node_kind[formal] == TY_CLOSURE) && (node_kind[actual] == TY_FUN || node_kind[actual] == TY_CLOSURE) then {
+    let fp_fun: int = node_a[formal]; let ap_fun: int = node_a[actual];
+    while fp_fun != 0 && ap_fun != 0 { gen_unify_formal(fp_fun, ap_fun); fp_fun = node_next[fp_fun]; ap_fun = node_next[ap_fun]; }
+    gen_unify_formal(node_b[formal], node_b[actual]);
+    return;
+  }
 }
 
 func gen_bind_decl(decl: int, inst: int): void {
@@ -2224,16 +2281,6 @@ func gen_program(id: int): void {
     gen_tuple_decl(gen_tuple_type[tuple_i], gen_tuple_name[tuple_i]);
     tuple_i = tuple_i + 1;
   }
-  // Forward declarations for ordinary and specialized structs.
-  item = node_a[id];
-  while item != 0 {
-    if node_kind[item] == N_STRUCT then {
-      code_emit(C_KW, 14); code_emit(C_KW, 12); code_emit(C_IDENT, sym_c_symbol(node_value[item])); code_emit(C_PUNCT, 22); code_emit(C_IDENT, sym_c_symbol(node_value[item])); code_emit(C_PUNCT, 12); code_emit(C_NEWLINE, 0);
-    }
-    item = node_next[item];
-  }
-  let si: int = 0;
-  while si < gen_spec_count { if gen_spec_kind[si] == 1 then { code_emit(C_KW, 14); code_emit(C_KW, 12); code_emit(C_IDENT, gen_spec_name[si]); code_emit(C_PUNCT, 22); code_emit(C_IDENT, gen_spec_name[si]); code_emit(C_PUNCT, 12); code_emit(C_NEWLINE, 0); } si = si + 1; }
   // Rescan each discovered generic function instance until nested calls reach a fixed point.
   let scan_si: int = 0;
   while scan_si < gen_spec_count {
@@ -2248,6 +2295,17 @@ func gen_program(id: int): void {
     }
     scan_si = scan_si + 1;
   }
+  // Forward declarations must follow the generic fixed-point scan because
+  // nested generic calls can discover additional concrete struct instances.
+  item = node_a[id];
+  while item != 0 {
+    if node_kind[item] == N_STRUCT then {
+      code_emit(C_KW, 14); code_emit(C_KW, 12); code_emit(C_IDENT, sym_c_symbol(node_value[item])); code_emit(C_PUNCT, 22); code_emit(C_IDENT, sym_c_symbol(node_value[item])); code_emit(C_PUNCT, 12); code_emit(C_NEWLINE, 0);
+    }
+    item = node_next[item];
+  }
+  let si: int = 0;
+  while si < gen_spec_count { if gen_spec_kind[si] == 1 then { code_emit(C_KW, 14); code_emit(C_KW, 12); code_emit(C_IDENT, gen_spec_name[si]); code_emit(C_PUNCT, 22); code_emit(C_IDENT, gen_spec_name[si]); code_emit(C_PUNCT, 12); code_emit(C_NEWLINE, 0); } si = si + 1; }
   gen_closure_emit_all();
   // Definitions for ordinary and specialized structs in dependency order.
   ensure_gen_struct_state(node_count + 1);
@@ -5398,7 +5456,7 @@ func tc_expr(id: int): void {
     return;
   }
   if k == N_VAR then {
-    if tc_lookup_var(node_value[id]) == 1 then { if tc_last_var_moved == 1 then { if tc_var_closure_moved[tc_last_var_index] == 1 then tc_fail(61); else tc_fail(33); } tc_expr_borrow_source = tc_var_borrow_source[tc_last_var_index]; if tc_last_var_owned == 1 then tc_expr_owner_source = tc_last_var_index; tc_expr_is_owned = 0; tc_result_type = tc_last_var_type; node_aux[id] = tc_last_var_type; return; }
+    if tc_lookup_var(node_value[id]) == 1 then { if tc_last_var_moved == 1 then { if tc_var_closure_moved[tc_last_var_index] == 1 then tc_fail(61); else tc_fail(33); } tc_expr_borrow_source = tc_var_borrow_source[tc_last_var_index]; if tc_last_var_owned == 1 then tc_expr_owner_source = tc_last_var_index; tc_expr_is_owned = 0; tc_result_type = tc_last_var_type; if node_type[id] == 0 then node_type[id] = tc_last_var_type; node_aux[id] = tc_last_var_type; return; }
     let e: int = tc_find_enum_value(node_value[id]);
     if e != 0 then { tc_kind = TY_NAMED; tc_name = e; tc_result_type = ast_node(TY_NAMED, 0, 0, 0, e, 0); node_aux[id] = tc_result_type; return; }
     tc_error_symbol = node_value[id]; tc_fail(5); return;
@@ -5942,7 +6000,7 @@ func tc_emit_field_type(id: int): int {
   }
   let f: int = node_a[decl];
   while f != 0 {
-    if node_a[f] == node_value[id] then return gen_substitute_type(node_b[f]);
+    if node_a[f] == node_value[id] then return tc_substitute_type(node_b[f]);
     f = node_next[f];
   }
   return 0;
@@ -5966,10 +6024,31 @@ func tc_emit_arg_type(id: int): int {
     let field_ty: int = tc_emit_field_type(id);
     if field_ty != 0 then return field_ty;
   }
+  if node_kind[id] == N_INDIRECT_CALL then {
+    let callee_type: int = tc_emit_arg_type(node_a[id]);
+    if callee_type != 0 && (node_kind[callee_type] == TY_FUN || node_kind[callee_type] == TY_CLOSURE) then return gen_substitute_type(node_b[callee_type]);
+  }
+  if node_kind[id] == N_CALL then {
+    let call_param_type: int = gen_active_param_type(node_value[id]);
+    if call_param_type != 0 && (node_kind[call_param_type] == TY_FUN || node_kind[call_param_type] == TY_CLOSURE) then return gen_substitute_type(node_b[call_param_type]);
+  }
   if node_kind[id] == N_VAR then {
     let formal_type: int = gen_active_param_type(node_value[id]);
     if formal_type != 0 then return gen_substitute_type(formal_type);
-    if node_aux[id] != 0 then return node_aux[id];
+    let declared_type: int = gen_active_local_decl_type(node_value[id]);
+    if declared_type != 0 then return gen_substitute_type(declared_type);
+    if node_type[id] != 0 then {
+      let stable_local_type: int = node_type[id];
+      let resolved_stable_type: int = gen_substitute_type(stable_local_type);
+      if resolved_stable_type != 0 then return resolved_stable_type;
+      return stable_local_type;
+    }
+    if node_aux[id] != 0 then {
+      let local_type: int = node_aux[id];
+      let resolved_local_type: int = gen_substitute_type(local_type);
+      if resolved_local_type != 0 then return resolved_local_type;
+      return local_type;
+    }
   }
   if node_kind[id] == N_STRING then return ast_node(TY_STRING, 0, 0, 0, 0, 0);
   if node_kind[id] == N_INT then return ast_node(TY_INT, 0, 0, 0, 0, 0);
@@ -5990,8 +6069,16 @@ func tc_expr_kind_for_emit(id: int): int {
   if id != 0 && node_kind[id] == N_CLOSURE then return TY_CLOSURE;
   if id != 0 && node_kind[id] == N_CALL && node_aux[id] != 0 then return node_kind[node_aux[id]];
   if id != 0 && node_kind[id] == N_INDIRECT_CALL then {
-    tc_expr(id);
-    return tc_kind;
+    let indirect_result_type: int = tc_emit_arg_type(id);
+    if indirect_result_type != 0 then return node_kind[indirect_result_type];
+    return TY_INT;
+  }
+  if id != 0 && node_kind[id] == N_CALL then {
+    let call_param_type: int = gen_active_param_type(node_value[id]);
+    if call_param_type != 0 && (node_kind[call_param_type] == TY_FUN || node_kind[call_param_type] == TY_CLOSURE) then {
+      let call_result_type: int = gen_substitute_type(node_b[call_param_type]);
+      if call_result_type != 0 then return node_kind[call_result_type];
+    }
   }
   let f: int = tc_find_function_ctx(node_value[id], node_scope[id]);
   if f != 0 then {

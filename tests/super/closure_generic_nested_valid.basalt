@@ -1,0 +1,52 @@
+include "../../src/stdlib/array.basalt"
+include "../../src/stdlib/option.basalt"
+include "../../src/stdlib/result.basalt"
+
+func increment(value: int): int {
+  return value + 1;
+}
+
+func apply<T>(value: T, callback: fn(T): T): T {
+  return callback(value);
+}
+
+func choose<T>(value: T, fallback: T, present: bool): option::Option<T> {
+  if present then return option::some(value);
+  return option::none(fallback);
+}
+
+func main(): int {
+  let callback: fn(int): int = &increment;
+  let applied: int = apply(41, callback);
+  if applied != 42 then return 1;
+
+  let offset: int = 7;
+  let captured: closure(int): int = fn[borrow offset](value: int): int {
+    return value + offset;
+  };
+  let captured_value: int = (captured)(5);
+  if captured_value != 12 then return 2;
+
+  let selected: option::Option<int> = choose(19, 0, true);
+  if option::unwrap_or(selected, 0) != 19 then return 3;
+  let missing: option::Option<int> = choose(19, 23, false);
+  if option::unwrap_or(missing, 23) != 23 then return 4;
+
+  let values: array::Array<int> = array::new(0, 0);
+  let grown: array::Array<int> = array::push(values, apply(2, callback), 0);
+  let grown_again: array::Array<int> = array::push(grown, apply(3, callback), 0);
+  if array::get(grown_again, 0) != 3 then return 5;
+  if array::get(grown_again, 1) != 4 then return 6;
+
+  let ok: result::Result<int, string> = result::ok(12, "");
+  let changed: result::Result<int, string> = result::map(ok, &increment, 0);
+  if result::unwrap_or(changed, 0) != 13 then return 7;
+
+  let freed: array::Array<int> = array::free(grown_again);
+  if array::len(freed) != 0 then return 8;
+  return 0;
+}
+// Exercises generic callback return substitution and captured-closure lifetime
+// handling without forming an out-of-bounds pointer or invalid ownership use.
+// diagnostic: valid
+// end

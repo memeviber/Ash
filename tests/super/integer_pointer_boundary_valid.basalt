@@ -1,0 +1,29 @@
+func main(): int {
+  let max_u8: u8 = 255;
+  let max_u16: u16 = 65535;
+  let max_u32: u32 = 4294967295;
+  let max_u64: u64 = 18446744073709551615;
+  let high_bit: u64 = 9223372036854775808;
+  if max_u8 != 255 then return 1;
+  if max_u16 != 65535 then return 2;
+  if max_u32 != 4294967295 then return 3;
+  if max_u64 != 18446744073709551615 then return 4;
+  if high_bit != 9223372036854775808 then return 5;
+
+  let values: int* = alloc_ints(8);
+  *(values + 0) = 11;
+  *(values + 1) = 22;
+  *(values + 2) = 33;
+  *(values + 3) = 44;
+  let middle: int* = values + 2;
+  let end: int* = values + 8;
+  if *middle != 33 then return 6;
+  if end - values != 8 then return 7;
+  if *(end - 1) != 0 then return 8;
+  free_ints(values);
+  return 0;
+}
+// UBSan/CERT-C boundary workload: all pointer arithmetic stays within one
+// allocated array, and the one-past pointer is never dereferenced.
+// diagnostic: valid
+// end

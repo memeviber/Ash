@@ -1,0 +1,15 @@
+include "../../src/stdlib/result.basalt"
+
+func wrong_callback(value: int): int {
+  return value + 1;
+}
+
+func main(): int {
+  let failure: result::Result<int, string> = result::err(0, "bad");
+  let wrong: fn(int): int = &wrong_callback;
+  let rejected: result::Result<int, string> = result::map_error(failure, wrong, "fallback");
+  return result::value_or(rejected, 0);
+}
+// diagnostic: invalid
+// expected: callback fn(string): string, found fn(int): int
+// end

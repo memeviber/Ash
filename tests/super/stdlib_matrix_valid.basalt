@@ -1,0 +1,124 @@
+include "../../src/stdlib/array.basalt"
+include "../../src/stdlib/slice.basalt"
+include "../../src/stdlib/map.basalt"
+include "../../src/stdlib/option.basalt"
+include "../../src/stdlib/result.basalt"
+include "../../src/stdlib/string.basalt"
+include "../../src/stdlib/string_builder.basalt"
+
+func inc(x: int): int { return x + 1; }
+func even(x: int): bool { return (x & 1) == 0; }
+func positive(x: int): bool { return x > 0; }
+func mark(x: int): int { return x + 10; }
+func mark_error(x: string): string { return str::concat(x, "!"); }
+
+func main(): int {
+  let status: int = 0;
+
+  let present: option::Option<int> = option::some(41);
+  let absent: option::Option<int> = option::none(0);
+  if option::is_some(present) == false then status = 1;
+  if option::is_none(absent) == false then status = 2;
+  if option::value_or(absent, 7) != 7 then status = 3;
+  if option::map_or(present, 0, &mark) != 51 then status = 4;
+  let mapped_option: option::Option<int> = option::map(present, &inc, 0);
+  if option::unwrap_or(mapped_option, 0) != 42 then status = 5;
+  let filtered_option: option::Option<int> = option::filter(present, &positive, 0);
+  if option::contains(filtered_option, 41) == false then status = 6;
+  let selected_option: option::Option<int> = option::or_else(absent, present);
+  if option::unwrap_or(selected_option, 0) != 41 then status = 7;
+  let chained_option: option::Option<string> = option::and_option(present, option::some("ok"), "");
+  if str::eq(option::unwrap_or(chained_option, "bad"), "ok") == false then status = 8;
+
+  let success: result::Result<int, string> = result::ok(20, "");
+  let failure: result::Result<int, string> = result::err(0, "bad");
+  if result::is_ok(success) == false then status = 9;
+  if result::is_err(failure) == false then status = 10;
+  if result::value_or(failure, 99) != 99 then status = 11;
+  if str::eq(result::error_or(failure, "fallback"), "bad") == false then status = 12;
+  if result::map_or(success, 0, &inc) != 21 then status = 13;
+  let mapped_result: result::Result<int, string> = result::map(success, &inc, 0);
+  if result::unwrap_or(mapped_result, 0) != 21 then status = 14;
+  let mapped_error: result::Result<int, string> = result::map_error(failure, &mark_error, "");
+  if str::eq(result::error_or(mapped_error, ""), "bad!") == false then status = 15;
+  if result::contains(success, 20) == false then status = 16;
+  let chained_result: result::Result<int, string> = result::and_result(success, result::ok(8, ""), 0);
+  if result::unwrap_or(chained_result, 0) != 8 then status = 17;
+  let fallback_result: result::Result<int, string> = result::or_result(failure, result::ok(7, ""), "");
+  if result::unwrap_or(fallback_result, 0) != 7 then status = 18;
+
+  let i: int = 0;
+  let a: array::Array<int> = array::new(0, 0);
+  while i < 96 {
+    a = array::push(a, i, 0);
+    i = i + 1;
+  }
+  if array::len(a) != 96 then status = 19;
+  if array::capacity(a) < 96 then status = 20;
+  if array::get(a, 0) != 0 then status = 21;
+  if array::get(a, 95) != 95 then status = 22;
+  if array::get_or(a, 999, 1234) != 1234 then status = 23;
+  if array::set_if_in_bounds(a, 0, 1000) == false then status = 24;
+  if array::get(a, 0) != 1000 then status = 25;
+  if array::set_if_in_bounds(a, 999, 2) then status = 26;
+  let a_map: array::Array<int> = array::map(a, &inc, 0);
+  let a_filter: array::Array<int> = array::filter(a, &even, 0);
+  if array::len(a_map) != 96 then status = 27;
+  if array::is_empty(a_filter) then status = 28;
+  let a_part: array::Array<int> = array::slice(a, 4, 8, 0);
+  if array::len(a_part) != 8 then status = 29;
+  a = array::free(a);
+  a_map = array::free(a_map);
+  a_filter = array::free(a_filter);
+  a_part = array::free(a_part);
+
+  let s: slice::Slice<int> = slice::new(0);
+  let j: int = 0;
+  while j < 64 {
+    s = slice::push(s, j);
+    j = j + 1;
+  }
+  if slice::len(s) != 64 then status = 30;
+  if slice::last_or(s, 0) != 63 then status = 31;
+  if slice::get_or(s, 999, 77) != 77 then status = 32;
+  let s_map: slice::Slice<int> = slice::map(s, &inc, 0);
+  let s_filter: slice::Slice<int> = slice::filter(s, &positive);
+  if slice::get(s_map, 0) != 1 then status = 33;
+  if slice::is_empty(s_filter) then status = 34;
+  s = slice::clear(s);
+  if slice::is_empty(s) == false then status = 35;
+  s = slice::free(s);
+  s_map = slice::free(s_map);
+  s_filter = slice::free(s_filter);
+
+  let k: int = 0;
+  let m: map::HashMap<int, int> = map::new(0, 0);
+  while k < 128 {
+    m = map::put(m, k, k * 3);
+    k = k + 1;
+  }
+  if map::len(m) != 128 then status = 36;
+  if map::contains_key(m, 127) == false then status = 37;
+  if map::get(m, 127) != 381 then status = 38;
+  if map::get_or(m, 999, 55) != 55 then status = 39;
+  m = map::remove(m, 127);
+  if map::contains_key(m, 127) then status = 40;
+  m = map::clear(m);
+  if map::is_empty(m) == false then status = 41;
+  m = map::free(m);
+
+  if str::utf8_validate("Aé") == false then status = 42;
+  if str::codepoint_len("Aé") != 2 then status = 43;
+  if str::codepoint_at("Aé", 1) < 128 then status = 44;
+  if str::codepoint_at("Aé", 99) != (0 - 1) then status = 45;
+  let builder: string_builder::Builder = string_builder::new();
+  let b: string_builder::Builder = string_builder::append(builder, "Basalt");
+  b = string_builder::push_char(b, '!');
+  if string_builder::len(b) != 7 then status = 46;
+  if string_builder::is_empty(b) then status = 47;
+  b = string_builder::clear(b);
+  if string_builder::len(b) != 0 then status = 48;
+  b = string_builder::free(b);
+
+  return status;
+}

@@ -130,6 +130,9 @@ compile_run "$ROOT/tests/regression/option_test.basalt" option_test
 compile_run "$ROOT/tests/regression/option_result_combinators_test.basalt" option_result_combinators_test
 compile_run "$ROOT/tests/regression/stdlib_stabilization_test.basalt" stdlib_stabilization_test
 compile_run "$ROOT/tests/regression/stdlib_stabilization_edge_test.basalt" stdlib_stabilization_edge_test
+compile_run "$ROOT/tests/super/stdlib_matrix_valid.basalt" stdlib_matrix_valid
+compile_run "$ROOT/tests/super/integer_pointer_boundary_valid.basalt" integer_pointer_boundary_valid
+compile_run "$ROOT/tests/super/closure_generic_nested_valid.basalt" closure_generic_nested_valid
 compile_run "$ROOT/tests/regression/string_builder_iter_test.basalt" string_builder_iter_test
 compile_run "$ROOT/tests/regression/numeric_compound_test.basalt" numeric_compound_test
 compile_run "$ROOT/tests/regression/f32_f64_test.basalt" f32_f64_test
@@ -161,6 +164,8 @@ expect_reject "$ROOT/tests/regression/match_non_exhaustive.basalt" match_non_exh
 expect_reject "$ROOT/tests/regression/match_payload_arity_invalid.basalt" match_payload_arity_invalid
 expect_reject "$ROOT/tests/regression/tuple_binding_count_invalid.basalt" tuple_binding_count_invalid
 expect_reject "$ROOT/tests/regression/tagged_union_type_invalid.basalt" tagged_union_type_invalid
+expect_reject "$ROOT/tests/super/generic_element_mismatch_invalid.basalt" generic_element_mismatch_invalid
+expect_reject "$ROOT/tests/super/generic_callback_mismatch_invalid.basalt" generic_callback_mismatch_invalid
 compile_run_with_input "$ROOT/tests/regression/io_safe_test.basalt" io_safe_test $'42\nbad-number\nBasalt-OVERFLOW\nok\n' $'safe-io\n42\nBasalt-\n'
 compile_run_with_input "$ROOT/tests/regression/io_safe_edge_test.basalt" io_safe_edge_test $'-17\n999999999999999999999999999999999999999999999\n' ''
 expect_runtime_failure_with_input "$ROOT/tests/regression/io_invalid_limit.basalt" io_invalid_limit '' 2

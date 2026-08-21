@@ -45,3 +45,31 @@ The stored C compiler is never regenerated or replaced by any runner. It is the 
 The Bootstrap-only suites cover strict GCC compilation, valid and invalid regression fixtures, long-term conformance generation, ownership and move/borrow checks, pointer and function-pointer stress, adversarial sanitizer workloads, code-buffer growth, and fixed-point stability. The memory sanitizer harness compares Bootstrap-generated C with a hand-written C baseline; it does not invoke the frozen Host compiler.
 
 The compatibility script `scripts/check_parser_conflicts.sh` is retained only as a legacy entry point. It intentionally performs no OCaml, Dune, Menhir, or Host-parser operation.
+
+## Super-test campaign
+
+The `tests/super/` corpus is the pressure layer for changes that cross several compiler subsystems at once. It is intentionally separate from the smaller regression fixtures and is registered in `scripts/run_regression.sh`, so every ordinary regression run exercises it.
+
+| Area | Coverage | Representative fixtures or checks |
+|---|---|---|
+| Integer boundaries | Maximum representable `u8`, `u16`, `u32`, and `u64` literals, plus a high-bit value | `integer_pointer_boundary_valid.basalt`, existing literal-overflow rejection fixtures |
+| Pointer arithmetic | Same-array addition and subtraction, valid dereference, one-past pointer formation without dereference | `integer_pointer_boundary_valid.basalt`, pointer-arithmetic regression and stress fixtures |
+| Generic specialization | Nested `Option`, `Result`, and dynamic `Array` instantiations; repeated calls with concrete element types | `stdlib_matrix_valid.basalt`, `closure_generic_nested_valid.basalt` |
+| Closures and callbacks | Borrowed captures, function pointers, generic callback return substitution, and lifecycle checks | `closure_generic_nested_valid.basalt`, closure ownership fixtures |
+| Standard library | Growth, indexing, higher-order operations, string helpers, map operations, and builder lifecycle | `stdlib_matrix_valid.basalt` and the existing standard-library matrix |
+| Negative compilation | Generic element mismatch and incompatible generic callback signatures | `generic_element_mismatch_invalid.basalt`, `generic_callback_mismatch_invalid.basalt` |
+| Toolchain safety | Strict C11 warnings, ASan, UBSan, fixed-point reproduction, and no repository ELF artifacts | `run_regression.sh`, `run_ownership_stress.sh`, and `fixed_point.sh` |
+
+The valid super-tests are compiled from the current Bootstrap compiler and then built with `-std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror`. The sanitizer pass additionally uses AddressSanitizer and UndefinedBehaviorSanitizer with leak detection and fail-fast settings. Invalid fixtures must be rejected before a generated C file is accepted as a test artifact.
+
+The test design follows the UBSan catalogue, which specifically calls out signed overflow, invalid shifts, null or misaligned dereferences, out-of-bounds indexing, pointer arithmetic overflow, and invalid indirect calls as runtime hazards [1]. It also follows CERT C INT32-C, which identifies arithmetic, compound assignment, shifts, and unary negation as signed-overflow risks and emphasizes values used in indexing, pointer arithmetic, and allocation sizes [2]. CERT C ARR30-C distinguishes a legal one-past pointer from an invalid dereference or out-of-range subscript; the boundary fixture forms the former and deliberately avoids the latter [3].
+
+This campaign does not claim that a sanitizer run proves memory safety for every possible program. It establishes that the checked fixtures produce strict C11 and remain clean under the selected dynamic instrumentation, while compile-time negative cases exercise Basalt’s own type and ownership diagnostics.
+
+## References
+
+[1]: https://clang.llvm.org/docs/UndefinedBehaviorSanitizer.html "Clang UndefinedBehaviorSanitizer documentation"
+
+[2]: https://cmu-sei.github.io/secure-coding-standards/sei-cert-c-coding-standard/rules/integers-int/int32-c/ "SEI CERT C INT32-C"
+
+[3]: https://cmu-sei.github.io/secure-coding-standards/sei-cert-c-coding-standard/rules/arrays-arr/arr30-c "SEI CERT C ARR30-C"
