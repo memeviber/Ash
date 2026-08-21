@@ -1,12 +1,14 @@
 # Basalt Language Specification
 
-## 1. Scope
+## Status and conformance
 
-Basalt is a statically typed, C-emitting language designed for small systems programs, compiler implementation, and data-oriented utilities. Its reference behavior is defined by the Host compiler and checked against the Bootstrap compiler. The language deliberately keeps the core syntax compact while exposing pointers, C interoperability, generics, and explicit container operations.
+This document is the normative language contract for the Bootstrap Basalt compiler. The implementation of record is `src/bootstrap/basaltc.bsl` together with the checked-in C seed `src/bootstrap/basaltc.seed.c`; the frozen seed must be able to compile the Bootstrap source without invoking the Host compiler. A language change is conforming only when the Bootstrap compiler accepts every valid corpus case, rejects every invalid corpus case before C emission, produces strict-C11 output, and preserves the fixed-point property described below.
 
-## 2. Program structure
+The specification uses **MUST** for a required rule, **MUST NOT** for a forbidden behavior, and **MAY** for an implementation extension that does not change the defined behavior of conforming programs.
 
-A program is a sequence of type declarations, namespace declarations, external declarations, includes, global declarations, and function definitions. The conventional entry point is:
+## Program model
+
+A Basalt source file is a sequence of declarations. Declarations may be type declarations, namespace declarations, `include` or `includec` directives, global bindings, external declarations, and function definitions. The conventional executable entry point is:
 
 ```basalt
 func main(): int {
@@ -14,50 +16,75 @@ func main(): int {
 }
 ```
 
-Statements use semicolons. Blocks are delimited by braces. Conditional statements use `if condition then { ... } else { ... }`; loops use `while condition { ... }`. `for` is supported by the compiler and is lowered to equivalent C control flow. `break` and `continue` apply to the innermost loop.
+Statements are terminated by semicolons. Blocks use braces. A conditional has the form `if condition then { ... } else { ... }`; `while condition { ... }` is the primitive loop form. `for` is accepted by the compiler and lowered to equivalent C control flow. `break` and `continue` apply to the innermost active loop. `defer` schedules a statement for execution when the enclosing function or scope exits according to the ownership rules.
 
-## 3. Lexical forms
+The compiler MUST evaluate a source expression into an AST before type checking and C emission. It MUST NOT use C emission as a substitute for source-level type validation.
 
-Identifiers contain letters, digits, and underscores, subject to the usual rule that the first character is not a digit. Integer literals are decimal. String literals use double quotes and character literals use single quotes. Escape sequences include the common control escapes and escaped quote and backslash forms. Comments are line comments beginning with `//`.
+## Lexical rules
 
-## 4. Types
+Identifiers contain letters, decimal digits, and underscores, and the first character MUST NOT be a digit. Keywords are reserved when they appear as complete identifiers. Comments begin with `//` and continue to the end of the line.
 
-The primitive types are `int`, `bool`, `char`, `string`, `float`, `double`, and `void`. Pointers use postfix `*`, fixed arrays use a type and compile-time length, and dynamic arrays use the generic array facilities in the standard library. Named types include structs and enums. Generic types use angle brackets, for example `Result<int, string>`.
+Integer literals are decimal. The compiler MUST detect overflow before accumulation and MUST reject a literal that cannot be represented by its contextual integer type. Decimal floating literals default to `f64`/C `double`; a literal in an `f32` context is emitted with an `f` suffix. String literals use double quotes. Character literals use single quotes and support escaped quotes, backslashes, and the documented control escapes.
 
-Basalt treats `int` and `bool` as compatible in the current C-oriented type model. Character values are integer-like. `float` and `double` participate in numeric compatibility and array element matching according to the compiler's strict element rules. Pointer compatibility follows C-like rules for compatible pointee types and `void*` conversions.
+## Types
 
-## 5. Expressions and precedence
+The primitive and derived types currently covered by the Bootstrap contract are:
 
-The precedence levels below are listed from lowest to highest. Operators on the same row associate left-to-right unless stated otherwise.
+| Basalt type | C representation | Contract |
+| --- | --- | --- |
+| `int` | `int` | The default signed integer type. |
+| `bool` | `int`-compatible Boolean representation | Used by conditions and logical operations. |
+| `char` | `unsigned char`-compatible character value | Character values are byte-oriented and range from 0 through 255. |
+| `string` | Basalt-managed string representation | String operations are byte-oriented, not Unicode code-point operations. |
+| `f32` / `float` | `float` | Single-precision floating type. |
+| `f64` / `double` | `double` | Double-precision floating type. |
+| `void` | `void` | Function return type with no value. |
+| `T*` | Pointer to the C representation of `T` | Pointers use postfix `*`. |
+| `T[N]` | Fixed C array | The length is part of the type and is bounds-checked for literal indices. |
+| `array::Array<T>` | Generic dynamic-array representation | Growth, indexing, and ownership are implemented by the standard library. |
+| Named struct or enum | Generated named C type | Namespaces and generic specializations are mangled deterministically. |
+| Function pointer | C function-pointer type | The parameter count and parameter types are checked before invocation. |
+
+`f32` and `float` are aliases for the same internal kind. `f64` and `double` are aliases for the same internal kind. The two floating kinds are distinct for contextual literal emission, arithmetic result typing, generic element matching, and explicitly typed function arguments. A named `f64` expression MUST NOT be silently retyped as `f32` merely because it is passed to an `f32` parameter.
+
+`int` and `bool` follow the current C-oriented compatibility model. Character values are integer-like where the type checker explicitly permits numeric conversion. Pointer compatibility is C-like only for the conversions implemented by the Bootstrap type checker; an arbitrary integer MUST NOT be treated as a pointer except for the documented null representation and accepted zero compatibility rule.
+
+## Expressions and evaluation
+
+The precedence levels below are ordered from lowest to highest. Operators on the same level associate left-to-right unless the parser defines a specific unary or assignment rule.
 
 | Level | Operators | Meaning |
 | --- | --- | --- |
-| 1 | `||` | logical OR |
-| 2 | `&&` | logical AND |
-| 3 | `==`, `!=`, `<`, `>` | comparison |
-| 4 | `++` | string concatenation |
-| 5 | `\|` | bitwise OR |
-| 6 | `^` | bitwise XOR |
-| 7 | `&` | bitwise AND |
-| 8 | `<<`, `>>` | shifts |
-| 9 | `+`, `-` | addition and subtraction |
-| 10 | `*`, `/`, `%` | multiplication, division, and modulo |
+| 1 | `||` | Logical OR with short-circuit behavior. |
+| 2 | `&&` | Logical AND with short-circuit behavior. |
+| 3 | `==`, `!=`, `<`, `>` | Comparison. |
+| 4 | `++` | String concatenation. |
+| 5 | `\|` | Bitwise OR. |
+| 6 | `^` | Bitwise XOR. |
+| 7 | `&` | Bitwise AND, or address-of in unary position. |
+| 8 | `<<`, `>>` | Bit shifts. |
+| 9 | `+`, `-` | Addition and subtraction. Unary `-` is also supported. |
+| 10 | `*`, `/`, `%` | Multiplication, division, and integer remainder. |
 
-The modulo operator returns the C11 remainder of its integer operands. It has the same precedence as multiplication and division. The Host and Bootstrap parsers use the same token, precedence, AST opcode, type-checking branch, and C emission mapping.
+The parser MUST build `a + b % c` as `a + (b % c)`. The modulo operator is available only for integer-compatible operands. String concatenation MUST release intermediate managed storage according to the runtime ownership policy.
 
-> Example: `a + b % c` parses as `a + (b % c)`, while `(a + b) % c` explicitly applies modulo to the sum.
+Compound assignment is a distinct semantic operation. For `lhs += rhs`, `lhs` MUST be evaluated exactly once, then updated with the compound operator. The compiler MUST NOT lower it to a duplicated `lhs = lhs + rhs` expression when `lhs` can contain an index, field access, pointer dereference, or side effect.
 
-Unary `-` is available for numeric expressions. `&value` takes an address and `*pointer` dereferences a pointer. Array indexing uses `array[index]`, and struct field access uses `value.field`.
+Logical operators MUST short-circuit. The right-hand operand of `a && b` is evaluated only when required by `a`; the right-hand operand of `a || b` is evaluated only when required by `a`.
 
-## 6. Declarations and assignment
+## Declarations, scopes, and ownership
 
-A mutable local declaration has the form `let name: Type = expression;`. `const` creates a read-only binding. Assignment uses `name = expression;`, and field or indexed assignment follows the corresponding access expression. The type checker rejects incompatible initializers, assignments, returns, calls, field operations, and array element operations before C emission.
+A mutable local binding uses `let name: Type = expression;`. A `const` binding is read-only after initialization. Assignments, field assignments, indexed assignments, returns, calls, variant payloads, and generic substitutions MUST be checked before C emission.
 
-The `null` literal represents a null pointer value and is emitted through the C runtime's portable null representation. A raw integer zero remains accepted in the C-oriented pointer compatibility rules where specified by the implementation.
+A block introduces a scope. Local bindings declared in an inner scope MUST NOT remain visible after the scope closes. The type checker tracks ownership state separately from lexical name lookup. A moved owner MUST NOT be used again. A borrowed value MUST NOT outlive its owner, and a borrowed owner MUST NOT be mutated while an incompatible active borrow exists. The current Bootstrap implementation provides scope-based borrow checking; explicit lifetime parameters and closure-capture lifetime inference are reserved for a later language revision and MUST NOT be assumed by current programs.
 
-## 7. Functions, namespaces, and generics
+`defer statement;` registers cleanup in the active scope. Deferred operations MUST execute in reverse registration order on the corresponding exit path, including explicit returns covered by the implementation. A resource transferred out of a scope MUST NOT also be freed by the originating scope.
 
-Functions declare parameters and a return type:
+The `null` literal represents a null pointer value. A raw zero MAY be accepted in pointer contexts covered by the C-oriented compatibility rules, but `null` is the portable spelling for new code.
+
+## Functions, generics, namespaces, and containers
+
+A function declaration has the form:
 
 ```basalt
 func remainder(a: int, b: int): int {
@@ -65,11 +92,17 @@ func remainder(a: int, b: int): int {
 }
 ```
 
-Namespaces introduce a separate qualified scope. A declaration in `namespace result { ... }` is called as `result::ok(...)`. Generic structs and functions use type parameters, which are instantiated and monomorphized for C emission. The generated C name uses `__` as the namespace and specialization separator.
+Function calls MUST match arity and parameter types. Function pointers carry their full parameter and return signature. Calling a non-function value, using the wrong arity, or passing an incompatible argument is a compile-time error.
 
-## 8. Structs and enums
+Generic functions and structs use type parameters and are monomorphized for C emission. A generic binding MUST be consistent across all occurrences of the type parameter. Nested generic field types MUST be recursively collected and specialized before the parent definition is emitted. A failed generic match MUST stop compilation; it MUST NOT be converted into an unconditional acceptance path.
 
-Structs contain typed fields:
+Namespaces introduce a separate qualified scope. `namespace result { ... }` declarations are referenced through qualified names such as `result::ok(...)`. Generated C names use deterministic `__` separators for namespace segments and generic specialization arguments. Distinct source declarations that collide after mangling MUST be rejected before C emission.
+
+Dynamic containers are generic. Their growth policy, element layout, indexing, callbacks, and cleanup behavior MUST be type-checked using the instantiated element type. `f32` and `f64` array specializations MUST remain distinct.
+
+## Structs, enums, tuples, and pattern matching
+
+Struct fields are declared with typed members:
 
 ```basalt
 struct Point {
@@ -78,26 +111,68 @@ struct Point {
 }
 ```
 
-Enums contain named variants. The type checker validates field existence and field assignment types. Recursive structs are permitted through pointers but not by value, preventing infinite object layouts.
+A struct field access MUST name an existing field, and a field assignment MUST match that field's type. Recursive structs are permitted through pointers but not through an unbounded by-value cycle.
 
-## 9. Arrays and standard library
+Enums MAY be plain or tagged. Plain enum matches compare the enum value against qualified enumerators. Tagged-union matches dispatch on the tag and validate payload arity and payload types. A match over a non-exhaustive enum is a compile-time error under the current checked mode.
 
-The standard library provides generic dynamic-array operations and container modules. Implementations track allocation ownership in the generated runtime and provide explicit release operations for resources that escape ordinary local cleanup. `map` and `result` are generic namespace-based modules; their public names do not carry an artificial language prefix.
+Tuple expressions and multiple return values use generated C struct-like representations. Tuple binding count MUST equal the number of returned values, and each element MUST be type-compatible with its binding.
 
-## 10. C interoperability and includes
+## Includes and controlled C interoperability
 
-`extern` declares a C-provided function with an Basalt signature. `includec "file.h";` injects or includes raw C material under the compiler's controlled emission path. `include "module.bsl";` loads another Basalt source file. Recursive include processing tracks canonical paths, rejects active include cycles, and avoids duplicate loaded modules.
+`include "module.bsl";` loads Basalt source. Include resolution MUST use the including file as the base for relative paths, canonicalize paths before cycle checks, reject active include cycles, and avoid processing the same canonical module more than once.
 
-## 11. Diagnostics
+`includec "file.h";` injects or includes raw C material through the emitter. It is an escape hatch and MUST be isolated from ordinary Basalt type checking. New FFI declarations SHOULD use `extern` so the function signature and ownership boundary remain visible to the compiler.
 
-The Host compiler reports human-readable type and parse errors. The Bootstrap compiler records an error code and source position, reports a corresponding diagnostic, and exits nonzero without writing a C artifact. The regression suite accepts differences in wording while requiring equivalent rejection behavior.
+An `extern` declaration declares a C-provided function with a Basalt signature. The current implementation checks the Basalt-side arity and type contract; C-side ABI verification remains a portability responsibility of the build configuration until the controlled FFI milestone adds header and symbol validation.
 
-## 12. Generated C contract
+## Diagnostics contract
 
-Basalt emits portable C11. Release validation uses:
+Every compile-time failure MUST produce a nonzero exit status and MUST NOT leave a C artifact at the requested output path. The Bootstrap formatter emits a concise message followed by stable fields: `diagnostic.code`, `diagnostic.file`, one-based `diagnostic.line`, one-based `diagnostic.column`, `diagnostic.excerpt`, and `diagnostic.hint`. The file and excerpt are derived from the source byte span associated with the first failure; included files MUST report their own canonicalized source path.
+
+For type mismatch codes 12, 20, 21, 23, and 36, the formatter MUST additionally emit `diagnostic.expected` and `diagnostic.found` with human-readable type names. The compiler MUST preserve the first failing span while type checking so later traversal cannot overwrite the originating location. Diagnostic wording MAY evolve, but stable codes, field labels, rejection behavior, and source-location semantics are compatibility requirements. Tests MUST assert semantic rejection and the documented structured fields rather than depending only on incidental prose.
+
+## Generated C and platform contract
+
+The emitter targets C11 and MUST compile under:
 
 ```text
 gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror
 ```
 
-The Bootstrap fixed-point criterion is byte identity between the C generated by generations two and three. This criterion protects deterministic parsing, specialization, symbol mangling, runtime serialization, and operator emission.
+The runtime prologue MUST emit common headers exactly once. On native C11-thread platforms it MAY include `<threads.h>`. For MinGW/UCRT64 targets, when `_WIN32` and `__MINGW32__` are defined, the emitter MUST generate the pthread compatibility shim and include `<pthread.h>` and `<sched.h>`. The shim MUST be overridable by `BASALT_USE_NATIVE_C11_THREADS` and MUST use a type-safe join context rather than casting an `int *` to `void **`.
+
+The aligned allocation declaration is emitted behind a guard when required by the target:
+
+```c
+#ifndef BASALT_ALIGNED_ALLOC_DECLARED
+#define BASALT_ALIGNED_ALLOC_DECLARED 1
+void *aligned_alloc(size_t alignment, size_t size);
+#endif
+```
+
+Generated C MUST preserve source locations through `#line` directives where source mapping is enabled. Runtime support, allocation tracking, and cleanup code MAY make generated source larger than hand-written kernel code, but optimization MUST NOT change program output.
+
+## Determinism and fixed point
+
+The Bootstrap build pipeline is:
+
+```text
+src/bootstrap/basaltc.seed.c
+        -> seed compiler binary
+        -> translates src/bootstrap/basaltc.bsl
+        -> current-generation C
+        -> current compiler binary
+```
+
+A synchronized seed is valid only when the generated generations converge byte-for-byte. The repository’s production check compares the stable generations, normally `n3.c` and `n4.c`, and compares their SHA-256 with `src/bootstrap/fixed_point_production.sha256`. The seed, source emitter, serializer, mangling, runtime prologue, and diagnostics therefore form one deterministic contract.
+
+## Conformance corpus
+
+The Bootstrap compatibility corpus is stored under `tests/spec/`. Valid cases MUST compile, pass strict GCC, and produce the expected runtime result. Invalid cases MUST be rejected before a generated C artifact is created. The corpus is executed by `scripts/run_spec_compat.sh` and is also part of `scripts/run_ownership_stress.sh`.
+
+## References
+
+[1]: ../src/bootstrap/basaltc.bsl "Bootstrap Basalt compiler source"
+[2]: ../src/bootstrap/basaltc.seed.c "Checked-in Bootstrap C seed"
+[3]: DEVELOPER_GUIDE.md "Basalt Bootstrap developer workflow"
+[4]: SAFE_IO_AND_DIAGNOSTICS.md "Basalt safety and diagnostics guidance"
