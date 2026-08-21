@@ -1,0 +1,8 @@
+extern "stdlib.h" func abs(x: int): int;
+extern "stdlib.h" func abs_again(x: int): int;
+extern "stdint.h" func ffi_u64(value: u64): u64;
+func main(): int {
+  if abs(0 - 7) != 7 then return 1;
+  return 0;
+}
+// end

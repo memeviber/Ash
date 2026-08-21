@@ -171,6 +171,21 @@ compile_run "$ROOT/tests/stress/map_bucket_mask_stress.basalt" map_bucket_mask_s
 compile_run "$ROOT/tests/regression/stress_containers_loop.basalt" stress_containers_loop
 compile_run "$ROOT/tests/regression/generic_map_probe.basalt" generic_map_probe
 compile_run "$ROOT/tests/regression/include_test_main.basalt" include_test_main
+compile_run "$ROOT/tests/regression/extern_ffi_test.basalt" extern_ffi_test
+compile_run "$ROOT/tests/regression/stress_ffi_loop.basalt" stress_ffi_loop
+compile_run "$ROOT/tests/spec/valid/controlled_ffi_valid.basalt" controlled_ffi_valid
+if [[ "$(grep -F -c '#include "stdlib.h"' "$OUT/controlled_ffi_valid.boot.c")" -ne 1 ]]; then
+  echo 'FAIL controlled_ffi_valid: duplicate controlled stdlib.h header' >&2
+  exit 1
+fi
+if [[ "$(grep -F -c '#include "stdint.h"' "$OUT/controlled_ffi_valid.boot.c")" -ne 1 ]]; then
+  echo 'FAIL controlled_ffi_valid: missing or duplicate controlled stdint.h header' >&2
+  exit 1
+fi
+printf 'PASS controlled_ffi_valid header deduplication guard\n'
+expect_reject "$ROOT/tests/spec/invalid/ffi_unsafe_type_invalid.basalt" ffi_unsafe_type_invalid
+expect_reject "$ROOT/tests/spec/invalid/ffi_unsafe_return_invalid.basalt" ffi_unsafe_return_invalid
+expect_reject "$ROOT/tests/spec/invalid/ffi_bad_header_invalid.basalt" ffi_bad_header_invalid
 compile_run "$ROOT/tests/regression/print_pointer_test.basalt" print_pointer_test
 grep -Fq '%p' "$OUT/print_pointer_test.boot.c"
 grep -Fq '(void*)' "$OUT/print_pointer_test.boot.c"

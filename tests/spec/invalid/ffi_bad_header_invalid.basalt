@@ -1,0 +1,5 @@
+// diagnostic.code: 57
+// diagnostic.excerpt: extern "bad header!" func f(): void;
+extern "bad header!" func f(): void;
+func main(): void { }
+// end

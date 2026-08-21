@@ -6,23 +6,18 @@ This guide explains how the Basalt repository is structured, how the two compile
 
 ## 1. The two-compiler model
 
-Basalt contains **two complete implementations** of the same language pipeline:
+Basalt historically contained two implementations of the language pipeline, but the production workflow is now deliberately **Bootstrap-only**:
 
-| Implementation | Language | Location | Purpose |
+| Implementation | Language | Location | Status |
 | --- | --- | --- | --- |
-| Host | OCaml | `src/compiler/` | Reference implementation |
-| Bootstrap | Basalt | `src/bootstrap/basaltc.basalt` | Self-hosting implementation |
+| Host | OCaml | `src/compiler/` | Frozen reference; never modified, built, or used for development validation |
+| Bootstrap | Basalt | `src/bootstrap/basaltc.basalt` | Active self-hosting implementation |
 
-The **parity rule**: a change is complete only when both compilers
+A change is complete only when the Bootstrap compiler accepts valid programs, rejects invalid programs, emits strict-C11 C, reproduces its fixed point, and passes the full pressure suite. The frozen Host source is retained for historical reference and is outside the active change path.
 
-1. accept the same valid programs,
-2. reject the same invalid programs,
-3. emit compilable, strict-C11 C,
-4. produce the same runtime behavior.
+The frozen seed C compiler is checked into `src/bootstrap/basaltc.seed.c` together with its SHA-256 (`src/bootstrap/fixed_point_production.sha256`). The seed must be regenerated from `basaltc.basalt` only after the two-stage fixed-point checks pass; generated binaries and intermediate C files remain under `.tmp/`.
 
-The Bootstrap compiler's generated C is checked into the repository as `src/bootstrap/basaltc.basalt.c` together with its SHA-256 (`src/bootstrap/fixed_point_production.sha256`). The two artifacts must stay in lockstep with `basaltc.basalt`.
-
-The two implementations are deliberately kept structurally close: same pipeline stages, same AST shapes, same diagnostics codes. When a language change lands, the Host is usually changed first (it is easier to edit), then the Bootstrap mirrors it, and finally the fixed-point and suite machinery proves the two agree.
+The active implementation keeps lexer, parser, type checker, generator, and diagnostics in `basaltc.basalt`. Every language change is developed there, compiled from the frozen seed, validated through the current compiler, and then synchronized back into the seed artifact.
 
 ### The pipeline
 
@@ -34,7 +29,15 @@ The two implementations are deliberately kept structurally close: same pipeline 
 | Type checker | Names, scopes, generics, fields, ownership, operator constraints |
 | Specializer | Monomorphizes generic functions and types actually used |
 | C generator | Emits an intermediate C-token stream, serializes to C11 |
-| Validation | Strict GCC flags, sanitizers, differential comparison |
+| Validation | Strict GCC flags, sanitizers, fixed-point and pressure checks |
+
+### Controlled C FFI
+
+Controlled FFI is intentionally narrower than raw C injection. `extern func name(...): type;` remains backward-compatible, while `extern "header.h" func name(...): type;` records one validated header path for the generated C file. Header literals are non-empty and limited to ASCII letters, digits, `.`, `/`, `_`, and `-`; the emitter deduplicates identical controlled headers and writes quoted includes after the runtime prologue and before `includec` bytes.
+
+The Bootstrap type checker rejects compiler-only representations at an extern boundary. Scalar types, pointers, fixed arrays, and named structs are accepted; dynamic arrays, tuples, variants, generic types, and other unsupported forms are rejected with stable diagnostic codes 55 (parameter), 56 (return), and 57 (header path). The compiler validates the Basalt declaration and generated C spelling, but the final C linker and platform ABI remain responsible for symbol availability and calling-convention compatibility.
+
+The required implementation order is parser metadata, ABI validation, header registration, C emission, structured diagnostics, specification fixtures, regression registration, and fixed-point synchronization. Raw `includec` remains available for explicit C helper implementations and is not type-checked by Basalt.
 
 ---
 

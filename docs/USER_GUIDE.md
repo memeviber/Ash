@@ -286,7 +286,7 @@ func main(): void {
 
 ### 4.10 C interoperability
 
-**`extern`** declares a C function you will link against:
+**`extern`** declares a C function that the final link step provides. The legacy form has no header metadata and remains useful when the runtime or an `includec` file already provides the declaration:
 
 ```basalt
 extern func c_abs(x: int): int;
@@ -297,19 +297,34 @@ func main(): int {
 }
 ```
 
+For a controlled declaration, place a header path immediately after `extern`:
+
+```basalt
+extern "stdlib.h" func abs(x: int): int;
+
+func main(): int {
+  print abs(0 - 7);      // 7
+  return 0;
+}
+```
+
+The controlled header literal is emitted as a quoted C include. It must be non-empty and contain only letters, digits, `.`, `/`, `_`, and `-`; preprocessor syntax such as angle brackets, quotes, backslashes, and newlines is rejected. Repeated declarations using the same header emit that header only once. Controlled extern parameters and returns may use scalar types, pointers, fixed-size arrays, or named structs. Dynamic arrays, tuples, variants, generic types, and other compiler-only representations are rejected at compile time with diagnostics 55 or 56.
+
 **`include`** pulls in another Basalt file (paths are resolved relative to the including file's directory):
 
 ```basalt
 include "../../src/stdlib/option.basalt"
 ```
 
-**`includec`** embeds a C source file into the generated program, which is the natural way to provide the implementation of `extern` functions:
+**`includec`** embeds raw C material into the generated program. It remains the escape hatch for helper implementations and declarations that are not expressed through the controlled `extern` surface:
 
 ```basalt
 includec "my_helpers.c"
 
 extern func compute(x: int): int;
 ```
+
+Use controlled `extern "header.h"` declarations when the C function boundary is stable and representable by Basalt types. Use `includec` only for C text that must be injected directly; its contents are not type-checked by Basalt.
 
 ### 4.11 Built-in functions
 

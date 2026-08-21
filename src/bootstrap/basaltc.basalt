@@ -141,6 +141,9 @@ let tc_diag_ascii: string = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQ
 let gen_source_pos: int = 0;
 let gen_source_epoch: int = 0;
 let emit_pending_space: int = 0;
+let ffi_header_ids: int* = 0;
+let ffi_header_count: int = 0;
+let ffi_header_cap: int = 0;
 
 func next_capacity(old: int, need: int): int {
   let n: int = old;
@@ -214,6 +217,48 @@ func ensure_sym(need: int): void {
   sym_elem_name = grow_ints(sym_elem_name, sym_cap, n);
   sym_scope = grow_ints(sym_scope, sym_cap, n);
   sym_cap = n;
+}
+
+func ensure_ffi_headers(need: int): void {
+  if need < ffi_header_cap then return;
+  let n: int = next_capacity(ffi_header_cap, need);
+  ffi_header_ids = grow_ints(ffi_header_ids, ffi_header_cap, n);
+  ffi_header_cap = n;
+}
+func ffi_header_char_ok(c: int): int {
+  if c > 47 then { if c < 58 then return 1; }
+  if c > 64 then { if c < 91 then return 1; }
+  if c > 96 then { if c < 123 then return 1; }
+  if c == 46 then return 1;
+  if c == 47 then return 1;
+  if c == 95 then return 1;
+  if c == 45 then return 1;
+  return 0;
+}
+func ffi_header_valid(id: int): int {
+  if id == 0 then return 1;
+  if sym_len[id] == 0 then return 0;
+  let i: int = 0;
+  while i < sym_len[id] {
+    if ffi_header_char_ok(source[sym_start[id] + i]) == 0 then return 0;
+    i = i + 1;
+  }
+  return 1;
+}
+func ffi_header_seen(id: int): int {
+  let i: int = 0;
+  while i < ffi_header_count {
+    if ffi_header_ids[i] == id then return 1;
+    i = i + 1;
+  }
+  return 0;
+}
+func ffi_header_register(id: int): void {
+  if id == 0 then return;
+  if ffi_header_seen(id) == 1 then return;
+  ensure_ffi_headers(ffi_header_count);
+  ffi_header_ids[ffi_header_count] = id;
+  ffi_header_count = ffi_header_count + 1;
 }
 
 func ast_node(kind: int, a: int, b: int, c: int, value: int, aux: int): int {
@@ -1844,9 +1889,13 @@ func gen_program(id: int): void {
   gen_source_epoch = 0;
   gen_match_serial = 0;
   gen_tuple_count = 0;
+  ffi_header_count = 0;
   code_reset(); gen_spec_count = 0; gen_name_override = 0; emit_defer_count = 0; emit_scope_depth = 0; emit_loop_depth = 0;
   let item: int = node_a[id];
   while item != 0 {
+    if node_kind[item] == N_EXTERN then {
+      if node_a[item] != 0 then ffi_header_register(node_a[item]);
+    }
     if node_kind[item] == N_GLOBAL || node_kind[item] == N_CONST then gen_collect_stmt(item);
     else if node_kind[item] == N_STRUCT then {
       let sf: int = node_a[item];
@@ -2830,6 +2879,11 @@ func ast_namespace_decl(): int {
 func ast_decl(): int {
   if input_take(T_NAMESPACE) == 1 then return ast_namespace_decl();
   if input_take(T_EXTERN) == 1 then {
+    let header_id: int = 0;
+    if input_peek() == T_STRING then {
+      header_id = input_payload();
+      input_pos = input_pos + 1;
+    }
     if input_take(T_FUNC) == 0 then return (0 - 1);
     if input_peek() != T_ID then return (0 - 1);
     let name: int = input_payload(); input_pos = input_pos + 1;
@@ -2842,7 +2896,7 @@ func ast_decl(): int {
     let ret_ty: int = ast_type();
     if ret_ty == 0 then return (0 - 1);
     if input_take(T_SEMI) == 0 then return (0 - 1);
-    return ast_node(N_EXTERN, 0, ret_ty, params, name, node_kind[ret_ty]);
+    return ast_node(N_EXTERN, header_id, ret_ty, params, name, node_kind[ret_ty]);
   }
   if input_take(T_CONST) == 1 then {
     if input_peek() != T_ID then return (0 - 1);
@@ -3898,6 +3952,7 @@ func load_tokens_from_file(path: string): void {
   sym_count = 1;
   ast_namespace_scope = 0;
   c_source_reset();
+  ffi_header_count = 0;
   include_ok = 1;
   let handle: int* = basalt_include_open_root(path);
   if handle == 0 then include_ok = 0;
@@ -5554,6 +5609,9 @@ func tc_print_hint(code: int): void {
   else if code == 21 then print "make the right-hand side match the left-hand side type";
   else if code == 23 then print "return a value matching the function return type";
   else if code == 36 then print "use an element type matching the existing array";
+  else if code == 55 then print "use only scalar, pointer, fixed-array, or named struct types in extern parameters";
+  else if code == 56 then print "use only scalar, pointer, fixed-array, or named struct types in extern return type";
+  else if code == 57 then print "header path must contain only alphanumeric characters, '.', '/', '_', '-'";
   else if code == 31 then print "assign only to a mutable binding";
   else print "inspect the expression at the reported source location";
 }
@@ -5590,6 +5648,9 @@ func tc_diag(): void {
   else if tc_error_code == 52 then print "type error: tuple destructuring requires tuple type";
   else if tc_error_code == 53 then print "type error: tuple binding count mismatch";
   else if tc_error_code == 54 then print "type error: integer literal is out of range for its target type";
+  else if tc_error_code == 55 then print "type error: extern parameter type is not FFI-safe";
+  else if tc_error_code == 56 then print "type error: extern return type is not FFI-safe";
+  else if tc_error_code == 57 then print "type error: extern header path contains invalid characters";
   else if tc_error_code == 44 then print "type error: distinct functions collide after C mangling";
   else print "type error: invalid expression";
   print "diagnostic.code";
@@ -5634,6 +5695,18 @@ func tc_reserved_function(name: int): int {
   if bi_has_flag(name, BI_FLAG_RESERVED) == 1 then return 1;
   return 0;
 }
+func tc_check_ffi_type(ty: int): int {
+  if ty == 0 then return 1;
+  let k: int = node_kind[ty];
+  if k == TY_INT || k == TY_BOOL || k == TY_CHAR || k == TY_STRING then return 1;
+  if k == TY_VOID || k == TY_FLOAT || k == TY_DOUBLE then return 1;
+  if k == TY_LONG || k == TY_LLONG then return 1;
+  if tc_is_fixed_integer_kind(k) == 1 then return 1;
+  if k == TY_PTR then return 1;
+  if k == TY_ARRAY then return 1;
+  if k == TY_NAMED then return 1;
+  return 0;
+}
 func tc_program(root: int): int {
   tc_root = root; tc_ok = 1; tc_error_code = 0; tc_error_pos = 0 - 1; tc_error_expected_kind = 0; tc_error_found_kind = 0; tc_var_count = 0; tc_scope_count = 0; tc_path_count = 0; tc_loop_depth = 0;
   let collision_item: int = node_a[root];
@@ -5645,6 +5718,29 @@ func tc_program(root: int): int {
   tc_enter_scope();
   let item: int = node_a[root];
   while item != 0 { if node_kind[item] == N_STRUCT then { let f: int = node_a[item]; while f != 0 { tc_check_type(node_b[f]); f = node_next[f]; } if tc_cycle_struct(node_value[item]) == 1 then tc_fail(28); } item = node_next[item]; }
+  item = node_a[root];
+  while item != 0 {
+    if node_kind[item] == N_EXTERN then {
+      let header_id: int = node_a[item];
+      if header_id != 0 then {
+        if ffi_header_valid(header_id) == 0 then {
+          if tc_ok == 1 then { tc_error_pos = node_pos[item]; tc_fail(57); }
+        }
+      }
+      let ffi_param: int = node_c[item];
+      while ffi_param != 0 {
+        if tc_check_ffi_type(node_b[ffi_param]) == 0 then {
+          if tc_ok == 1 then { tc_error_pos = node_pos[ffi_param]; tc_fail(55); }
+        }
+        ffi_param = node_next[ffi_param];
+      }
+      if tc_check_ffi_type(node_b[item]) == 0 then {
+        if tc_ok == 1 then { tc_error_pos = node_pos[item]; tc_fail(56); }
+      }
+    }
+    item = node_next[item];
+  }
+  if tc_ok == 0 then { tc_diag(); return 0; }
   item = node_a[root];
     while item != 0 { if node_kind[item] == N_GLOBAL || node_kind[item] == N_CONST then { tc_type_node(node_b[item]); let gk: int = tc_kind; let gn: int = tc_name; let ge: int = tc_elem_kind; let gen: int = tc_elem_name; tc_add_var(node_a[item], gk, gn, ge, gen, node_b[item]); if node_kind[item] == N_CONST then sym_type[node_a[item]] = gk + 100;     tc_mark_float_expr(node_c[item], gk); tc_expr(node_c[item]);     if tc_literal_fits(node_c[item], gk) == 0 then tc_fail(54);     if tc_same_full(gk, gn, ge, gen, tc_kind, tc_name, tc_elem_kind, tc_elem_name) == 0 && (node_kind[node_c[item]] != N_INT || node_value[node_c[item]] != 0) && node_kind[node_c[item]] != N_NULL then tc_fail(29); } item = node_next[item]; }
 
@@ -5943,6 +6039,13 @@ func emit_runtime(out: int*): void {
 func emit_c_file(path: string): void {
   let out: int* = open_file(path, "w");
   emit_runtime(out);
+  let hi: int = 0;
+  while hi < ffi_header_count {
+    write_string(out, "#include \"");
+    emit_symbol(out, ffi_header_ids[hi]);
+    write_string(out, "\"\n");
+    hi = hi + 1;
+  }
   let ci: int = 0;
   while ci < c_source_len { write_char(out, c_source[ci]); ci = ci + 1; }
   let i: int = 0;

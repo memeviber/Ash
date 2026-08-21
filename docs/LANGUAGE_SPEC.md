@@ -121,9 +121,25 @@ Tuple expressions and multiple return values use generated C struct-like represe
 
 `include "module.basalt";` loads Basalt source. Include resolution MUST use the including file as the base for relative paths, canonicalize paths before cycle checks, reject active include cycles, and avoid processing the same canonical module more than once.
 
-`includec "file.h";` injects or includes raw C material through the emitter. It is an escape hatch and MUST be isolated from ordinary Basalt type checking. New FFI declarations SHOULD use `extern` so the function signature and ownership boundary remain visible to the compiler.
+`includec "file.c";` injects raw C material through the emitter. It is an explicit escape hatch and MUST remain isolated from ordinary Basalt type checking. The injected material is responsible for providing any implementation and any declarations that are not represented by a controlled `extern` declaration.
 
-An `extern` declaration declares a C-provided function with a Basalt signature. The current implementation checks the Basalt-side arity and type contract; C-side ABI verification remains a portability responsibility of the build configuration until the controlled FFI milestone adds header and symbol validation.
+An `extern` declaration declares a C-provided function with a Basalt signature. The legacy form remains valid:
+
+```basalt
+extern func c_abs(x: int): int;
+```
+
+A controlled declaration MAY attach one validated header path immediately after `extern`:
+
+```basalt
+extern "stdlib.h" func abs(x: int): int;
+```
+
+The header literal MUST be non-empty and contain only ASCII letters, digits, `.`, `/`, `_`, and `-`. The Bootstrap emitter emits each distinct controlled header once as a quoted `#include` after the runtime prologue and before raw `includec` material. Angle-bracket spelling, quotes, backslashes, newlines, and other preprocessor syntax are not accepted in the literal.
+
+The compiler MUST accept scalar ABI types `int`, `bool`, `char`, `string`, `void`, `float`, `double`, `long`, `long long`, `u8`, `u16`, `u32`, `u64`, `i8`, `i16`, `i32`, `i64`, and `usize`, together with pointers, fixed-size arrays, and named struct types. Dynamic arrays, tuples, variants, generic types, and other compiler-only representations MUST be rejected in an `extern` parameter or return type. The checked Basalt contract covers declaration syntax, arity, and this ABI-safe type subset; C linker, calling-convention, and platform-specific ABI compatibility remain the build configuration's responsibility.
+
+Unsafe extern parameter types use diagnostic code 55, unsafe return types use code 56, and invalid controlled header paths use code 57.
 
 ## Diagnostics contract
 

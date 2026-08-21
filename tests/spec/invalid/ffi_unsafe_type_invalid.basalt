@@ -1,0 +1,5 @@
+// diagnostic.code: 55
+// diagnostic.excerpt: extern func bad(values: array::Array<int>): void;
+extern func bad(values: array::Array<int>): void;
+func main(): void { }
+// end
