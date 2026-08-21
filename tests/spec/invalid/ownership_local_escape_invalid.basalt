@@ -1,0 +1,13 @@
+func leak_local(): int* {
+  let value: int = 99;
+  return &value;
+}
+
+func main(): void {
+  let leaked: int* = leak_local();
+  print *leaked;
+}
+
+// diagnostic.code: 38
+// diagnostic.hint: inspect the expression at the reported source location
+// diagnostic.excerpt: return &value;

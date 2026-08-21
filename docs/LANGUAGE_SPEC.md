@@ -76,7 +76,21 @@ Logical operators MUST short-circuit. The right-hand operand of `a && b` is eval
 
 A mutable local binding uses `let name: Type = expression;`. A `const` binding is read-only after initialization. Assignments, field assignments, indexed assignments, returns, calls, variant payloads, and generic substitutions MUST be checked before C emission.
 
-A block introduces a scope. Local bindings declared in an inner scope MUST NOT remain visible after the scope closes. The type checker tracks ownership state separately from lexical name lookup. A moved owner MUST NOT be used again. A borrowed value MUST NOT outlive its owner, and a borrowed owner MUST NOT be mutated while an incompatible active borrow exists. The current Bootstrap implementation provides scope-based borrow checking; explicit lifetime parameters and closure-capture lifetime inference are reserved for a later language revision and MUST NOT be assumed by current programs.
+A block introduces a scope. Local bindings declared in an inner scope MUST NOT remain visible after the scope closes. The type checker tracks ownership state separately from lexical name lookup. A moved owner MUST NOT be used again. Generic owner representations such as `array::Array<T>` are tracked in the same way as dynamic arrays.
+
+Function parameters MAY declare an ownership mode before the parameter name:
+
+```basalt
+func consume(move values: array::Array<int>): void { }
+func inspect(borrow p: int*): int { return *p; }
+func update(borrow_mut p: int*): void { *p = 1; }
+```
+
+An unannotated parameter has compatibility mode and does not consume its argument. A `move` parameter requires an explicit `move expression` at the call site and transfers ownership exactly once. A `borrow` parameter creates a temporary shared borrow for the duration of the call. A `borrow_mut` parameter creates a temporary exclusive borrow and permits mutation through that parameter. Shared and mutable borrows MUST conflict with one another, and mutation, move, or release of a value MUST be rejected while an incompatible borrow is active.
+
+The `move expression` has the form `move expression`. It is valid only for an owned binding or an owned container result. After a successful move, the source binding is unusable until it is reinitialized. The checker applies these transitions at all ordinary, generic, built-in, and indirect call sites rather than only to expression statements.
+
+A borrowed value MUST NOT outlive its owner. Returning a pointer derived from a block-local owner is a lifetime error; returning a pointer derived from a global or formal parameter is permitted under lifetime elision. Borrow metadata is unwound when the lexical binding leaves scope, so a borrow held only by an inner binding does not leak into an outer scope. Closure-capture lifetime inference and named lifetime parameters are not yet part of the language contract.
 
 `defer statement;` registers cleanup in the active scope. Deferred operations MUST execute in reverse registration order on the corresponding exit path, including explicit returns covered by the implementation. A resource transferred out of a scope MUST NOT also be freed by the originating scope.
 
@@ -145,7 +159,7 @@ Unsafe extern parameter types use diagnostic code 55, unsafe return types use co
 
 Every compile-time failure MUST produce a nonzero exit status and MUST NOT leave a C artifact at the requested output path. The Bootstrap formatter emits a concise message followed by stable fields: `diagnostic.code`, `diagnostic.file`, one-based `diagnostic.line`, one-based `diagnostic.column`, `diagnostic.excerpt`, and `diagnostic.hint`. The file and excerpt are derived from the source byte span associated with the first failure; included files MUST report their own canonicalized source path.
 
-For type mismatch codes 12, 20, 21, 23, and 36, the formatter MUST additionally emit `diagnostic.expected` and `diagnostic.found` with human-readable type names. The compiler MUST preserve the first failing span while type checking so later traversal cannot overwrite the originating location. Diagnostic wording MAY evolve, but stable codes, field labels, rejection behavior, and source-location semantics are compatibility requirements. Tests MUST assert semantic rejection and the documented structured fields rather than depending only on incidental prose.
+For type mismatch codes 12, 20, 21, 23, and 36, the formatter MUST additionally emit `diagnostic.expected` and `diagnostic.found` with human-readable type names. Ownership and lifetime violations use stable codes 33 (use after move), 35 (release requires an owned value), 37 (borrow or mutation conflict), 38 (borrowed value escapes its lifetime), 40 (owned parameter requires an explicit move), 58 (explicit move requires an owned value), and 59 (borrow parameter source cannot be tracked). The compiler MUST preserve the first failing span while type checking so later traversal cannot overwrite the originating location. Diagnostic wording MAY evolve, but stable codes, field labels, rejection behavior, and source-location semantics are compatibility requirements. Tests MUST assert semantic rejection and the documented structured fields rather than depending only on incidental prose.
 
 ## Generated C and platform contract
 

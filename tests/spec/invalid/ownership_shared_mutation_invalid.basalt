@@ -1,0 +1,12 @@
+func write_shared(borrow p: int*): void {
+  *p = 11;
+}
+
+func main(): void {
+  let value: int = 3;
+  write_shared(&value);
+}
+
+// diagnostic.code: 37
+// diagnostic.hint: inspect the expression at the reported source location
+// diagnostic.excerpt: *p = 11;

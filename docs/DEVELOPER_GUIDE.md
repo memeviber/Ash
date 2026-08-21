@@ -39,6 +39,16 @@ The Bootstrap type checker rejects compiler-only representations at an extern bo
 
 The required implementation order is parser metadata, ABI validation, header registration, C emission, structured diagnostics, specification fixtures, regression registration, and fixed-point synchronization. Raw `includec` remains available for explicit C helper implementations and is not type-checked by Basalt.
 
+### Ownership, borrowing, and lifetime analysis
+
+Ownership is implemented entirely in the Bootstrap type checker. Parameter nodes store an ownership mode in `node_aux`: `0` means compatibility mode, `1` means `move`, `2` means shared `borrow`, and `3` means exclusive `borrow_mut`. The parser also creates `N_MOVE` expression nodes; the emitter deliberately lowers them to their child expression, because `move` is a compile-time transfer and must not duplicate evaluation or introduce runtime syntax.
+
+The checker keeps ownership metadata beside the scope stack: moved state, owned state, parameter origin, shared-borrow count, mutable-borrow count, borrow source, and active parameter mode. Generic owner types are recognized recursively so `array::Array<T>` and related container specializations participate in the same state machine as dynamic arrays. Call checking applies the parameter mode uniformly to ordinary, generic, built-in, and indirect calls. A move-mode parameter accepts only an explicit `N_MOVE`; borrow modes resolve a tracked source and enforce shared/exclusive conflicts before the call proceeds.
+
+Scope exit unwinds borrow counts associated with bindings declared in that scope. Return checking propagates the source of pointer expressions and rejects pointers derived from block-local owners while allowing globals and formal parameters under lifetime elision. This is a conservative escape analysis: it does not inspect arbitrary C inside `includec`, and raw FFI pointers remain an explicit unsafe boundary. Ownership errors use stable diagnostics 33, 35, 37, 38, 40, 58, and 59; new fixtures must assert the semantic code and source excerpt.
+
+Any ownership change must be developed in `src/bootstrap/basaltc.basalt`, rebuilt from the frozen seed with strict C11 flags, exercised by `scripts/run_ownership_stress.sh`, and only then synchronized into `basaltc.seed.c` and `fixed_point_production.sha256`. Do not modify, build, or use `src/compiler/` for this workflow.
+
 ---
 
 ## 2. Repository layout

@@ -349,36 +349,46 @@ More than 50 names (`printf`, `malloc`, `free`, `strlen`, `exit`, ...) are **res
 func printf(x: int): int { return 0; }   // Type Error: reserved runtime function name printf
 ```
 
-### 4.12 Ownership: move and borrow
+### 4.12 Ownership, borrowing, lifetimes, and escape analysis
 
-Basalt implements a small, explicit move/borrow checker for **dynamic arrays** (`array::Array<T>` and `slice::Slice<T>`):
+Basalt uses an explicit ownership checker for heap-backed values, including generic `array::Array<T>` and `slice::Slice<T>` representations. An owner is tracked independently from lexical name lookup, and ownership state is updated at declarations, assignments, returns, defers, ordinary calls, generic calls, built-ins, and indirect calls.
 
-- A dynamic array value **owns** its heap buffer.
-- Passing it to an owned parameter **moves** it; the source is dead afterward.
-- Releasing (`array::free`) **consumes** the owner.
-- Taking its address (`&values`) creates a **borrow**; while the borrow is live you cannot mutate, move, or release the value.
-- Borrows cannot escape a function through a return value.
+Function parameters can state their ownership mode:
 
 ```basalt
 include "../../src/stdlib/array.basalt"
 
-func consume_owner(values: array::Array<int>): int {
-  print array::get(values, 0);
-  array::free(values);
-  return 0;
+func consume(move values: array::Array<int>): void {
+  values = array::free(values);
+}
+
+func inspect(borrow p: int*): int {
+  return *p;
+}
+
+func update(borrow_mut p: int*): void {
+  *p = 41;
 }
 
 func main(): int {
+  let value: int = 7;
+  {
+    let view: int* = &value;
+    print inspect(view);       // temporary shared borrow
+  }                            // the borrow is released here
+  update(&value);              // temporary exclusive borrow
   let values: array::Array<int> = array::new(2, 0);
-  values = array::push(values, 41, 0);
-  print array::get(values, 0);
-  consume_owner(values);          // moves `values`
-  // print array::get(values, 0); // Type Error: use of moved value
-  return 0;
+  consume(move values);        // explicit ownership transfer
+  // print array::length(values); // Type Error: use of moved value
+  return value - 41;
 }
 ```
 
-The checker is deliberately scoped: raw pointers, `extern`, and `includec` remain low-level boundaries that the checker does not police.
+The rules are as follows. An unannotated parameter preserves compatibility behavior and does not consume its argument. A `move` parameter requires `move expression` at the call site and makes the source unusable after the transfer. A `borrow` parameter permits read-only access for the duration of the call. A `borrow_mut` parameter permits mutation but requires an exclusive borrow; shared and mutable borrows cannot overlap. Releasing an owner, mutating it, or moving it while an incompatible borrow is active is rejected at compile time.
+
+Borrow state is lexical. When a borrowed binding leaves its scope, the associated borrow count is unwound, so a temporary view does not leak into an outer block. Returning a pointer derived from a block-local owner is rejected as a lifetime escape. Pointers derived from globals or formal parameters are allowed under lifetime elision. Named lifetime parameters and closure-capture lifetime inference are reserved for a future language revision.
+
+The explicit `move` expression is intentionally transparent in generated C: it changes only compile-time ownership state and emits the underlying expression once. Raw pointers, `extern`, and `includec` remain low-level boundaries; the checker validates tracked Basalt ownership at their call boundaries but cannot infer ownership behavior inside arbitrary injected C.
 
 ---
 

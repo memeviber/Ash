@@ -68,6 +68,7 @@ run_invalid() {
 
 printf '%s\n' '[2/3] Running ownership fixtures.'
 run_valid "$ROOT/tests/stress/move_borrow_valid.basalt"
+run_valid "$ROOT/tests/spec/valid/ownership_lifetime_valid.basalt"
 for source in "$ROOT"/tests/stress/move_borrow_invalid_*.basalt; do
   run_invalid "$source"
 done

@@ -1,0 +1,15 @@
+include "../../../src/stdlib/array.basalt"
+
+func consume(move values: array::Array<int>): void {
+  values = array::free(values);
+}
+
+func main(): void {
+  let values: array::Array<int> = array::new(2, 0);
+  consume(move values);
+  print array::length(values);
+}
+
+// diagnostic.code: 33
+// diagnostic.hint: inspect the expression at the reported source location
+// diagnostic.excerpt: print array::length(values);

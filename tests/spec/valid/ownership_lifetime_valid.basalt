@@ -1,0 +1,29 @@
+include "../../../src/stdlib/array.basalt"
+
+func read_ref(borrow p: int*): int {
+  return *p;
+}
+
+func write_ref(borrow_mut p: int*): int {
+  *p = 9;
+  return *p;
+}
+
+func consume(move values: array::Array<int>): int {
+  values = array::free(values);
+  return 0;
+}
+
+func main(): int {
+  let value: int = 7;
+  {
+    let first: int* = &value;
+    if read_ref(first) != 7 then return 1;
+  }
+  if write_ref(&value) != 9 then return 2;
+  let values: array::Array<int> = array::new(2, 0);
+  consume(move values);
+  return value - 9;
+}
+
+// diagnostic: valid
