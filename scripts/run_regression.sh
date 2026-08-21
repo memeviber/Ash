@@ -132,6 +132,7 @@ compile_run "$ROOT/tests/regression/string_builder_iter_test.bsl" string_builder
 compile_run "$ROOT/tests/regression/numeric_compound_test.bsl" numeric_compound_test
 compile_run "$ROOT/tests/regression/f32_f64_test.bsl" f32_f64_test
 compile_run "$ROOT/tests/regression/generic_float_bound_nested_test.bsl" generic_float_bound_nested_test
+compile_run "$ROOT/tests/regression/generic_callback_borrow_lifecycle_test.bsl" generic_callback_borrow_lifecycle_test
 compile_run "$ROOT/tests/regression/compound_assignment_side_effect_test.bsl" compound_assignment_side_effect_test
 compile_run "$ROOT/tests/regression/source_mapping_test.bsl" source_mapping_test
 compile_run "$ROOT/tests/regression/tagged_union_test.bsl" tagged_union_test
