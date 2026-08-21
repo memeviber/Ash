@@ -54,6 +54,8 @@ tests/benchmark/         cross-language benchmark sources
 tests/regression/*.c     tracked includec helper runtimes (intentional)
 docs/                    spec, design, guides, reports
 scripts/                 all build/verify commands
+
+For Windows UCRT64 bootstrap compilation, see [`WINDOWS_UCRT64_BOOTSTRAP.md`](WINDOWS_UCRT64_BOOTSTRAP.md) for the pthread compatibility shim, `-pthread`/`-lpthread` linking guidance, and the `aligned_alloc` declaration.
 ```
 
 ---
