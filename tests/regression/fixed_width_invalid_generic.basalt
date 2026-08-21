@@ -1,0 +1,10 @@
+include "../../src/stdlib/array.basalt"
+
+func main(): int {
+  let zero_u8: u8 = 0;
+  let bytes: array::Array<u8> = array::new(1, zero_u8);
+  let words: array::Array<u16> = bytes;
+  array::free(bytes);
+  array::free(words);
+  return 0;
+}

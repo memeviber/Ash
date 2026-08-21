@@ -16,7 +16,7 @@ fail=0
 run_valid() {
   local source=$1
   local name
-  name=$(basename "$source" .bsl)
+  name=$(basename "$source" .basalt)
   local generated="$OUT/${name}.c"
   local binary="$OUT/${name}.bin"
   if "$BOOT_BIN" "$source" "$generated" >"$OUT/${name}.compile.log" 2>&1 \
@@ -78,7 +78,7 @@ check_diag_format() {
 run_invalid() {
   local source=$1
   local name
-  name=$(basename "$source" .bsl)
+  name=$(basename "$source" .basalt)
   local generated="$OUT/${name}.c"
   local log="$OUT/${name}.compile.log"
   rm -f "$generated"
@@ -94,11 +94,11 @@ run_invalid() {
   fi
 }
 
-for source in "$ROOT"/tests/spec/valid/*.bsl; do
+for source in "$ROOT"/tests/spec/valid/*.basalt; do
   [ -f "$source" ] || continue
   run_valid "$source"
 done
-for source in "$ROOT"/tests/spec/invalid/*.bsl; do
+for source in "$ROOT"/tests/spec/invalid/*.basalt; do
   [ -f "$source" ] || continue
   run_invalid "$source"
 done

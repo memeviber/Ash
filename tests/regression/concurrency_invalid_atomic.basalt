@@ -1,0 +1,5 @@
+include "../../src/stdlib/concurrency.basalt"
+
+func main(): int {
+  return concurrency::atomic_load(0);
+}

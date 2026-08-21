@@ -1,0 +1,9 @@
+include "../../src/stdlib/concurrency.basalt"
+
+func bad_worker(argument: void*): void {
+}
+
+func main(): int {
+  let thread: void* = concurrency::thread_spawn(&bad_worker, null);
+  return concurrency::thread_join(thread);
+}

@@ -15,7 +15,7 @@ bootstrap_stage() {
   mkdir -p "$out"
   gcc "${cflags[@]}" "$root/src/bootstrap/basaltc.seed.c" -o "$seed_bin"
   # Keep the helper's stdout machine-readable: compiler diagnostics belong on stderr.
-  "$seed_bin" "$root/src/bootstrap/basaltc.bsl" "$current_c" >&2
+  "$seed_bin" "$root/src/bootstrap/basaltc.basalt" "$current_c" >&2
   gcc "${cflags[@]}" "$current_c" -o "$current_bin"
   printf '%s\n' "$current_bin"
 }

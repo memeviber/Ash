@@ -55,7 +55,7 @@ The script invokes Dune in `src/compiler/` and produces the Host executable at `
 
 ## Building and using the Bootstrap compiler
 
-The canonical Bootstrap source is `src/bootstrap/basaltc.bsl`. The standard sequence is:
+The canonical Bootstrap source is `src/bootstrap/basaltc.basalt`. The standard sequence is:
 
 ```sh
 ./scripts/fixed_point.sh

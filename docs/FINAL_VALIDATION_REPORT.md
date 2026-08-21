@@ -2,7 +2,7 @@
 
 ## Scope
 
-This release completes the repository normalization and Bootstrap parity work for the Basalt compiler. The canonical self-hosting source is `src/bootstrap/basaltc.bsl`; no obsolete source extensions remain, and repository text contains no legacy branding or author/AI attribution.
+This release completes the repository normalization and Bootstrap parity work for the Basalt compiler. The canonical self-hosting source is `src/bootstrap/basaltc.basalt`; no obsolete source extensions remain, and repository text contains no legacy branding or author/AI attribution.
 
 ## Bootstrap generic parity fix
 
@@ -17,11 +17,11 @@ Generic specialization collection also performs one warm-up generation pass foll
 | Check | Result |
 | --- | --- |
 | Host compiler build | Passed |
-| Bootstrap C regeneration from `basaltc.bsl` | Passed |
+| Bootstrap C regeneration from `basaltc.basalt` | Passed |
 | Strict GCC (`-std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror`) | Passed |
-| `generic_map_probe.bsl` Host/Bootstrap parity | Passed |
-| `result_option_test.bsl` Host/Bootstrap parity | Passed |
-| `generic_slice_result_probe.bsl` Host/Bootstrap parity | Passed |
+| `generic_map_probe.basalt` Host/Bootstrap parity | Passed |
+| `result_option_test.basalt` Host/Bootstrap parity | Passed |
+| `generic_slice_result_probe.basalt` Host/Bootstrap parity | Passed |
 | Concrete `map`, `slice`, and container regression tests | Passed |
 | Ownership valid and five negative fixtures | Passed; both compilers agree |
 | ASan/UBSan and leak detection | Passed |
@@ -46,10 +46,10 @@ It completed successfully after rebuilding both compiler paths and reported `PAS
 | `.sl` files | 0 |
 | Legacy branding tokens | 0 |
 | Files containing author/AI attribution | 0 |
-| Canonical Bootstrap source | `src/bootstrap/basaltc.bsl` |
-| Generated Bootstrap C | `src/bootstrap/basaltc.bsl.c` |
+| Canonical Bootstrap source | `src/bootstrap/basaltc.basalt` |
+| Generated Bootstrap C | `src/bootstrap/basaltc.basalt.c` |
 | Executable files in release tree | 0 |
-| Namespace stdlib modules | `src/stdlib/map.bsl`, `src/stdlib/slice.bsl`, `src/stdlib/result.bsl` |
+| Namespace stdlib modules | `src/stdlib/map.basalt`, `src/stdlib/slice.basalt`, `src/stdlib/result.basalt` |
 
 The generated C remains a compile-time artifact of the compiler pipeline; the ownership checker and generic parity changes do not inject runtime bookkeeping into accepted programs.
 
@@ -59,9 +59,9 @@ From the repository root:
 
 ```sh
 (cd src/compiler && dune build bin/basaltc.exe)
-src/compiler/_build/default/bin/basaltc.exe src/bootstrap/basaltc.bsl
+src/compiler/_build/default/bin/basaltc.exe src/bootstrap/basaltc.basalt
 gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror \
-  src/bootstrap/basaltc.bsl.c -o /tmp/basaltc
+  src/bootstrap/basaltc.basalt.c -o /tmp/basaltc
 ./scripts/run_ownership_stress.sh
 ```
 

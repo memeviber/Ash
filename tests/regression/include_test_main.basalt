@@ -1,0 +1,10 @@
+include "include_test_lib.basalt"
+include "./include_test_lib.basalt"
+include "include_test_lib.basalt"
+includec "include_test_runtime.c"
+
+extern func c_value(): int;
+func main(): void {
+  print imported_value();
+  print c_value();
+}

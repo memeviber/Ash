@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-BOOT_SOURCE="$ROOT/src/bootstrap/basaltc.bsl"
+BOOT_SOURCE="$ROOT/src/bootstrap/basaltc.basalt"
 OUT="$ROOT/.tmp/adversarial"
 source "$ROOT/scripts/bootstrap_stage.sh"
 SAN_FLAGS=(-std=c11 -O1 -g -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror -fsanitize=address,undefined -fno-omit-frame-pointer)
@@ -13,7 +13,7 @@ GENERATED_SOURCES=()
 track_source() { GENERATED_SOURCES+=("$1"); }
 cleanup_generated() {
   for source in "${GENERATED_SOURCES[@]}"; do
-    rm -f "${source}.c" "${source%.bsl}"
+    rm -f "${source}.c" "${source%.basalt}"
   done
 }
 trap cleanup_generated EXIT
@@ -22,11 +22,11 @@ trap cleanup_generated EXIT
 BOOT_BIN=$(bootstrap_stage "$ROOT" "$OUT" "${SAN_FLAGS[@]}")
 
 for source in \
-  "$ROOT/tests/regression/complex_fnptr_ptrarith.bsl" \
-  "$ROOT/tests/regression/macro_pointer_complex.bsl" \
-  "$ROOT/tests/regression/stress_memory_loop.bsl" \
-  "$ROOT/tests/stress/modulo_stress.bsl"; do
-  name=$(basename "$source" .bsl)
+  "$ROOT/tests/regression/complex_fnptr_ptrarith.basalt" \
+  "$ROOT/tests/regression/macro_pointer_complex.basalt" \
+  "$ROOT/tests/regression/stress_memory_loop.basalt" \
+  "$ROOT/tests/stress/modulo_stress.basalt"; do
+  name=$(basename "$source" .basalt)
   track_source "$source"
   "$BOOT_BIN" "$source" "$OUT/${name}.boot.c" >"$OUT/${name}.boot.log" 2>&1
   gcc "${SAN_FLAGS[@]}" "$OUT/${name}.boot.c" -o "$OUT/${name}.boot.bin"
@@ -36,7 +36,7 @@ done
 
 # Bounds-safe runtime check: the Bootstrap path must produce the deterministic
 # fallback result without sanitizer diagnostics.
-OOB_SOURCE="$ROOT/tests/adversarial/memory_oob_test.bsl"
+OOB_SOURCE="$ROOT/tests/adversarial/memory_oob_test.basalt"
 track_source "$OOB_SOURCE"
 OOB_OUT="$OUT/memory_oob"
 "$BOOT_BIN" "$OOB_SOURCE" "$OOB_OUT.boot.c" >"$OOB_OUT.boot.compile.log" 2>&1

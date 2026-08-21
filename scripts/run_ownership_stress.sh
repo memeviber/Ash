@@ -26,12 +26,12 @@ check_no_stray_binaries() {
 run_valid() {
   local source=$1
   local name
-  name=$(basename "$source" .bsl)
+  name=$(basename "$source" .basalt)
   local dir="$OUT/$name"
   mkdir -p "$dir"
-  cp "$source" "$dir/$name.bsl"
+  cp "$source" "$dir/$name.basalt"
 
-  if ! "$BOOT_BIN" "$dir/$name.bsl" "$dir/$name.boot.c" >"$dir/bootstrap.compile.out" 2>"$dir/bootstrap.compile.err"; then
+  if ! "$BOOT_BIN" "$dir/$name.basalt" "$dir/$name.boot.c" >"$dir/bootstrap.compile.out" 2>"$dir/bootstrap.compile.err"; then
     printf 'FAIL %s: Bootstrap rejected valid fixture\n' "$name" >&2
     return 1
   fi
@@ -53,12 +53,12 @@ run_valid() {
 run_invalid() {
   local source=$1
   local name
-  name=$(basename "$source" .bsl)
+  name=$(basename "$source" .basalt)
   local dir="$OUT/$name"
   mkdir -p "$dir"
-  cp "$source" "$dir/$name.bsl"
+  cp "$source" "$dir/$name.basalt"
 
-  if "$BOOT_BIN" "$dir/$name.bsl" "$dir/$name.boot.c" >"$dir/bootstrap.compile.out" 2>"$dir/bootstrap.compile.err"; then
+  if "$BOOT_BIN" "$dir/$name.basalt" "$dir/$name.boot.c" >"$dir/bootstrap.compile.out" 2>"$dir/bootstrap.compile.err"; then
     printf 'FAIL %s: Bootstrap accepted invalid fixture\n' "$name" >&2
     return 1
   fi
@@ -67,8 +67,8 @@ run_invalid() {
 }
 
 printf '%s\n' '[2/3] Running ownership fixtures.'
-run_valid "$ROOT/tests/stress/move_borrow_valid.bsl"
-for source in "$ROOT"/tests/stress/move_borrow_invalid_*.bsl; do
+run_valid "$ROOT/tests/stress/move_borrow_valid.basalt"
+for source in "$ROOT"/tests/stress/move_borrow_invalid_*.basalt; do
   run_invalid "$source"
 done
 

@@ -45,7 +45,7 @@ This is not a claim of universal language performance. The C baseline uses the s
 
 ## Generated C inspection: callback and borrow fixture
 
-The generated C for `generic_callback_borrow_lifecycle_test.bsl` was compiled with the same strict GCC flags and executed successfully. The generic callback specializations are emitted as ordinary C function-pointer signatures:
+The generated C for `generic_callback_borrow_lifecycle_test.basalt` was compiled with the same strict GCC flags and executed successfully. The generic callback specializations are emitted as ordinary C function-pointer signatures:
 
 ```c
 int apply__int(int value, int (*callback)(int));
@@ -53,7 +53,7 @@ int apply_borrowed__int(int *value, int (*callback)(int));
 float apply__float(float value, float (*callback)(float));
 ```
 
-The emitted program preserves the important source-level behavior. `&increment_int` and `&shift_f32` become function-pointer values, `apply_borrowed__int` dereferences the borrowed pointer exactly once into a local snapshot before invoking the callback, and the block-scoped pointer is no longer used after the block. `#line` directives point diagnostics and debugger locations back to the `.bsl` fixture.
+The emitted program preserves the important source-level behavior. `&increment_int` and `&shift_f32` become function-pointer values, `apply_borrowed__int` dereferences the borrowed pointer exactly once into a local snapshot before invoking the callback, and the block-scoped pointer is no longer used after the block. `#line` directives point diagnostics and debugger locations back to the `.basalt` fixture.
 
 The emitter also produces a harmless duplicate `return 0;` at the end of `main` after the explicit source return. GCC accepts it under the repository's strict warnings, but it remains a possible future code-quality cleanup because it adds unreachable generated text without changing behavior.
 

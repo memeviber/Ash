@@ -35,7 +35,7 @@ def main() -> int:
         shutil.rmtree(OUT)
     OUT.mkdir(parents=True)
 
-    source = OUT / "code_buffer_growth.bsl"
+    source = OUT / "code_buffer_growth.basalt"
     lines = ["func main(): int {", "  let total: int = 0;"]
     lines.extend("  total = total + 1;" for _ in range(ASSIGNMENTS))
     lines.extend(["  print total;", "  return 0;", "}", ""])
@@ -47,7 +47,7 @@ def main() -> int:
     boot_c = OUT / "workload.c"
 
     run(["gcc", *STRICT, str(MODERN_C), "-o", str(seed_bin)])
-    run([str(seed_bin), str(ROOT / "src" / "bootstrap" / "basaltc.bsl"), str(current_c)])
+    run([str(seed_bin), str(ROOT / "src" / "bootstrap" / "basaltc.basalt"), str(current_c)])
     run(["gcc", *STRICT, str(current_c), "-o", str(boot_bin)])
     run([str(boot_bin), str(source), str(boot_c)])
     workload_bin = OUT / "workload.bin"

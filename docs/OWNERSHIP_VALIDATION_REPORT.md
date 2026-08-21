@@ -8,12 +8,12 @@ This report records the final validation of the Basalt static move/borrow checke
 
 | Case | Host | Bootstrap | Expected |
 | --- | --- | --- | --- |
-| `move_borrow_valid.bsl` | Accepted | Accepted | Runtime output must match |
-| `move_borrow_invalid_use_after_move.bsl` | Rejected, status 1 | Rejected, status 1 | Compile-time rejection |
-| `move_borrow_invalid_double_free.bsl` | Rejected, status 1 | Rejected, status 1 | Compile-time rejection |
-| `move_borrow_invalid_mutate_borrowed.bsl` | Rejected, status 1 | Rejected, status 1 | Compile-time rejection |
-| `move_borrow_invalid_borrow_escape.bsl` | Rejected, status 1 | Rejected, status 1 | Compile-time rejection |
-| `move_borrow_invalid_owner_copy.bsl` | Rejected, status 1 | Rejected, status 1 | Compile-time rejection |
+| `move_borrow_valid.basalt` | Accepted | Accepted | Runtime output must match |
+| `move_borrow_invalid_use_after_move.basalt` | Rejected, status 1 | Rejected, status 1 | Compile-time rejection |
+| `move_borrow_invalid_double_free.basalt` | Rejected, status 1 | Rejected, status 1 | Compile-time rejection |
+| `move_borrow_invalid_mutate_borrowed.basalt` | Rejected, status 1 | Rejected, status 1 | Compile-time rejection |
+| `move_borrow_invalid_borrow_escape.basalt` | Rejected, status 1 | Rejected, status 1 | Compile-time rejection |
+| `move_borrow_invalid_owner_copy.basalt` | Rejected, status 1 | Rejected, status 1 | Compile-time rejection |
 
 The valid fixture prints the identical output `7 8 41 41` through both compiler paths. Its generated C passes strict GCC with `-std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror`.
 
@@ -43,7 +43,7 @@ The unified diff is empty. This confirms that the ownership checker changes acce
 
 ## Fixed point
 
-After synchronizing `basaltc.bsl` with `basaltc.bsl`, the fixed-point script verified `n2.c == n3.c`. The production checksum recorded in `src/bootstrap/fixed_point_production.sha256` is:
+After synchronizing `basaltc.basalt` with `basaltc.basalt`, the fixed-point script verified `n2.c == n3.c`. The production checksum recorded in `src/bootstrap/fixed_point_production.sha256` is:
 
 ```text
 676c81cd21cd96f3fafc89135d55472cb903b33f1e785fab7eb70e2c55d50936

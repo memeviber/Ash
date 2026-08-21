@@ -25,7 +25,7 @@ def gen_arithmetic() -> None:
         shift = i % 4
         shifted = xor_value << shift
         write(
-            f"lt_valid_arithmetic_{i:03d}.bsl",
+            f"lt_valid_arithmetic_{i:03d}.basalt",
             f"""func main(): int {{
   let a: int = {a};
   let b: int = {b};
@@ -43,7 +43,7 @@ def gen_pointers() -> None:
         offset = (i % 7) + 1
         value = i * 13 + 9
         write(
-            f"lt_valid_pointer_{i:03d}.bsl",
+            f"lt_valid_pointer_{i:03d}.basalt",
             f"""func main(): int {{
   let p: int* = alloc_ints(16);
   p[{offset}] = {value};
@@ -64,7 +64,7 @@ def gen_function_pointers() -> None:
         right = i * 2 + 3
         expected = left + right + i
         write(
-            f"lt_valid_fnptr_{i:03d}.bsl",
+            f"lt_valid_fnptr_{i:03d}.basalt",
             f"""func add_{i}(a: int, b: int): int {{
   return a + b + {i};
 }}
@@ -89,8 +89,8 @@ def gen_arrays() -> None:
     for i in range(20):
         typ, zero, value, expected = cases[i % len(cases)]
         write(
-            f"lt_valid_array_{i:03d}.bsl",
-            f"""include "../../../src/stdlib/array.bsl"
+            f"lt_valid_array_{i:03d}.basalt",
+            f"""include "../../../src/stdlib/array.basalt"
 func main(): int {{
   let values: array::Array<{typ}> = array::new(1, {zero});
   let j: int = 0;
@@ -119,8 +119,8 @@ def gen_slices() -> None:
     for i in range(20):
         typ, zero, value = cases[i % len(cases)]
         write(
-            f"lt_valid_slice_{i:03d}.bsl",
-            f"""include "../../../src/stdlib/slice.bsl"
+            f"lt_valid_slice_{i:03d}.basalt",
+            f"""include "../../../src/stdlib/slice.basalt"
 func main(): int {{
   let values: slice::Slice<{typ}> = slice::new({zero});
   let j: int = 0;
@@ -148,8 +148,8 @@ def gen_maps() -> None:
     for i in range(20):
         key_type, value_type, key_zero, value_zero, key, value = cases[i % len(cases)]
         write(
-            f"lt_valid_map_{i:03d}.bsl",
-            f"""include "../../../src/stdlib/map.bsl"
+            f"lt_valid_map_{i:03d}.basalt",
+            f"""include "../../../src/stdlib/map.basalt"
 func main(): int {{
   let m: map::HashMap<{key_type}, {value_type}> = map::new({key_zero}, {value_zero});
   m = map::put(m, {key}, {value});
@@ -174,8 +174,8 @@ def gen_strings() -> None:
     for i in range(20):
         text, byte_len, codepoint_len = cases[i % len(cases)]
         write(
-            f"lt_valid_string_{i:03d}.bsl",
-            f"""include "../../../src/stdlib/string.bsl"
+            f"lt_valid_string_{i:03d}.basalt",
+            f"""include "../../../src/stdlib/string.basalt"
 func main(): int {{
   let text: string = "{text}";
   if str::utf8_validate(text) == false then return 1;
@@ -191,7 +191,7 @@ func main(): int {{
 def gen_named() -> None:
     for i in range(10):
         write(
-            f"lt_valid_named_{i:03d}.bsl",
+            f"lt_valid_named_{i:03d}.basalt",
             f"""struct Pair{i} {{
   left: int;
   right: double;
@@ -212,21 +212,21 @@ def gen_invalid() -> None:
     for i in range(30):
         kind = i % 5
         if kind == 0:
-            body = '''include "../../../src/stdlib/array.bsl"
+            body = '''include "../../../src/stdlib/array.basalt"
 func main(): int {
   let a: array::Array<int> = array::new(1, 0);
   a = array::push(a, "wrong", 0);
   return 0;
 }'''
         elif kind == 1:
-            body = '''include "../../../src/stdlib/slice.bsl"
+            body = '''include "../../../src/stdlib/slice.basalt"
 func main(): int {
   let s: slice::Slice<double> = slice::new(0.0);
   s = slice::push(s, 'x');
   return 0;
 }'''
         elif kind == 2:
-            body = '''include "../../../src/stdlib/map.bsl"
+            body = '''include "../../../src/stdlib/map.basalt"
 func main(): int {
   let m: map::HashMap<int, int> = map::new(0, 0);
   m = map::put(m, "wrong", 1);
@@ -248,12 +248,12 @@ func main(): int {
   let result: int = f(1, 2);
   return result;
 }'''
-        write(f"bad_lt_type_{i:03d}.bsl", body)
+        write(f"bad_lt_type_{i:03d}.basalt", body)
 
     for i in range(20):
         write(
-            f"bad_lt_owner_{i:03d}.bsl",
-            '''include "../../../src/stdlib/array.bsl"
+            f"bad_lt_owner_{i:03d}.basalt",
+            '''include "../../../src/stdlib/array.basalt"
 func main(): int {
   let a: array::Array<int> = array::new(2, 0);
   a = array::set(a, 0, "wrong");
@@ -263,8 +263,8 @@ func main(): int {
 
     for i in range(20):
         write(
-            f"bad_lt_borrow_{i:03d}.bsl",
-            '''include "../../../src/stdlib/slice.bsl"
+            f"bad_lt_borrow_{i:03d}.basalt",
+            '''include "../../../src/stdlib/slice.basalt"
 func main(): int {
   let s: slice::Slice<double> = slice::new(0.0);
   s = slice::set(s, 0, 'x');
@@ -274,7 +274,7 @@ func main(): int {
 
     for i in range(20):
         write(
-            f"bad_lt_pointer_{i:03d}.bsl",
+            f"bad_lt_pointer_{i:03d}.basalt",
             '''func main(): int {
   let p: int* = alloc_ints(2);
   let q: double* = p;

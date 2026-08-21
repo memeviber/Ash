@@ -1,0 +1,20 @@
+include "../../src/stdlib/io.basalt"
+
+func main(): int {
+  let negative: int = io::read_int(99);
+  if negative != -17 then { return 1; }
+  if io::status() != 0 then { return 2; }
+
+  let overflow: int = io::read_int(88);
+  if overflow != 88 then { return 3; }
+  if io::status() != 4 then { return 4; }
+
+  let eof_value: int = io::read_int(77);
+  if eof_value != 77 then { return 5; }
+  if io::status() != 1 then { return 6; }
+
+  let empty: string = io::read_line(16);
+  if empty[0] != 0 then { return 7; }
+  if io::status() != 1 then { return 8; }
+  return 0;
+}

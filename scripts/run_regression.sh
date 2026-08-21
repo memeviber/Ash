@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-BOOT_SOURCE="$ROOT/src/bootstrap/basaltc.bsl"
+BOOT_SOURCE="$ROOT/src/bootstrap/basaltc.basalt"
 BOOT_BIN="$ROOT/.tmp/bootstrap.bin"
 OUT="$ROOT/.tmp/regression"
 source "$ROOT/scripts/bootstrap_stage.sh"
@@ -13,7 +13,7 @@ GENERATED_SOURCES=()
 track_source() { GENERATED_SOURCES+=("$1"); }
 cleanup_generated() {
   for source in "${GENERATED_SOURCES[@]}"; do
-    rm -f "${source}.c" "${source%.bsl}"
+    rm -f "${source}.c" "${source%.basalt}"
   done
 }
 trap cleanup_generated EXIT
@@ -59,12 +59,12 @@ compile_run() {
   "$BOOT_BIN" "$source" "$boot_c" >/dev/null
   if [[ "$label" == "include_test_main" ]]; then
     assert_single_runtime_prologue "$boot_c" "$label (Bootstrap)"
-    assert_source_mapping "$boot_c" "$ROOT/tests/regression/include_test_nested.bsl" 2 "$label (nested include)"
-    assert_source_mapping "$boot_c" "$ROOT/tests/regression/include_test_lib.bsl" 3 "$label (include library)"
-    assert_source_mapping "$boot_c" "$ROOT/tests/regression/include_test_main.bsl" 8 "$label (main source)"
+    assert_source_mapping "$boot_c" "$ROOT/tests/regression/include_test_nested.basalt" 2 "$label (nested include)"
+    assert_source_mapping "$boot_c" "$ROOT/tests/regression/include_test_lib.basalt" 3 "$label (include library)"
+    assert_source_mapping "$boot_c" "$ROOT/tests/regression/include_test_main.basalt" 8 "$label (main source)"
   fi
   if [[ "$label" == "source_mapping_test" ]]; then
-    assert_source_mapping "$boot_c" "$ROOT/tests/regression/source_mapping_test.bsl" 3 "$label"
+    assert_source_mapping "$boot_c" "$ROOT/tests/regression/source_mapping_test.basalt" 3 "$label"
   fi
   gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror "$boot_c" -o "$boot_bin"
   "$boot_bin"
@@ -123,80 +123,80 @@ expect_collision_reject() {
   grep -Fq 'distinct functions collide after C mangling' "$OUT/${label}.boot.log"
 }
 
-compile_run "$ROOT/tests/stress/modulo_stress.bsl" modulo_stress
-compile_run "$ROOT/tests/regression/stdlib_growth_test.bsl" stdlib_growth_test
-compile_run "$ROOT/tests/regression/stdlib_containers_test.bsl" stdlib_containers_test
-compile_run "$ROOT/tests/regression/option_test.bsl" option_test
-compile_run "$ROOT/tests/regression/option_result_combinators_test.bsl" option_result_combinators_test
-compile_run "$ROOT/tests/regression/string_builder_iter_test.bsl" string_builder_iter_test
-compile_run "$ROOT/tests/regression/numeric_compound_test.bsl" numeric_compound_test
-compile_run "$ROOT/tests/regression/f32_f64_test.bsl" f32_f64_test
-compile_run "$ROOT/tests/regression/generic_float_bound_nested_test.bsl" generic_float_bound_nested_test
-compile_run "$ROOT/tests/regression/generic_callback_borrow_lifecycle_test.bsl" generic_callback_borrow_lifecycle_test
-compile_run "$ROOT/tests/regression/compound_assignment_side_effect_test.bsl" compound_assignment_side_effect_test
-compile_run "$ROOT/tests/regression/source_mapping_test.bsl" source_mapping_test
-compile_run "$ROOT/tests/regression/tagged_union_test.bsl" tagged_union_test
-compile_run "$ROOT/tests/regression/defer_test.bsl" defer_test
-compile_run "$ROOT/tests/regression/match_test.bsl" match_test
-compile_run "$ROOT/tests/regression/tuple_test.bsl" tuple_test
-compile_run "$ROOT/tests/regression/concurrency_test.bsl" concurrency_test
-compile_run "$ROOT/tests/regression/aligned_alloc_test.bsl" aligned_alloc_test
-compile_run "$ROOT/tests/regression/fixed_width_integer_test.bsl" fixed_width_integer_test
-compile_run "$ROOT/tests/regression/integer_literal_boundary_test.bsl" integer_literal_boundary_test
-compile_run "$ROOT/tests/regression/integer_literal_usize_boundary_test.bsl" integer_literal_usize_boundary_test
-expect_reject "$ROOT/tests/regression/integer_literal_overflow_invalid.bsl" integer_literal_overflow_invalid
-expect_reject "$ROOT/tests/regression/integer_literal_u64_overflow_invalid.bsl" integer_literal_u64_overflow_invalid
-expect_reject "$ROOT/tests/regression/integer_literal_u8_overflow_invalid.bsl" integer_literal_u8_overflow_invalid
-expect_reject "$ROOT/tests/regression/integer_literal_global_invalid.bsl" integer_literal_global_invalid
-expect_reject "$ROOT/tests/regression/integer_literal_indirect_invalid.bsl" integer_literal_indirect_invalid
-expect_reject "$ROOT/tests/regression/f32_f64_mismatch_invalid.bsl" f32_f64_mismatch_invalid
-expect_reject "$ROOT/tests/regression/fixed_width_invalid_generic.bsl" fixed_width_invalid_generic
-expect_reject "$ROOT/tests/regression/aligned_invalid_power.bsl" aligned_invalid_power
-expect_reject "$ROOT/tests/regression/concurrency_invalid_atomic.bsl" concurrency_invalid_atomic
-expect_reject "$ROOT/tests/regression/concurrency_invalid_callback.bsl" concurrency_invalid_callback
-expect_reject "$ROOT/tests/regression/tagged_union_arity_invalid.bsl" tagged_union_arity_invalid
-expect_reject "$ROOT/tests/regression/match_non_exhaustive.bsl" match_non_exhaustive
-expect_reject "$ROOT/tests/regression/match_payload_arity_invalid.bsl" match_payload_arity_invalid
-expect_reject "$ROOT/tests/regression/tuple_binding_count_invalid.bsl" tuple_binding_count_invalid
-expect_reject "$ROOT/tests/regression/tagged_union_type_invalid.bsl" tagged_union_type_invalid
-compile_run_with_input "$ROOT/tests/regression/io_safe_test.bsl" io_safe_test $'42\nbad-number\nBasalt-OVERFLOW\nok\n' $'safe-io\n42\nBasalt-\n'
-compile_run_with_input "$ROOT/tests/regression/io_safe_edge_test.bsl" io_safe_edge_test $'-17\n999999999999999999999999999999999999999999999\n' ''
-expect_runtime_failure_with_input "$ROOT/tests/regression/io_invalid_limit.bsl" io_invalid_limit '' 2
-compile_run "$ROOT/tests/regression/builtin_join_test.bsl" builtin_join_test
-compile_run "$ROOT/tests/regression/stdlib_slice_only_test.bsl" stdlib_slice_only_test
-compile_run "$ROOT/tests/regression/stdlib_map_only_test.bsl" stdlib_map_only_test
-compile_run "$ROOT/tests/regression/stdlib_hashing_test.bsl" stdlib_hashing_test
-compile_run "$ROOT/tests/regression/map_bucket_mask_edge.bsl" map_bucket_mask_edge
-compile_run "$ROOT/tests/stress/map_bucket_mask_stress.bsl" map_bucket_mask_stress
-compile_run "$ROOT/tests/regression/stress_containers_loop.bsl" stress_containers_loop
-compile_run "$ROOT/tests/regression/generic_map_probe.bsl" generic_map_probe
-compile_run "$ROOT/tests/regression/include_test_main.bsl" include_test_main
-compile_run "$ROOT/tests/regression/print_pointer_test.bsl" print_pointer_test
+compile_run "$ROOT/tests/stress/modulo_stress.basalt" modulo_stress
+compile_run "$ROOT/tests/regression/stdlib_growth_test.basalt" stdlib_growth_test
+compile_run "$ROOT/tests/regression/stdlib_containers_test.basalt" stdlib_containers_test
+compile_run "$ROOT/tests/regression/option_test.basalt" option_test
+compile_run "$ROOT/tests/regression/option_result_combinators_test.basalt" option_result_combinators_test
+compile_run "$ROOT/tests/regression/string_builder_iter_test.basalt" string_builder_iter_test
+compile_run "$ROOT/tests/regression/numeric_compound_test.basalt" numeric_compound_test
+compile_run "$ROOT/tests/regression/f32_f64_test.basalt" f32_f64_test
+compile_run "$ROOT/tests/regression/generic_float_bound_nested_test.basalt" generic_float_bound_nested_test
+compile_run "$ROOT/tests/regression/generic_callback_borrow_lifecycle_test.basalt" generic_callback_borrow_lifecycle_test
+compile_run "$ROOT/tests/regression/compound_assignment_side_effect_test.basalt" compound_assignment_side_effect_test
+compile_run "$ROOT/tests/regression/source_mapping_test.basalt" source_mapping_test
+compile_run "$ROOT/tests/regression/tagged_union_test.basalt" tagged_union_test
+compile_run "$ROOT/tests/regression/defer_test.basalt" defer_test
+compile_run "$ROOT/tests/regression/match_test.basalt" match_test
+compile_run "$ROOT/tests/regression/tuple_test.basalt" tuple_test
+compile_run "$ROOT/tests/regression/concurrency_test.basalt" concurrency_test
+compile_run "$ROOT/tests/regression/aligned_alloc_test.basalt" aligned_alloc_test
+compile_run "$ROOT/tests/regression/fixed_width_integer_test.basalt" fixed_width_integer_test
+compile_run "$ROOT/tests/regression/integer_literal_boundary_test.basalt" integer_literal_boundary_test
+compile_run "$ROOT/tests/regression/integer_literal_usize_boundary_test.basalt" integer_literal_usize_boundary_test
+expect_reject "$ROOT/tests/regression/integer_literal_overflow_invalid.basalt" integer_literal_overflow_invalid
+expect_reject "$ROOT/tests/regression/integer_literal_u64_overflow_invalid.basalt" integer_literal_u64_overflow_invalid
+expect_reject "$ROOT/tests/regression/integer_literal_u8_overflow_invalid.basalt" integer_literal_u8_overflow_invalid
+expect_reject "$ROOT/tests/regression/integer_literal_global_invalid.basalt" integer_literal_global_invalid
+expect_reject "$ROOT/tests/regression/integer_literal_indirect_invalid.basalt" integer_literal_indirect_invalid
+expect_reject "$ROOT/tests/regression/f32_f64_mismatch_invalid.basalt" f32_f64_mismatch_invalid
+expect_reject "$ROOT/tests/regression/fixed_width_invalid_generic.basalt" fixed_width_invalid_generic
+expect_reject "$ROOT/tests/regression/aligned_invalid_power.basalt" aligned_invalid_power
+expect_reject "$ROOT/tests/regression/concurrency_invalid_atomic.basalt" concurrency_invalid_atomic
+expect_reject "$ROOT/tests/regression/concurrency_invalid_callback.basalt" concurrency_invalid_callback
+expect_reject "$ROOT/tests/regression/tagged_union_arity_invalid.basalt" tagged_union_arity_invalid
+expect_reject "$ROOT/tests/regression/match_non_exhaustive.basalt" match_non_exhaustive
+expect_reject "$ROOT/tests/regression/match_payload_arity_invalid.basalt" match_payload_arity_invalid
+expect_reject "$ROOT/tests/regression/tuple_binding_count_invalid.basalt" tuple_binding_count_invalid
+expect_reject "$ROOT/tests/regression/tagged_union_type_invalid.basalt" tagged_union_type_invalid
+compile_run_with_input "$ROOT/tests/regression/io_safe_test.basalt" io_safe_test $'42\nbad-number\nBasalt-OVERFLOW\nok\n' $'safe-io\n42\nBasalt-\n'
+compile_run_with_input "$ROOT/tests/regression/io_safe_edge_test.basalt" io_safe_edge_test $'-17\n999999999999999999999999999999999999999999999\n' ''
+expect_runtime_failure_with_input "$ROOT/tests/regression/io_invalid_limit.basalt" io_invalid_limit '' 2
+compile_run "$ROOT/tests/regression/builtin_join_test.basalt" builtin_join_test
+compile_run "$ROOT/tests/regression/stdlib_slice_only_test.basalt" stdlib_slice_only_test
+compile_run "$ROOT/tests/regression/stdlib_map_only_test.basalt" stdlib_map_only_test
+compile_run "$ROOT/tests/regression/stdlib_hashing_test.basalt" stdlib_hashing_test
+compile_run "$ROOT/tests/regression/map_bucket_mask_edge.basalt" map_bucket_mask_edge
+compile_run "$ROOT/tests/stress/map_bucket_mask_stress.basalt" map_bucket_mask_stress
+compile_run "$ROOT/tests/regression/stress_containers_loop.basalt" stress_containers_loop
+compile_run "$ROOT/tests/regression/generic_map_probe.basalt" generic_map_probe
+compile_run "$ROOT/tests/regression/include_test_main.basalt" include_test_main
+compile_run "$ROOT/tests/regression/print_pointer_test.basalt" print_pointer_test
 grep -Fq '%p' "$OUT/print_pointer_test.boot.c"
 grep -Fq '(void*)' "$OUT/print_pointer_test.boot.c"
 printf 'PASS print_pointer_test format guard\n'
-compile_run "$ROOT/tests/regression/namespace_collision.bsl" namespace_collision
-compile_run "$ROOT/tests/regression/nested_namespace_valid.bsl" nested_namespace_valid
-compile_run "$ROOT/tests/regression/namespace_global.bsl" namespace_global
-compile_run "$ROOT/tests/regression/pointer_struct_field.bsl" pointer_struct_field
-compile_run "$ROOT/tests/regression/pointer_generic_struct_test.bsl" pointer_generic_struct_test
-compile_run "$ROOT/tests/regression/fixed_array_valid.bsl" fixed_array_valid
-expect_reject "$ROOT/tests/regression/fixed_array_oob_literal.bsl" fixed_array_oob_literal
-expect_reject "$ROOT/tests/regression/fixed_array_oob_negative.bsl" fixed_array_oob_negative
-compile_run "$ROOT/tests/regression/enum_typechecker_valid.bsl" enum_typechecker_valid
-compile_run "$ROOT/tests/regression/plain_enum_match_test.bsl" plain_enum_match_test
-expect_reject "$ROOT/tests/regression/enum_typechecker_invalid.bsl" enum_typechecker_invalid
-expect_reject "$ROOT/tests/regression/fixed_array_oob_struct_field.bsl" fixed_array_oob_struct_field
-expect_collision_reject "$ROOT/tests/regression/mangle_collision.bsl" mangle_collision
-expect_collision_reject "$ROOT/tests/regression/nested_namespace_flat_collision.bsl" nested_namespace_flat_collision
-expect_collision_reject "$ROOT/tests/regression/nested_namespace_segment_collision.bsl" nested_namespace_segment_collision
-expect_reject "$ROOT/tests/stress/modulo_invalid_string.bsl" modulo_invalid_string
-expect_reject "$ROOT/tests/regression/undefined_function_call.bsl" undefined_function_call
-expect_reject "$ROOT/tests/regression/non_function_value_call.bsl" non_function_value_call
-expect_reject "$ROOT/tests/regression/unknown_variable_use.bsl" unknown_variable_use
-expect_reject "$ROOT/tests/regression/unknown_field_access.bsl" unknown_field_access
-expect_reject "$ROOT/tests/regression/deref_non_pointer.bsl" deref_non_pointer
-expect_reject "$ROOT/tests/regression/index_non_container.bsl" index_non_container
-expect_reject "$ROOT/tests/regression/indirect_call_non_function.bsl" indirect_call_non_function
-expect_reject "$ROOT/tests/regression/reserved_runtime_function.bsl" reserved_runtime_function
+compile_run "$ROOT/tests/regression/namespace_collision.basalt" namespace_collision
+compile_run "$ROOT/tests/regression/nested_namespace_valid.basalt" nested_namespace_valid
+compile_run "$ROOT/tests/regression/namespace_global.basalt" namespace_global
+compile_run "$ROOT/tests/regression/pointer_struct_field.basalt" pointer_struct_field
+compile_run "$ROOT/tests/regression/pointer_generic_struct_test.basalt" pointer_generic_struct_test
+compile_run "$ROOT/tests/regression/fixed_array_valid.basalt" fixed_array_valid
+expect_reject "$ROOT/tests/regression/fixed_array_oob_literal.basalt" fixed_array_oob_literal
+expect_reject "$ROOT/tests/regression/fixed_array_oob_negative.basalt" fixed_array_oob_negative
+compile_run "$ROOT/tests/regression/enum_typechecker_valid.basalt" enum_typechecker_valid
+compile_run "$ROOT/tests/regression/plain_enum_match_test.basalt" plain_enum_match_test
+expect_reject "$ROOT/tests/regression/enum_typechecker_invalid.basalt" enum_typechecker_invalid
+expect_reject "$ROOT/tests/regression/fixed_array_oob_struct_field.basalt" fixed_array_oob_struct_field
+expect_collision_reject "$ROOT/tests/regression/mangle_collision.basalt" mangle_collision
+expect_collision_reject "$ROOT/tests/regression/nested_namespace_flat_collision.basalt" nested_namespace_flat_collision
+expect_collision_reject "$ROOT/tests/regression/nested_namespace_segment_collision.basalt" nested_namespace_segment_collision
+expect_reject "$ROOT/tests/stress/modulo_invalid_string.basalt" modulo_invalid_string
+expect_reject "$ROOT/tests/regression/undefined_function_call.basalt" undefined_function_call
+expect_reject "$ROOT/tests/regression/non_function_value_call.basalt" non_function_value_call
+expect_reject "$ROOT/tests/regression/unknown_variable_use.basalt" unknown_variable_use
+expect_reject "$ROOT/tests/regression/unknown_field_access.basalt" unknown_field_access
+expect_reject "$ROOT/tests/regression/deref_non_pointer.basalt" deref_non_pointer
+expect_reject "$ROOT/tests/regression/index_non_container.basalt" index_non_container
+expect_reject "$ROOT/tests/regression/indirect_call_non_function.basalt" indirect_call_non_function
+expect_reject "$ROOT/tests/regression/reserved_runtime_function.basalt" reserved_runtime_function
 printf 'Bootstrap-only regression checks completed successfully.\n'

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-SRC="$ROOT/src/bootstrap/basaltc.bsl"
+SRC="$ROOT/src/bootstrap/basaltc.basalt"
 SEED_C="$ROOT/src/bootstrap/basaltc.seed.c"
 CHECKSUM_FILE="$ROOT/src/bootstrap/fixed_point_production.sha256"
 OUT="$ROOT/.tmp/fixed-point"

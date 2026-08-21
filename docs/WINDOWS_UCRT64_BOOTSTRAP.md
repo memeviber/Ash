@@ -2,7 +2,7 @@
 
 This guide explains how to compile the Bootstrap compiler's generated C on Windows from an **MSYS2 UCRT64** shell. The Bootstrap emitter now selects a pthread compatibility shim automatically for MinGW/UCRT64 targets when the generated C would otherwise depend on an unavailable `<threads.h>` implementation.
 
-The repository's source of truth remains `src/bootstrap/basaltc.bsl`. The emitter emits the platform conditionals, pthread adapter, and guarded `aligned_alloc` declaration into every generated C translation. Users should not patch `basaltc.c` or `basaltc.seed.c` by hand; after emitter changes, regenerate the seed and verify the fixed point.
+The repository's source of truth remains `src/bootstrap/basaltc.basalt`. The emitter emits the platform conditionals, pthread adapter, and guarded `aligned_alloc` declaration into every generated C translation. Users should not patch `basaltc.c` or `basaltc.seed.c` by hand; after emitter changes, regenerate the seed and verify the fixed point.
 
 ## Toolchain setup
 
@@ -143,7 +143,7 @@ The executable is a local build artifact and must remain outside the repository'
 
 ## Generated-emitter workflow
 
-The Windows portability support is now part of `emit_runtime` in `src/bootstrap/basaltc.bsl`. A normal Bootstrap translation automatically emits the conditional prologue, so no generated `basaltc.c` edit is required. The durable update workflow is:
+The Windows portability support is now part of `emit_runtime` in `src/bootstrap/basaltc.basalt`. A normal Bootstrap translation automatically emits the conditional prologue, so no generated `basaltc.c` edit is required. The durable update workflow is:
 
 ```sh
 # Build a current compiler from the checked-in seed.
@@ -152,7 +152,7 @@ current_bin=$(bootstrap_stage "$PWD" .tmp/windows-bootstrap \
   -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror)
 
 # Regenerate the compiler C, then compile it in the target toolchain.
-"$current_bin" src/bootstrap/basaltc.bsl .tmp/basaltc.generated.c
+"$current_bin" src/bootstrap/basaltc.basalt .tmp/basaltc.generated.c
 gcc -std=c11 -O3 -Wall -Wextra -Wpedantic \
   -Wconversion -Wshadow -Werror -pthread \
   .tmp/basaltc.generated.c -o .tmp/basaltc.exe

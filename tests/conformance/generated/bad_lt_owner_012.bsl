@@ -1,6 +1,0 @@
-include "../../../src/stdlib/array.bsl"
-func main(): int {
-  let a: array::Array<int> = array::new(2, 0);
-  a = array::set(a, 0, "wrong");
-  return array::length(a);
-}

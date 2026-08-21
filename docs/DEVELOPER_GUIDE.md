@@ -11,7 +11,7 @@ Basalt contains **two complete implementations** of the same language pipeline:
 | Implementation | Language | Location | Purpose |
 | --- | --- | --- | --- |
 | Host | OCaml | `src/compiler/` | Reference implementation |
-| Bootstrap | Basalt | `src/bootstrap/basaltc.bsl` | Self-hosting implementation |
+| Bootstrap | Basalt | `src/bootstrap/basaltc.basalt` | Self-hosting implementation |
 
 The **parity rule**: a change is complete only when both compilers
 
@@ -20,7 +20,7 @@ The **parity rule**: a change is complete only when both compilers
 3. emit compilable, strict-C11 C,
 4. produce the same runtime behavior.
 
-The Bootstrap compiler's generated C is checked into the repository as `src/bootstrap/basaltc.bsl.c` together with its SHA-256 (`src/bootstrap/fixed_point_production.sha256`). The two artifacts must stay in lockstep with `basaltc.bsl`.
+The Bootstrap compiler's generated C is checked into the repository as `src/bootstrap/basaltc.basalt.c` together with its SHA-256 (`src/bootstrap/fixed_point_production.sha256`). The two artifacts must stay in lockstep with `basaltc.basalt`.
 
 The two implementations are deliberately kept structurally close: same pipeline stages, same AST shapes, same diagnostics codes. When a language change lands, the Host is usually changed first (it is easier to edit), then the Bootstrap mirrors it, and finally the fixed-point and suite machinery proves the two agree.
 
@@ -43,9 +43,9 @@ The two implementations are deliberately kept structurally close: same pipeline 
 ```
 src/compiler/            OCaml Host compiler (lexer.mll, parser.mly, ast.ml,
                          typechecker.ml, compiler.ml, parser.conflicts)
-src/bootstrap/           basaltc.bsl (source), basaltc.bsl.c (checked-in artifact),
+src/bootstrap/           basaltc.basalt (source), basaltc.basalt.c (checked-in artifact),
                          fixed_point_production.sha256
-src/stdlib/              array.bsl, slice.bsl, map.bsl, option.bsl, result.bsl, string.bsl
+src/stdlib/              array.basalt, slice.basalt, map.basalt, option.basalt, result.basalt, string.basalt
 tests/regression/        focused compiler + language tests (valid and expect-reject)
 tests/stress/            larger corpus (164 cases), move/borrow fixtures, modulo stress
 tests/conformance/       Host vs Bootstrap conformance material
@@ -78,28 +78,28 @@ Runs `dune build` in `src/compiler/` and then checks parser conflict counts (`ch
 
 The script:
 
-1. Host-compiles `src/bootstrap/basaltc.bsl` → `basaltc.bsl.c` (overwriting the working copy, **not** the checked-in one).
+1. Host-compiles `src/bootstrap/basaltc.basalt` → `basaltc.basalt.c` (overwriting the working copy, **not** the checked-in one).
 2. Builds `n1.bin` from that C with the strict GCC profile.
-3. Runs `n1.bin basaltc.bsl n2.c`, builds `n2.bin` from `n2.c`.
-4. Runs `n2.bin basaltc.bsl n3.c`.
+3. Runs `n1.bin basaltc.basalt n2.c`, builds `n2.bin` from `n2.c`.
+4. Runs `n2.bin basaltc.basalt n3.c`.
 5. Requires `n2.c == n3.c` byte-for-byte, and `sha256sum n2.c == fixed_point_production.sha256`.
 
 A passing fixed point proves the self-hosting compiler is stable: the compiler built by itself produces the same compiler artifact.
 
-**After changing `basaltc.bsl`, you must** regenerate the checked-in artifacts. The exact sequence used by maintainers:
+**After changing `basaltc.basalt`, you must** regenerate the checked-in artifacts. The exact sequence used by maintainers:
 
 ```sh
 ./scripts/build.sh
-src/compiler/_build/default/bin/basaltc.exe src/bootstrap/basaltc.bsl
+src/compiler/_build/default/bin/basaltc.exe src/bootstrap/basaltc.basalt
 gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror \
-  src/bootstrap/basaltc.bsl.c -o .tmp/n1.bin
-.tmp/n1.bin src/bootstrap/basaltc.bsl .tmp/n2.c
+  src/bootstrap/basaltc.basalt.c -o .tmp/n1.bin
+.tmp/n1.bin src/bootstrap/basaltc.basalt .tmp/n2.c
 gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror .tmp/n2.c -o .tmp/n2.bin
-.tmp/n2.bin src/bootstrap/basaltc.bsl .tmp/n3.c
+.tmp/n2.bin src/bootstrap/basaltc.basalt .tmp/n3.c
 cmp .tmp/n2.c .tmp/n3.c && sha256sum .tmp/n2.c
 ```
 
-Then write the new hash into `src/bootstrap/fixed_point_production.sha256` and commit the new `basaltc.bsl.c` and checksum together with the `.bsl` change. If the checksum does not change while the artifact does, something is wrong.
+Then write the new hash into `src/bootstrap/fixed_point_production.sha256` and commit the new `basaltc.basalt.c` and checksum together with the `.basalt` change. If the checksum does not change while the artifact does, something is wrong.
 
 ### 3.3 The full suite
 
@@ -120,8 +120,8 @@ This is the master runner. It builds both compilers and executes, in order:
 If you add a fixture, register it in `scripts/run_regression.sh`:
 
 ```sh
-compile_run "$ROOT/tests/regression/my_feature.bsl" my_feature          # valid program
-expect_reject "$ROOT/tests/regression/my_feature_invalid.bsl" my_feature_invalid  # both compilers must reject
+compile_run "$ROOT/tests/regression/my_feature.basalt" my_feature          # valid program
+expect_reject "$ROOT/tests/regression/my_feature_invalid.basalt" my_feature_invalid  # both compilers must reject
 ```
 
 `compile_run` compiles the fixture with the Host from the fixture's directory (so relative `include` paths resolve), then with the Bootstrap, then requires strict-GCC acceptance and a successful run of both binaries.
@@ -133,7 +133,7 @@ expect_reject "$ROOT/tests/regression/my_feature_invalid.bsl" my_feature_invalid
 Built-ins live in two tables that must agree:
 
 - Host: `Ast.builtin_funcs` in `src/compiler/lib/ast.ml` (type signature) and `reserved_names` in `src/compiler/lib/typechecker.ml`.
-- Bootstrap: `bi_init()` in `src/bootstrap/basaltc.bsl` — a data-driven registry built from `bi_register(name, tc_tag, flags)`.
+- Bootstrap: `bi_init()` in `src/bootstrap/basaltc.basalt` — a data-driven registry built from `bi_register(name, tc_tag, flags)`.
 
 The registry replaced a set of hardcoded name-hash checks. Tags: `BI_TC_NONE/VOID/INT/STRING/PTR_INT/PTR_VOID/MEM_ALLOC/MEM_RESIZE/MEM_FREE`; flags: `BI_FLAG_RESERVED/OWNED/CONSUME/DYNFIELD/MAIN`. Lookup is by `sym_len` + `sym_hash`, matching what the old code did, but adding a built-in is now a table entry instead of touching five functions.
 
@@ -151,14 +151,14 @@ The registry replaced a set of hardcoded name-hash checks. Tags: `BI_TC_NONE/VOI
    ("basalt_inc_join", ([TString; TString], TString))
    ```
 
-3. Add a fixture (`tests/regression/builtin_join_test.bsl`) and register it.
+3. Add a fixture (`tests/regression/builtin_join_test.basalt`) and register it.
 
 That is the whole change. Before the registry, the same addition touched the reserved list, the type-check dispatch, the emitter dispatch, and the ownership tables — five independent hardcoded hash lists that could drift apart.
 
 **Design notes for the registry** (learned the hard way):
 
 - `bi_init()` is **lazy**: it runs on the first `bi_lookup` during type checking. Eager initialization in `main()` fails because type-checking `bi_register`'s own body needs the registry (`grow_ints`) — a circular dependency.
-- `bi_register` interns names into the **symbol-text region** (`source_len + sym_text_len`), exactly like `sym_qualified`. Writing at plain `source_len` **overwrites the qualified-name region** used by namespace symbols (e.g. `map::free`) and breaks resolution for programs longer than the registry's footprint. This was a real bug: `stdlib_containers_test.bsl` failed with `unknown function` at a line inside the map section while short programs passed.
+- `bi_register` interns names into the **symbol-text region** (`source_len + sym_text_len`), exactly like `sym_qualified`. Writing at plain `source_len` **overwrites the qualified-name region** used by namespace symbols (e.g. `map::free`) and breaks resolution for programs longer than the registry's footprint. This was a real bug: `stdlib_containers_test.basalt` failed with `unknown function` at a line inside the map section while short programs passed.
 - `bi_lookup` compares `sym_len` and `sym_hash` only — never the source text — so the comparison is immune to later buffer reuse.
 - A built-in that is reserved but not callable (`printf`, `malloc`, `strlen`, ...) gets `BI_TC_NONE`. `write_int` was originally registered with `BI_TC_INT` by mistake; the old compiler treated it as reserved-only, and the Host has no `write_int` entry — so it must be `BI_TC_NONE` to preserve parity.
 
@@ -170,7 +170,7 @@ That is the whole change. Before the registry, the same addition touched the res
 
 Standard-library modules are plain Basalt in `src/stdlib/`, using the proven patterns: `namespace`, generic `struct`, zero-initialization (`= 0`), and accessor functions.
 
-**Worked example — `option.bsl`** (null-safety module):
+**Worked example — `option.basalt`** (null-safety module):
 
 ```basalt
 namespace option {
@@ -233,13 +233,13 @@ The typical workflow for a language-level change, demonstrated by the compile-ti
 
 1. **Host typechecker** (`typechecker.ml`): add the rule. A `const_int` helper recognizes both `5` and the `0 - 1` form of `-1`; indexing `TArray (t, n)` with a constant outside `[0, n)` yields `array index K out of bounds for length N`. Also relax the initializer rules so `let a: int[3] = 0;` is legal (local and global) — previously no fixed array could be declared at all.
 2. **Host emitter** (`compiler.ml`): emit `= {0}` for fixed-array initializers (previously the initializer was dropped, diverging from the Bootstrap, which emitted `= 0`).
-3. **Bootstrap** (`basaltc.bsl`): mirror the check in `tc_expr` using `node_value[tc_result_type]` as the array size, with `tc_fail(45)` and a message. Note the Bootstrap language has **no `>=` operator** — write `ik > size - 1` instead. Mirror the initializer emission in `gen_initializer` (`{0}`).
+3. **Bootstrap** (`basaltc.basalt`): mirror the check in `tc_expr` using `node_value[tc_result_type]` as the array size, with `tc_fail(45)` and a message. Note the Bootstrap language has **no `>=` operator** — write `ik > size - 1` instead. Mirror the initializer emission in `gen_initializer` (`{0}`).
 4. **Fixtures**: `fixed_array_valid` (boundary indexes), `fixed_array_oob_literal`, `fixed_array_oob_negative`, `fixed_array_oob_struct_field`; register the valid one with `compile_run` and the others with `expect_reject`.
 5. **Verify**: full suite, then regenerate the bootstrap artifact + checksum, then the suite again.
 
 ### Example of a Host-only bug found while writing documentation
 
-The enum fixture `tests/regression/enum_typechecker_valid.bsl` existed but was **not registered** in any suite — and it failed on the Host compiler with `internal: unknown variable or function Green` while the Bootstrap accepted it. Two Host defects surfaced:
+The enum fixture `tests/regression/enum_typechecker_valid.basalt` existed but was **not registered** in any suite — and it failed on the Host compiler with `internal: unknown variable or function Green` while the Bootstrap accepted it. Two Host defects surfaced:
 
 1. `emit_expr_type` (used during codegen) looked up `Var` in `vars` and `funcs` but not in **enum values**, although the type checker already resolved them. Fix: add `enum_values : typ SMap.t` to the emit environment, populate it from `program.enums`, and fall back to it in `emit_expr_type`.
 2. The Host emitted `typedef enum Color Color;` as a *forward declaration* before the definition. ISO C11 forbids forward references to `enum` types (unlike `struct`/`union`), which failed under `-Wpedantic -Werror`. Fix: emit `typedef enum Color Color;` immediately **after** each enum definition instead.
@@ -253,7 +253,7 @@ The fixtures were then registered in `run_regression.sh` so the gap cannot silen
 - [ ] Negative fixture that must be rejected by **both** compilers
 - [ ] Fixtures registered in `scripts/run_regression.sh`
 - [ ] `./scripts/run_ownership_stress.sh` fully green
-- [ ] Bootstrap artifact + checksum regenerated if `basaltc.bsl` changed
+- [ ] Bootstrap artifact + checksum regenerated if `basaltc.basalt` changed
 - [ ] Documentation updated (`docs/`, `README.md`)
 
 ---
@@ -263,9 +263,9 @@ The fixtures were then registered in `run_regression.sh` so the gap cannot silen
 - **Commit style**: imperative subject line, sentence case, no trailing period; body explains what and why. Examples from the repository history:
   - `Compile-time bounds checks for fixed arrays; allow int[n] = 0 initializers`
   - `Data-driven builtin registry in bootstrap; replace hardcoded name hashes with a runtime table; expose basalt_inc_join`
-  - `Add option.bsl null-safety stdlib; fix bootstrap generic call collection for nested calls in arguments`
+  - `Add option.basalt null-safety stdlib; fix bootstrap generic call collection for nested calls in arguments`
 - **Diagnostics**: the Host prints `Type Error: <message>`; the Bootstrap prints `type error: <code>` (with a message for most codes). Codes are shared and must stay in sync.
-- **Files**: sources are `.bsl`; generated C is `*.bsl.c` (gitignored except the bootstrap artifact); fixtures with a runtime component carry a tracked `.c` partner used through `includec`.
+- **Files**: sources are `.basalt`; generated C is `*.basalt.c` (gitignored except the bootstrap artifact); fixtures with a runtime component carry a tracked `.c` partner used through `includec`.
 - **Artifacts**: everything generated during verification lives under `.tmp/`; `tests/` must never contain executables.
 
 ---
@@ -274,7 +274,7 @@ The fixtures were then registered in `run_regression.sh` so the gap cannot silen
 
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |
-| `Fixed-point checksum mismatch` | `basaltc.bsl` changed without regenerating artifacts | Rebuild bootstrap, update `basaltc.bsl.c` + checksum |
+| `Fixed-point checksum mismatch` | `basaltc.basalt` changed without regenerating artifacts | Rebuild bootstrap, update `basaltc.basalt.c` + checksum |
 | `FAIL regression` for a new fixture | Fixture not registered, or relative `include` path wrong | Register in `run_regression.sh`; includes resolve relative to the fixture's directory |
 | `unknown function` / `invalid expression` on long programs | Symbol-text region overwritten (registry-era bug) or missing nested generic collection | Check `bi_register` region usage; check `gen_collect_expr` recursion |
 | `cc1: ... error:` after `-Werror` | Emitted C violates strict C11 (e.g. enum forward typedef) | Fix the emitter; run the emitted C through the strict profile |

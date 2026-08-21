@@ -1,0 +1,43 @@
+include "../../src/stdlib/array.basalt"
+
+func main(): int {
+  let byte_value: u8 = 255;
+  let word_value: u16 = 65535;
+  let dword_value: u32 = 100000;
+  let qword_value: u64 = 1000000;
+  let signed_byte: i8 = 127;
+  let signed_word: i16 = 32000;
+  let signed_dword: i32 = 100000;
+  let signed_qword: i64 = 1000000;
+  let index: usize = 2;
+
+  let next_dword: u32 = dword_value + 1;
+  let next_qword: i64 = signed_qword * 2;
+  let masked_word: u16 = word_value & 255;
+  if byte_value != 255 || word_value != 65535 || dword_value > qword_value then return 1;
+  if signed_byte != 127 || signed_word != 32000 || signed_dword != 100000 then return 2;
+  if next_dword != 100001 || next_qword != 2000000 || masked_word != 255 then return 3;
+  if index != 2 then return 4;
+
+  let zero_u8: u8 = 0;
+  let bytes: array::Array<u8> = array::new(2, zero_u8);
+  bytes = array::push(bytes, 10, zero_u8);
+  bytes = array::push(bytes, 20, zero_u8);
+  if array::get(bytes, 1) != 20 then return 5;
+  array::free(bytes);
+
+  let zero_u16: u16 = 0;
+  let words: array::Array<u16> = array::new(2, zero_u16);
+  words = array::push(words, 1000, zero_u16);
+  words = array::push(words, 2000, zero_u16);
+  if array::get(words, 1) != 2000 then return 6;
+  array::free(words);
+
+  let zero_i64: i64 = 0;
+  let signed_values: array::Array<i64> = array::new(2, zero_i64);
+  signed_values = array::push(signed_values, 1000000, zero_i64);
+  if array::get(signed_values, 0) != 1000000 then return 7;
+  array::free(signed_values);
+
+  return 0;
+}

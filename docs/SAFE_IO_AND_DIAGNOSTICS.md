@@ -2,7 +2,7 @@
 
 ## Safe input/output API
 
-The Bootstrap standard library now exposes `src/stdlib/io.bsl` under the `io` namespace. The implementation is backed by bounded C runtime primitives emitted by the Bootstrap compiler; it does not use unbounded `scanf`, `%s`, or an unchecked line reader.
+The Bootstrap standard library now exposes `src/stdlib/io.basalt` under the `io` namespace. The implementation is backed by bounded C runtime primitives emitted by the Bootstrap compiler; it does not use unbounded `scanf`, `%s`, or an unchecked line reader.
 
 | API | Contract |
 |---|---|

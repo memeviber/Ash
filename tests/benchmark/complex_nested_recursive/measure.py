@@ -10,7 +10,7 @@ ROOT = pathlib.Path(sys.argv[1]).resolve()
 COMPILER = pathlib.Path(sys.argv[2]).resolve()
 WORK = ROOT / ".tmp" / "complex-benchmark-results"
 WORK.mkdir(parents=True, exist_ok=True)
-BSL_TEMPLATE = ROOT / "tests" / "benchmark" / "complex_nested_recursive" / "kernel.bsl"
+BSL_TEMPLATE = ROOT / "tests" / "benchmark" / "complex_nested_recursive" / "kernel.basalt"
 C_TEMPLATE = ROOT / "tests" / "benchmark" / "complex_nested_recursive" / "kernel.c"
 
 FLAGS = [
@@ -35,12 +35,12 @@ def run_checked(command, stdout=None):
 
 
 def make_variant(name, rows, columns, depth):
-    bsl = WORK / f"kernel_{name}.bsl"
+    bsl = WORK / f"kernel_{name}.basalt"
     csrc = WORK / f"kernel_{name}.c"
     bsl_text = BSL_TEMPLATE.read_text()
     bsl_text = bsl_text.replace(
-        'include "../../../src/stdlib/array.bsl"',
-        'include "../../src/stdlib/array.bsl"',
+        'include "../../../src/stdlib/array.basalt"',
+        'include "../../src/stdlib/array.basalt"',
     )
     bsl_text = bsl_text.replace(
         "workspace.primary = make_matrix(20000, 32, 11);",
@@ -84,7 +84,7 @@ def main():
         ])
         for name, rows, columns, depth in CASES:
             bsl, csrc = make_variant(name, rows, columns, depth)
-            generated = bsl.with_suffix(".bsl.c")
+            generated = bsl.with_suffix(".basalt.c")
             basalt_bin = WORK / f"kernel_{name}_basalt.bin"
             c_bin = WORK / f"kernel_{name}_c.bin"
             compiler_log = WORK / f"kernel_{name}.compiler.log"

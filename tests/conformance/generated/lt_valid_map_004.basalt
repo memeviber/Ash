@@ -1,0 +1,11 @@
+include "../../../src/stdlib/map.basalt"
+func main(): int {
+  let m: map::HashMap<int, double> = map::new(0, 0.0);
+  m = map::put(m, 13, 2.5);
+  if map::length(m) != 1 then return 1;
+  if map::contains_key(m, 13) == false then return 2;
+  m = map::remove(m, 13);
+  if map::length(m) != 0 then return 3;
+  m = map::free(m);
+  return 0;
+}

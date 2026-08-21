@@ -19,10 +19,10 @@ import sys
 from pathlib import Path
 
 
-BASALT_SOURCE = r'''include "../../../src/stdlib/array.bsl"
-include "../../../src/stdlib/slice.bsl"
-include "../../../src/stdlib/map.bsl"
-include "../../../src/stdlib/string.bsl"
+BASALT_SOURCE = r'''include "../../../src/stdlib/array.basalt"
+include "../../../src/stdlib/slice.basalt"
+include "../../../src/stdlib/map.basalt"
+include "../../../src/stdlib/string.basalt"
 
 func hash_int(value: int): int {
   return value % 17;
@@ -322,7 +322,7 @@ def main() -> int:
     logs.mkdir()
     binaries.mkdir()
 
-    source = sources / "complex_ownership.bsl"
+    source = sources / "complex_ownership.basalt"
     c_source = sources / "complex_ownership.c"
     source.write_text(BASALT_SOURCE, encoding="utf-8")
     c_source.write_text(C_SOURCE, encoding="utf-8")
@@ -335,7 +335,7 @@ def main() -> int:
                      stdout=logs / "bootstrap-seed-build.out", stderr=logs / "bootstrap-seed-build.err")
     if seed_build.returncode != 0:
         raise RuntimeError(f"Bootstrap seed C build failed; see {logs / 'bootstrap-seed-build.err'}")
-    current_build = run([str(seed_compiler), str(root / "src" / "bootstrap" / "basaltc.bsl"), str(current_source)],
+    current_build = run([str(seed_compiler), str(root / "src" / "bootstrap" / "basaltc.basalt"), str(current_source)],
                         stdout=logs / "bootstrap-current-generate.out", stderr=logs / "bootstrap-current-generate.err")
     if current_build.returncode != 0:
         raise RuntimeError(f"Current Bootstrap generation failed; see {logs / 'bootstrap-current-generate.err'}")

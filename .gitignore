@@ -4,8 +4,8 @@ _build/
 *.merlin
 
 # Generated C and local compiler binaries
-*.bsl.c
-!src/bootstrap/basaltc.bsl.c
+*.basalt.c
+!src/bootstrap/basaltc.basalt.c
 *.bin
 *.out
 *.o

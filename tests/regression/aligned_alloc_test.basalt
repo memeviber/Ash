@@ -1,0 +1,33 @@
+include "../../src/stdlib/array.basalt"
+
+let global_aligned: int alignas(32) = 7;
+const global_const_aligned: int alignas(16) = 11;
+
+func main(): int {
+  let local_aligned: int alignas(16) = 3;
+  if global_aligned != 7 then return 1;
+  if global_const_aligned != 11 then return 2;
+  if local_aligned != 3 then return 3;
+
+  let ints: int* = memory_alloc_aligned(8, 32, 0);
+  ints[0] = 10;
+  ints[7] = 70;
+  if ints[0] != 10 then return 4;
+  if ints[7] != 70 then return 5;
+  memory_free(ints);
+
+  let doubles: double* = memory_alloc_aligned(4, 64, 0.0);
+  doubles[0] = 1.5;
+  doubles[3] = 6.5;
+  if doubles[0] != 1.5 then return 6;
+  if doubles[3] != 6.5 then return 7;
+  memory_free(doubles);
+
+  let values: array::Array<int> = array::new_aligned(4, 64, 0);
+  values = array::push(values, 21, 0);
+  values = array::push(values, 42, 0);
+  if array::get(values, 0) != 21 then return 8;
+  if array::get(values, 1) != 42 then return 9;
+  array::free(values);
+  return 0;
+}

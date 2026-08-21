@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-BOOT_SOURCE="$ROOT/src/bootstrap/basaltc.bsl"
+BOOT_SOURCE="$ROOT/src/bootstrap/basaltc.basalt"
 OUT="$ROOT/.tmp/stress"
 source "$ROOT/scripts/bootstrap_stage.sh"
 STRICT_FLAGS=(-std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror)
@@ -13,7 +13,7 @@ GENERATED_SOURCES=()
 track_source() { GENERATED_SOURCES+=("$1"); }
 cleanup_generated() {
   for source in "${GENERATED_SOURCES[@]}"; do
-    rm -f "${source}.c" "${source%.bsl}"
+    rm -f "${source}.c" "${source%.basalt}"
   done
 }
 trap cleanup_generated EXIT
@@ -41,16 +41,16 @@ run_negative() {
 }
 
 count=0
-for source in "$ROOT"/tests/stress/case_*.bsl; do
-  name=$(basename "$source" .bsl)
+for source in "$ROOT"/tests/stress/case_*.basalt; do
+  name=$(basename "$source" .basalt)
   run_valid "$source" "$name"
   count=$((count + 1))
 done
-for source in "$ROOT"/tests/stress/bad_*.bsl; do
-  name=$(basename "$source" .bsl)
+for source in "$ROOT"/tests/stress/bad_*.basalt; do
+  name=$(basename "$source" .basalt)
   run_negative "$source" "$name"
   count=$((count + 1))
 done
-run_valid "$ROOT/tests/stress/modulo_stress.bsl" modulo_stress
-run_negative "$ROOT/tests/stress/modulo_invalid_string.bsl" modulo_invalid_string
+run_valid "$ROOT/tests/stress/modulo_stress.basalt" modulo_stress
+run_negative "$ROOT/tests/stress/modulo_invalid_string.basalt" modulo_invalid_string
 printf 'Bootstrap-only stress suite passed: %d corpus cases plus modulo coverage.\n' "$count"

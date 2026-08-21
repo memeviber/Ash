@@ -2,7 +2,7 @@
 
 ## Status and conformance
 
-This document is the normative language contract for the Bootstrap Basalt compiler. The implementation of record is `src/bootstrap/basaltc.bsl` together with the checked-in C seed `src/bootstrap/basaltc.seed.c`; the frozen seed must be able to compile the Bootstrap source without invoking the Host compiler. A language change is conforming only when the Bootstrap compiler accepts every valid corpus case, rejects every invalid corpus case before C emission, produces strict-C11 output, and preserves the fixed-point property described below.
+This document is the normative language contract for the Bootstrap Basalt compiler. The implementation of record is `src/bootstrap/basaltc.basalt` together with the checked-in C seed `src/bootstrap/basaltc.seed.c`; the frozen seed must be able to compile the Bootstrap source without invoking the Host compiler. A language change is conforming only when the Bootstrap compiler accepts every valid corpus case, rejects every invalid corpus case before C emission, produces strict-C11 output, and preserves the fixed-point property described below.
 
 The specification uses **MUST** for a required rule, **MUST NOT** for a forbidden behavior, and **MAY** for an implementation extension that does not change the defined behavior of conforming programs.
 
@@ -119,7 +119,7 @@ Tuple expressions and multiple return values use generated C struct-like represe
 
 ## Includes and controlled C interoperability
 
-`include "module.bsl";` loads Basalt source. Include resolution MUST use the including file as the base for relative paths, canonicalize paths before cycle checks, reject active include cycles, and avoid processing the same canonical module more than once.
+`include "module.basalt";` loads Basalt source. Include resolution MUST use the including file as the base for relative paths, canonicalize paths before cycle checks, reject active include cycles, and avoid processing the same canonical module more than once.
 
 `includec "file.h";` injects or includes raw C material through the emitter. It is an escape hatch and MUST be isolated from ordinary Basalt type checking. New FFI declarations SHOULD use `extern` so the function signature and ownership boundary remain visible to the compiler.
 
@@ -159,7 +159,7 @@ The Bootstrap build pipeline is:
 ```text
 src/bootstrap/basaltc.seed.c
         -> seed compiler binary
-        -> translates src/bootstrap/basaltc.bsl
+        -> translates src/bootstrap/basaltc.basalt
         -> current-generation C
         -> current compiler binary
 ```
@@ -172,7 +172,7 @@ The Bootstrap compatibility corpus is stored under `tests/spec/`. Valid cases MU
 
 ## References
 
-[1]: ../src/bootstrap/basaltc.bsl "Bootstrap Basalt compiler source"
+[1]: ../src/bootstrap/basaltc.basalt "Bootstrap Basalt compiler source"
 [2]: ../src/bootstrap/basaltc.seed.c "Checked-in Bootstrap C seed"
 [3]: DEVELOPER_GUIDE.md "Basalt Bootstrap developer workflow"
 [4]: SAFE_IO_AND_DIAGNOSTICS.md "Basalt safety and diagnostics guidance"

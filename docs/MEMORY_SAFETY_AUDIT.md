@@ -45,26 +45,26 @@ Both compilers reject every ownership-negative fixture in the new corpus. The ac
 
 | Fixture | Host result | Bootstrap result | Semantic case |
 | --- | --- | --- | --- |
-| `move_borrow_valid.bsl` | Accepted; output `7 8 41 41` | Accepted; output `7 8 41 41` | Valid move, scoped borrow, and post-borrow mutation |
-| `move_borrow_invalid_use_after_move.bsl` | Rejected | Rejected | Read after passing owner to an owned parameter |
-| `move_borrow_invalid_double_free.bsl` | Rejected | Rejected | Release after the first `array_free` consumed the owner |
-| `move_borrow_invalid_mutate_borrowed.bsl` | Rejected | Rejected | Mutation while an address-derived borrow is active |
-| `move_borrow_invalid_borrow_escape.bsl` | Rejected | Rejected | Returning a pointer to a local owner |
-| `move_borrow_invalid_owner_copy.bsl` | Rejected | Rejected | Implicit dynamic-array owner copy |
+| `move_borrow_valid.basalt` | Accepted; output `7 8 41 41` | Accepted; output `7 8 41 41` | Valid move, scoped borrow, and post-borrow mutation |
+| `move_borrow_invalid_use_after_move.basalt` | Rejected | Rejected | Read after passing owner to an owned parameter |
+| `move_borrow_invalid_double_free.basalt` | Rejected | Rejected | Release after the first `array_free` consumed the owner |
+| `move_borrow_invalid_mutate_borrowed.basalt` | Rejected | Rejected | Mutation while an address-derived borrow is active |
+| `move_borrow_invalid_borrow_escape.basalt` | Rejected | Rejected | Returning a pointer to a local owner |
+| `move_borrow_invalid_owner_copy.basalt` | Rejected | Rejected | Implicit dynamic-array owner copy |
 
 The semantic results are identical, while the current human-readable diagnostics are not yet byte-for-byte identical. Host reports, for example, `cannot mutate borrowed value` and `borrow escapes function through return`; Bootstrap reports the equivalent messages `cannot mutate or move while borrowed` and `borrowed reference escapes its owner`. The error classes are aligned, including Bootstrap's explicit mapping for error 33 (`use after ownership move`) and error 40 (`owned value copy requires an explicit move`).
 
 ## Confirmed Host runtime bug and fix
 
-Before the Host emitter hardening, direct dynamic-array indexing could reach raw memory even though Bootstrap rejected the same out-of-bounds access. The Host emitter now routes dynamic-array reads through the checked runtime helper, aligning the two compiler paths. The adversarial fixture `memory_oob_test.bsl` is compiled through both paths and both generated programs terminate with the same deterministic failure status without AddressSanitizer or UBSan diagnostics.[^5]
+Before the Host emitter hardening, direct dynamic-array indexing could reach raw memory even though Bootstrap rejected the same out-of-bounds access. The Host emitter now routes dynamic-array reads through the checked runtime helper, aligning the two compiler paths. The adversarial fixture `memory_oob_test.basalt` is compiled through both paths and both generated programs terminate with the same deterministic failure status without AddressSanitizer or UBSan diagnostics.[^5]
 
 ## Validation evidence
 
 | Check | Result | Evidence |
 | --- | --- | --- |
 | Host Dune build | Passed | `basalt/scripts/run_ownership_stress.sh` |
-| Ownership valid fixture | Host and Bootstrap accepted | `tests/stress/move_borrow_valid.bsl` |
-| Ownership negative corpus | Five fixtures rejected by both compilers | `tests/stress/move_borrow_invalid_*.bsl` |
+| Ownership valid fixture | Host and Bootstrap accepted | `tests/stress/move_borrow_valid.basalt` |
+| Ownership negative corpus | Five fixtures rejected by both compilers | `tests/stress/move_borrow_invalid_*.basalt` |
 | Strict generated C | Passed with `-std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror` | Ownership runner and existing suites |
 | Ownership sanitizer run | ASan and UBSan passed with leak detection enabled | `run_ownership_stress.sh` |
 | Existing regression suite | Passed | `run_regression.sh` |
@@ -95,7 +95,7 @@ The next language-safety milestones should introduce explicit ownership annotati
 
 ## References
 
-[^1]: [Bootstrap ownership checker source](../src/bootstrap/basaltc.bsl)
+[^1]: [Bootstrap ownership checker source](../src/bootstrap/basaltc.basalt)
 [^2]: [Host ownership checker source](../src/compiler/lib/typechecker.ml)
 [^3]: [Bootstrap fixed-point verification script](../scripts/fixed_point.sh)
 [^4]: [Ownership stress runner](../scripts/run_ownership_stress.sh)

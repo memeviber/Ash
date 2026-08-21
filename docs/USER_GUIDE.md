@@ -13,7 +13,7 @@ The project is **self-hosting**: it contains two complete implementations of the
 | Implementation | Language | Role |
 | --- | --- | --- |
 | Host compiler | OCaml (`src/compiler/`) | Reference implementation; defines the "correct" behavior |
-| Bootstrap compiler | Basalt itself (`src/bootstrap/basaltc.bsl`) | Proves the language is expressive enough to compile itself |
+| Bootstrap compiler | Basalt itself (`src/bootstrap/basaltc.basalt`) | Proves the language is expressive enough to compile itself |
 
 A language change is considered complete only when **both** compilers accept the same valid programs, reject the same invalid programs, emit compilable C11, and produce identical runtime behavior. A fixed-point process then proves that the Bootstrap compiler can compile its own source and that two successive generations are byte-identical (see `docs/DEVELOPER_GUIDE.md`).
 
@@ -49,13 +49,13 @@ src/compiler/_build/default/bin/basaltc.exe
 ### Compile a Basalt program
 
 ```sh
-src/compiler/_build/default/bin/basaltc.exe hello.bsl
+src/compiler/_build/default/bin/basaltc.exe hello.basalt
 ```
 
-The Host compiler writes the generated C **beside the source file**, using the source filename with `.c` appended (`hello.bsl` → `hello.bsl.c`). Then compile and run the C with gcc:
+The Host compiler writes the generated C **beside the source file**, using the source filename with `.c` appended (`hello.basalt` → `hello.basalt.c`). Then compile and run the C with gcc:
 
 ```sh
-gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror hello.bsl.c -o hello
+gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror hello.basalt.c -o hello
 ./hello
 ```
 
@@ -64,7 +64,7 @@ gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror hello.bsl.c 
 The Bootstrap compiler accepts an explicit output path:
 
 ```sh
-src/bootstrap/basaltc hello.bsl out.c
+src/bootstrap/basaltc hello.basalt out.c
 ```
 
 Where `src/bootstrap/basaltc` is produced by `./scripts/fixed_point.sh` (see the Developer Guide). For everyday use, the Host compiler is simpler; the Bootstrap compiler exists to prove self-hosting.
@@ -73,7 +73,7 @@ Where `src/bootstrap/basaltc` is produced by `./scripts/fixed_point.sh` (see the
 
 ## 3. Your first program
 
-Basalt source files use the `.bsl` extension.
+Basalt source files use the `.basalt` extension.
 
 ```basalt
 func main(): int {
@@ -84,8 +84,8 @@ func main(): int {
 ```
 
 ```sh
-src/compiler/_build/default/bin/basaltc.exe hello.bsl
-gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror hello.bsl.c -o hello
+src/compiler/_build/default/bin/basaltc.exe hello.basalt
+gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror hello.basalt.c -o hello
 ./hello
 ```
 
@@ -300,7 +300,7 @@ func main(): int {
 **`include`** pulls in another Basalt file (paths are resolved relative to the including file's directory):
 
 ```basalt
-include "../../src/stdlib/option.bsl"
+include "../../src/stdlib/option.basalt"
 ```
 
 **`includec`** embeds a C source file into the generated program, which is the natural way to provide the implementation of `extern` functions:
@@ -345,7 +345,7 @@ Basalt implements a small, explicit move/borrow checker for **dynamic arrays** (
 - Borrows cannot escape a function through a return value.
 
 ```basalt
-include "../../src/stdlib/array.bsl"
+include "../../src/stdlib/array.basalt"
 
 func consume_owner(values: array::Array<int>): int {
   print array::get(values, 0);
@@ -372,7 +372,7 @@ The checker is deliberately scoped: raw pointers, `extern`, and `includec` remai
 Basalt has no `null` values and no null pointers in normal code. Absence is modeled with `option::Option<T>` from the standard library:
 
 ```basalt
-include "../../src/stdlib/option.bsl"
+include "../../src/stdlib/option.basalt"
 
 func find_value(flag: int): option::Option<int> {
   if flag == 1 then { return option::some(42); }
@@ -398,7 +398,7 @@ func main(): int {
 `result::Result<T, E>` works the same way for error handling:
 
 ```basalt
-include "../../src/stdlib/result.bsl"
+include "../../src/stdlib/result.basalt"
 
 func divide(a: int, b: int): result::Result<int, string> {
   if b == 0 then { return result::err(0, "division by zero"); }
@@ -419,17 +419,17 @@ func main(): int {
 
 | Module | File | Contents |
 | --- | --- | --- |
-| `array` | `src/stdlib/array.bsl` | Owned dynamic arrays: `new`, `push`, `get`, `set`, `len`, `free` |
-| `slice` | `src/stdlib/slice.bsl` | Lightweight slices over arrays |
-| `map` | `src/stdlib/map.bsl` | Hash map: `new`, `put`, `get_or`, `remove`, `free` |
-| `option` | `src/stdlib/option.bsl` | `Option<T>`: `some`, `none`, `is_some`, `is_none`, `unwrap_or` |
-| `result` | `src/stdlib/result.bsl` | `Result<T, E>`: `ok`, `err`, `is_ok`, `is_err`, `unwrap_or`, `error_or` |
-| `string` | `src/stdlib/string.bsl` | `byte_len`, `byte_at`, `eq`, and string helpers |
+| `array` | `src/stdlib/array.basalt` | Owned dynamic arrays: `new`, `push`, `get`, `set`, `len`, `free` |
+| `slice` | `src/stdlib/slice.basalt` | Lightweight slices over arrays |
+| `map` | `src/stdlib/map.basalt` | Hash map: `new`, `put`, `get_or`, `remove`, `free` |
+| `option` | `src/stdlib/option.basalt` | `Option<T>`: `some`, `none`, `is_some`, `is_none`, `unwrap_or` |
+| `result` | `src/stdlib/result.basalt` | `Result<T, E>`: `ok`, `err`, `is_ok`, `is_err`, `unwrap_or`, `error_or` |
+| `string` | `src/stdlib/string.basalt` | `byte_len`, `byte_at`, `eq`, and string helpers |
 
 All modules are **generic** and namespace-qualified:
 
 ```basalt
-include "../../src/stdlib/map.bsl"
+include "../../src/stdlib/map.basalt"
 
 func main(): int {
   let m: map::HashMap<int, int> = map::new(0, 0);

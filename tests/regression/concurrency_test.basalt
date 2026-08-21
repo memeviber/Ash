@@ -1,0 +1,48 @@
+include "../../src/stdlib/concurrency.basalt"
+
+func worker(argument: void*): int {
+  if argument == null then return 7;
+  return 7;
+}
+
+func atomic_worker(argument: void*): int {
+  return concurrency::atomic_fetch_add(argument, 1);
+}
+
+func channel_worker(argument: void*): int {
+  return concurrency::channel_send(argument, 77);
+}
+
+func main(): int {
+  let status: int = 0;
+  let atom: void* = concurrency::atomic_make(4);
+  if concurrency::atomic_load(atom) != 4 then status = 1;
+  if concurrency::atomic_fetch_add(atom, 3) != 4 then status = 2;
+  if concurrency::atomic_load(atom) != 7 then status = 3;
+  if concurrency::atomic_compare_exchange(atom, 7, 9) != 1 then status = 4;
+  if concurrency::atomic_load(atom) != 9 then status = 5;
+  let atomic_thread: void* = concurrency::thread_spawn(&atomic_worker, atom);
+  if concurrency::thread_join(atomic_thread) != 9 then status = 6;
+  if concurrency::atomic_load(atom) != 10 then status = 7;
+  concurrency::atomic_free(atom);
+
+  let channel: void* = concurrency::channel_make(2);
+  if concurrency::channel_send(channel, 11) != 1 then status = 8;
+  if concurrency::channel_send(channel, 22) != 1 then status = 9;
+  let received: int = 0;
+  if concurrency::channel_recv(channel, &received) != 1 then status = 10;
+  if received != 11 then status = 11;
+  if concurrency::channel_recv(channel, &received) != 1 then status = 12;
+  if received != 22 then status = 13;
+  let channel_thread: void* = concurrency::thread_spawn(&channel_worker, channel);
+  if concurrency::thread_join(channel_thread) != 1 then status = 14;
+  if concurrency::channel_recv(channel, &received) != 1 then status = 15;
+  if received != 77 then status = 16;
+  concurrency::channel_close(channel);
+  if concurrency::channel_recv(channel, &received) != (0 - 1) then status = 17;
+  concurrency::channel_free(channel);
+
+  let thread: void* = concurrency::thread_spawn(&worker, null);
+  if concurrency::thread_join(thread) != 7 then status = 18;
+  return status;
+}
