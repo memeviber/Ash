@@ -1,8 +1,8 @@
 # Windows UCRT64 Bootstrap Portability
 
-This guide explains how to compile the Bootstrap compiler's generated C on Windows from an **MSYS2 UCRT64** shell. The Bootstrap runtime currently emits C11 thread calls such as `thrd_create`, `thrd_join`, and `thrd_yield`, while some MinGW/UCRT64 installations provide the underlying POSIX-compatible `pthread` interface rather than a usable `<threads.h>` header.
+This guide explains how to compile the Bootstrap compiler's generated C on Windows from an **MSYS2 UCRT64** shell. The Bootstrap emitter now selects a pthread compatibility shim automatically for MinGW/UCRT64 targets when the generated C would otherwise depend on an unavailable `<threads.h>` implementation.
 
-The repository's source of truth remains `src/bootstrap/basaltc.bsl`. Editing a generated `basaltc.c` or `basaltc.seed.c` is a temporary portability experiment only; the durable fix belongs in the Bootstrap runtime-prologue emitter and must then be regenerated through the seed/fixed-point workflow.
+The repository's source of truth remains `src/bootstrap/basaltc.bsl`. The emitter emits the platform conditionals, pthread adapter, and guarded `aligned_alloc` declaration into every generated C translation. Users should not patch `basaltc.c` or `basaltc.seed.c` by hand; after emitter changes, regenerate the seed and verify the fixed point.
 
 ## Toolchain setup
 
@@ -26,26 +26,26 @@ The final command should identify a UCRT64 MinGW target rather than an MSYS or u
 
 ## Why `<threads.h>` can fail
 
-The generated runtime currently includes `<threads.h>`. If the selected UCRT64 headers do not expose that C11 header, compilation fails before the linker is reached. The installed winpthreads package supplies a POSIX-compatible thread layer, so the generated runtime can use a small adapter that preserves Basalt's C11-shaped calls while delegating to `pthread_create`, `pthread_join`, and `sched_yield`.
+Some UCRT64 headers do not expose a usable `<threads.h>` even though the installed winpthreads package supplies a POSIX-compatible thread layer. The Bootstrap emitter therefore emits `pthread.h` and `sched.h`, defines the C11-shaped `thrd_*` surface locally, and delegates to `pthread_create`, `pthread_join`, and `sched_yield`. On Linux and macOS, the generated runtime keeps the native `<threads.h>` path. The Windows branch is selected by `_WIN32 && __MINGW32__`; defining `BASALT_USE_NATIVE_C11_THREADS` opts out of the adapter when a target provides a working native C11 threads implementation.
 
 GCC documents `-pthread` as the thread-support option and explicitly lists MinGW targets among the supported environments [2]. Prefer `-pthread` for both compilation and linking. An explicit `-lpthread` link option is also shown below for toolchains that require it, but it does not always provide the same preprocessor configuration as `-pthread`.
 
 ## Safe pthread compatibility shim
 
-Place this block in the generated C runtime prologue **before** the Basalt runtime uses `thrd_t` or any `thrd_*` function. It is safer than the frequently copied one-line macros because `pthread_create` expects a `void *(*)(void *)` entry point, whereas a C11 thread entry point returns `int`. It also avoids casting an `int *` to `void **` for `pthread_join`, which can overwrite more bytes than the destination integer on 64-bit Windows.
+The following block is now emitted automatically in the generated C runtime prologue **before** the Basalt runtime uses `thrd_t` or any `thrd_*` function. It is shown here to document the generated interface, not as a manual patch step. The adapter is safer than frequently copied one-line macros because `pthread_create` expects a `void *(*)(void *)` entry point, whereas a C11 thread entry point returns `int`. It also avoids casting an `int *` to `void **` for `pthread_join`, which can overwrite more bytes than the destination integer on 64-bit Windows.
 
 ```c
-#if defined(__MINGW32__) && !defined(BASALT_USE_NATIVE_C11_THREADS)
+#if defined(_WIN32) && defined(__MINGW32__) && !defined(BASALT_USE_NATIVE_C11_THREADS)
 #include <pthread.h>
 #include <sched.h>
 #include <stdlib.h>
 
 typedef pthread_t thrd_t;
-typedef int (*thrd_start_t)(void *);
+typedef int (*basalt_thrd_start_t)(void *);
 #define thrd_success 0
 
 typedef struct basalt_thrd_start_context {
-    thrd_start_t entry;
+    basalt_thrd_start_t entry;
     void *argument;
     int result;
 } basalt_thrd_start_context;
@@ -56,7 +56,7 @@ static void *basalt_thrd_start(void *raw) {
     return raw;
 }
 
-static int basalt_thrd_create(thrd_t *thread, thrd_start_t entry, void *argument) {
+static int basalt_thrd_create(thrd_t *thread, basalt_thrd_start_t entry, void *argument) {
     basalt_thrd_start_context *context;
     int status;
 
@@ -141,11 +141,29 @@ gcc -std=c11 -O3 -Wall -Wextra -Wpedantic \
 
 The executable is a local build artifact and must remain outside the repository's tracked `tests/` tree. Keep temporary generated C and binaries under `.tmp/` or another ignored build directory.
 
-## Recommended long-term fix
+## Generated-emitter workflow
 
-The manual generated-C patch is useful for confirming that the problem is limited to platform headers and thread ABI adaptation. For a permanent cross-platform release, add the conditional prologue to the Bootstrap emitter in `src/bootstrap/basaltc.bsl`, mirror the same prologue in the supported reference path when parity is required, regenerate the Bootstrap C seed, update `fixed_point_production.sha256`, and run `scripts/run_ownership_stress.sh` before committing.
+The Windows portability support is now part of `emit_runtime` in `src/bootstrap/basaltc.bsl`. A normal Bootstrap translation automatically emits the conditional prologue, so no generated `basaltc.c` edit is required. The durable update workflow is:
 
-The portability adapter should be selected by compiler/platform feature detection rather than by blindly deleting `<threads.h>`. A native implementation should remain available for Linux and macOS, while UCRT64 should select the pthread adapter only when the native C11 header is unavailable or explicitly disabled.
+```sh
+# Build a current compiler from the checked-in seed.
+source scripts/bootstrap_stage.sh
+current_bin=$(bootstrap_stage "$PWD" .tmp/windows-bootstrap \
+  -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror)
+
+# Regenerate the compiler C, then compile it in the target toolchain.
+"$current_bin" src/bootstrap/basaltc.bsl .tmp/basaltc.generated.c
+gcc -std=c11 -O3 -Wall -Wextra -Wpedantic \
+  -Wconversion -Wshadow -Werror -pthread \
+  .tmp/basaltc.generated.c -o .tmp/basaltc.exe
+
+# After reviewing the generated output, synchronize the seed and checksum,
+# then run the fixed-point and ownership-stress checks.
+bash scripts/fixed_point.sh
+bash scripts/run_ownership_stress.sh
+```
+
+The portability adapter is selected by compiler/platform feature detection rather than by blindly deleting `<threads.h>`. A native implementation remains available for Linux and macOS, while MinGW/UCRT64 selects the pthread adapter unless `BASALT_USE_NATIVE_C11_THREADS` is defined. The generated C also emits the guarded `void *aligned_alloc(size_t alignment, size_t size);` declaration on MinGW/UCRT64, after `<stddef.h>` has been included.
 
 ## References
 
