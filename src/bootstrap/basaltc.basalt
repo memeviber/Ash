@@ -54,6 +54,8 @@ let N_MATCH_ARM: int = 42;
 let N_TUPLE: int = 43;
 let N_TUPLE_BIND: int = 44;
 let N_MOVE: int = 46;
+let N_CLOSURE: int = 47;
+let N_CLOSURE_CALL: int = 48;
 
 let OP_ADD: int = 1;
 let OP_SUB: int = 2;
@@ -102,6 +104,7 @@ let TY_I32: int = 25;
 let TY_I64: int = 26;
 let TY_USIZE: int = 27;
 let TY_TUPLE: int = 28;
+let TY_CLOSURE: int = 29;
 
 let node_kind: int* = 0;
 let node_a: int* = 0;
@@ -381,11 +384,19 @@ let gen_bind_type: int* = 0;
 let gen_bind_count: int = 0;
 let gen_bind_cap: int = 0;
 let gen_active_function: int = 0;
+let gen_active_closure: int = 0;
 let gen_match_serial: int = 0;
 let gen_tuple_type: int* = 0;
 let gen_tuple_name: int* = 0;
 let gen_tuple_count: int = 0;
 let gen_tuple_cap: int = 0;
+let gen_closure_node: int* = 0;
+let gen_closure_serial: int* = 0;
+let gen_closure_sig: int* = 0;
+let gen_closure_value_type_name: int* = 0;
+let gen_closure_count: int = 0;
+let gen_closure_cap: int = 0;
+let gen_closure_serial_next: int = 0;
 let gen_mangle_start: int = 0;
 let gen_mangle_len: int = 0;
 
@@ -413,6 +424,49 @@ func ensure_gen_tuple(need: int): void {
   gen_tuple_type = grow_ints(gen_tuple_type, gen_tuple_cap, n);
   gen_tuple_name = grow_ints(gen_tuple_name, gen_tuple_cap, n);
   gen_tuple_cap = n;
+}
+func ensure_gen_closure(need: int): void {
+  if need < gen_closure_cap then return;
+  let n: int = next_capacity(gen_closure_cap, need);
+  gen_closure_node = grow_ints(gen_closure_node, gen_closure_cap, n);
+  gen_closure_serial = grow_ints(gen_closure_serial, gen_closure_cap, n);
+  gen_closure_sig = grow_ints(gen_closure_sig, gen_closure_cap, n);
+  gen_closure_value_type_name = grow_ints(gen_closure_value_type_name, gen_closure_cap, n);
+  gen_closure_cap = n;
+}
+func gen_closure_signature(id: int): int {
+  let args: int = 0;
+  let p: int = node_c[id];
+  while p != 0 {
+    let src_ty: int = node_b[p];
+    let copy_ty: int = ast_node(node_kind[src_ty], node_a[src_ty], node_b[src_ty], node_c[src_ty], node_value[src_ty], node_aux[src_ty]);
+    if args == 0 then args = copy_ty; else args = ast_link(args, copy_ty);
+    p = node_next[p];
+  }
+  return ast_node(TY_CLOSURE, args, node_value[id], 0, 0, 0);
+}
+func gen_closure_name(serial: int, prefix: string): int {
+  gen_mangle_start = source_len + sym_text_len; gen_mangle_len = 0;
+  gen_append_text(prefix); gen_append_uint(serial);
+  return gen_mangle_intern(L_ID);
+}
+func gen_closure_env_name(serial: int): int { return gen_closure_name(serial, "__basalt_env_"); }
+func gen_closure_invoke_name(serial: int): int { return gen_closure_name(serial, "__basalt_invoke_"); }
+func gen_closure_factory_name(serial: int): int { return gen_closure_name(serial, "__basalt_make_"); }
+func gen_closure_value_name(serial: int): int { return gen_closure_name(serial, "__basalt_closure_"); }
+func gen_closure_register(id: int): void {
+  if id == 0 then return;
+  let i: int = 0;
+  while i < gen_closure_count { if gen_closure_node[i] == id then return; i = i + 1; }
+  ensure_gen_closure(gen_closure_count);
+  let serial: int = gen_closure_serial_next;
+  gen_closure_serial_next = gen_closure_serial_next + 1;
+  gen_closure_node[gen_closure_count] = id;
+  gen_closure_serial[gen_closure_count] = serial;
+  gen_closure_sig[gen_closure_count] = gen_closure_signature(id);
+  gen_closure_value_type_name[gen_closure_count] = gen_mangled_type_symbol(gen_closure_sig[gen_closure_count]);
+  node_aux[id] = serial + 1;
+  gen_closure_count = gen_closure_count + 1;
 }
 func gen_append_char(c: int): void { let pos: int = source_len + sym_text_len + gen_mangle_len; ensure_source(pos); source[pos] = c; gen_mangle_len = gen_mangle_len + 1; }
 func gen_append_char_text(c: char): void { let pos: int = source_len + sym_text_len + gen_mangle_len; ensure_source(pos); source[pos] = c; gen_mangle_len = gen_mangle_len + 1; }
@@ -476,6 +530,11 @@ func gen_mangle_type(ty: int): void {
     gen_append_text("tuple");
     let t: int = node_a[ty];
     while t != 0 { gen_append_text("__"); gen_mangle_type(t); t = node_next[t]; }
+  } else if node_kind[ty] == TY_CLOSURE then {
+    gen_append_text("closure");
+    let a: int = node_a[ty];
+    while a != 0 { gen_append_text("__"); gen_mangle_type(a); a = node_next[a]; }
+    gen_append_text("__ret__"); gen_mangle_type(node_b[ty]);
   } else gen_append_text("int");
 }
 func gen_mangled_type_symbol(ty: int): int {
@@ -604,7 +663,39 @@ func gen_substitute_type(ty: int): int {
     while p != 0 { let q: int = gen_substitute_type(p); if args == 0 then args = q; else args = ast_link(args, q); p = node_next[p]; }
     return ast_node(TY_GENERIC, args, 0, 0, node_value[ty], 0);
   }
+  if node_kind[ty] == TY_FUN || node_kind[ty] == TY_CLOSURE then {
+    let args2: int = 0; let p2: int = node_a[ty];
+    while p2 != 0 { let q2: int = gen_substitute_type(p2); if args2 == 0 then args2 = q2; else args2 = ast_link(args2, q2); p2 = node_next[p2]; }
+    return ast_node(node_kind[ty], args2, gen_substitute_type(node_b[ty]), 0, 0, 0);
+  }
   return ast_node(node_kind[ty], node_a[ty], node_b[ty], node_c[ty], node_value[ty], node_aux[ty]);
+}
+func gen_active_closure_capture(name: int): int {
+  if gen_active_closure == 0 then return 0;
+  let cap_probe: int = node_a[gen_active_closure];
+  while cap_probe != 0 {
+    if node_a[cap_probe] == name then return cap_probe;
+    cap_probe = node_next[cap_probe];
+  }
+  return 0;
+}
+func gen_closure_env_param_name(serial: int): int { return gen_closure_name(serial, "__basalt_env_arg_"); }
+func gen_closure_env_local_name(serial: int): int { return gen_closure_name(serial, "__basalt_env_ptr_"); }
+func gen_closure_active_env_name(): int {
+  if gen_active_closure == 0 then return gen_closure_env_local_name(0);
+  return gen_closure_env_local_name(node_aux[gen_active_closure] - 1);
+}
+func gen_closure_arg_name(index: int): int {
+  gen_mangle_start = source_len + sym_text_len; gen_mangle_len = 0;
+  gen_append_text("__basalt_arg_"); gen_append_uint(index);
+  return gen_mangle_intern(L_ID);
+}
+func gen_closure_call_name(sig: int): int {
+  let sig_name: int = gen_mangled_type_symbol(sig);
+  gen_mangle_start = source_len + sym_text_len; gen_mangle_len = 0;
+  gen_append_text("__basalt_call_");
+  gen_append_symbol(sig_name);
+  return gen_mangle_intern(L_ID);
 }
 func gen_active_param_type(name: int): int {
   if gen_active_function == 0 then return 0;
@@ -713,11 +804,24 @@ func gen_collect_type(ty: int): void {
   if ty == 0 then { return; }
   if node_kind[ty] == TY_GENERIC then { gen_add_struct_spec(ty); }
   else if node_kind[ty] == TY_TUPLE then { gen_add_tuple_type(ty); }
+  else if node_kind[ty] == TY_CLOSURE then {
+    let ca: int = node_a[ty];
+    while ca != 0 { gen_collect_type(ca); ca = node_next[ca]; }
+    gen_collect_type(node_b[ty]);
+  }
   else if (node_kind[ty] == TY_PTR || node_kind[ty] == TY_ARRAY || node_kind[ty] == TY_DYN_ARRAY) then { gen_collect_type(node_a[ty]); }
 }
 func gen_collect_expr(id: int): void {
   if id == 0 then return;
   let k: int = node_kind[id];
+  if k == N_CLOSURE then {
+    let cp: int = node_c[id];
+    while cp != 0 { gen_collect_type(node_b[cp]); cp = node_next[cp]; }
+    gen_collect_type(node_value[id]);
+    gen_closure_register(id);
+    gen_collect_stmt(node_b[id]);
+    return;
+  }
   if k == N_VARIANT then { let aa: int = node_a[id]; while aa != 0 { gen_collect_expr(aa); aa = node_next[aa]; } return; }
   if k == N_CALL then {
     let f: int = tc_find_function_ctx(node_value[id], node_scope[id]);
@@ -800,6 +904,10 @@ func gen_type(kind: int, child: int, size: int): void {
     code_emit(C_IDENT, gen_mangled_type_symbol(child));
     code_emit(C_PUNCT, 18);
   } else if kind == TY_TUPLE then {
+    code_emit(C_KW, 12);
+    code_emit(C_IDENT, gen_mangled_type_symbol(child));
+    code_emit(C_PUNCT, 18);
+  } else if kind == TY_CLOSURE then {
     code_emit(C_KW, 12);
     code_emit(C_IDENT, gen_mangled_type_symbol(child));
     code_emit(C_PUNCT, 18);
@@ -1179,9 +1287,30 @@ func gen_expr(id: int): void {
   }
   else if k == N_NULL then { code_emit(C_INT, 0); }
   else if k == N_MOVE then { gen_expr(node_a[id]); }
+  else if k == N_CLOSURE then {
+    let closure_serial_expr: int = node_aux[id] - 1;
+    code_emit(C_IDENT, gen_closure_factory_name(closure_serial_expr)); code_emit(C_PUNCT, 6);
+    let closure_cap_expr: int = node_a[id];
+    while closure_cap_expr != 0 {
+      let capture_var_expr: int = ast_node(N_VAR, 0, 0, 0, node_a[closure_cap_expr], 0);
+      if node_aux[closure_cap_expr] == 2 || node_aux[closure_cap_expr] == 3 then code_emit(C_PUNCT, 10);
+      gen_expr(capture_var_expr);
+      if node_next[closure_cap_expr] != 0 then code_emit(C_PUNCT, 7);
+      closure_cap_expr = node_next[closure_cap_expr];
+    }
+    code_emit(C_PUNCT, 8);
+  }
   else if k == N_UNARY then { code_emit(C_OP, OP_NOT); code_emit(C_PUNCT, 4); gen_expr(node_a[id]); code_emit(C_PUNCT, 5); }
   else if k == N_VAR then {
-    if node_aux[id] != 0 && node_kind[node_aux[id]] == TY_NAMED then {
+    let active_capture: int = gen_active_closure_capture(node_value[id]);
+    if active_capture != 0 && node_aux[active_capture] != 1 then {
+      code_emit(C_PUNCT, 4);
+      code_emit(C_PUNCT, 9);
+      code_emit(C_IDENT, gen_closure_active_env_name());
+      code_emit(C_PUNCT, 27);
+      code_emit(C_IDENT, sym_c_symbol(node_a[active_capture]));
+      code_emit(C_PUNCT, 5);
+    } else if node_aux[id] != 0 && node_kind[node_aux[id]] == TY_NAMED then {
       let enum_name: int = node_value[node_aux[id]];
       let enum_decl: int = tc_find_enum(enum_name);
       let member: int = tc_match_variant_member(enum_decl, node_value[id]);
@@ -1216,9 +1345,18 @@ func gen_expr(id: int): void {
     if btag == BI_TC_MEM_ALLOC || btag == BI_TC_MEM_ALLOC_ALIGNED || btag == BI_TC_MEM_RESIZE || btag == BI_TC_MEM_FREE then gen_memory_builtin(id);
     else { code_emit(C_IDENT, gen_call_name(id)); code_emit(C_PUNCT, 6); let arg: int = node_a[id]; while arg != 0 { gen_expr(arg); if node_next[arg] != 0 then code_emit(C_PUNCT, 7); arg = node_next[arg]; } code_emit(C_PUNCT, 8); }
   } else if k == N_INDIRECT_CALL then {
-    code_emit(C_PUNCT, 4); gen_expr(node_a[id]); code_emit(C_PUNCT, 5); code_emit(C_PUNCT, 6);
-    let arg: int = node_b[id]; while arg != 0 { gen_expr(arg); if node_next[arg] != 0 then code_emit(C_PUNCT, 7); arg = node_next[arg]; }
-    code_emit(C_PUNCT, 8);
+    let callee_type_expr: int = tc_emit_arg_type(node_a[id]);
+    if callee_type_expr != 0 && node_kind[callee_type_expr] == TY_CLOSURE then {
+      code_emit(C_IDENT, gen_closure_call_name(callee_type_expr)); code_emit(C_PUNCT, 6); gen_expr(node_a[id]);
+      let closure_arg_emit: int = node_b[id];
+      if closure_arg_emit != 0 then code_emit(C_PUNCT, 7);
+      while closure_arg_emit != 0 { gen_expr(closure_arg_emit); if node_next[closure_arg_emit] != 0 then code_emit(C_PUNCT, 7); closure_arg_emit = node_next[closure_arg_emit]; }
+      code_emit(C_PUNCT, 8);
+    } else {
+      code_emit(C_PUNCT, 4); gen_expr(node_a[id]); code_emit(C_PUNCT, 5); code_emit(C_PUNCT, 6);
+      let arg: int = node_b[id]; while arg != 0 { gen_expr(arg); if node_next[arg] != 0 then code_emit(C_PUNCT, 7); arg = node_next[arg]; }
+      code_emit(C_PUNCT, 8);
+    }
   } else if k == N_DEREF then { code_emit(C_PUNCT, 9); gen_expr(node_a[id]); }
   else if k == N_ADDRESS then { code_emit(C_PUNCT, 10); gen_expr(node_a[id]); }
   else if k == N_INDEX then {
@@ -1234,6 +1372,7 @@ func gen_expr(id: int): void {
 func gen_expr_kind(id: int): int {
   let k: int = node_kind[id];
   if k == N_INT || k == N_BOOL then return TY_INT;
+  if k == N_CLOSURE then return TY_CLOSURE;
   if k == N_MOVE then return gen_expr_kind(node_a[id]);
   if k == N_TUPLE then return TY_TUPLE;
   if k == N_VARIANT then { if node_aux[id] != 0 then return node_kind[node_aux[id]]; return TY_NAMED; }
@@ -1887,11 +2026,179 @@ func gen_function(id: int): void {
   } else gen_stmt(node_a[id]);
 }
 
+func gen_closure_emit_env(serial: int, closure_id: int): void {
+  let env_name_emit: int = gen_closure_env_name(serial);
+  code_emit(C_KW, 12); code_emit(C_IDENT, env_name_emit); code_emit(C_PUNCT, 13);
+  let cap_emit: int = node_a[closure_id];
+  if cap_emit == 0 then {
+    code_emit(C_KW, 17); code_emit(C_IDENT, gen_closure_name(serial, "__basalt_unused_")); code_emit(C_PUNCT, 12); code_emit(C_NEWLINE, 0);
+  }
+  while cap_emit != 0 {
+    let source_ty_emit: int = node_b[cap_emit];
+    if node_aux[cap_emit] == 2 || node_aux[cap_emit] == 3 then {
+      let ref_ty_emit: int = ast_node(TY_PTR, source_ty_emit, 0, 0, 0, 0);
+      gen_type(TY_PTR, ref_ty_emit, 0);
+    } else gen_type(node_kind[source_ty_emit], source_ty_emit, node_value[source_ty_emit]);
+    code_emit(C_IDENT, sym_c_symbol(node_a[cap_emit]));
+    code_emit(C_PUNCT, 12); code_emit(C_NEWLINE, 0);
+    cap_emit = node_next[cap_emit];
+  }
+  code_emit(C_PUNCT, 14); code_emit(C_PUNCT, 12); code_emit(C_NEWLINE, 0);
+}
+func gen_closure_emit_value(closure_id: int): void {
+  let sig_emit: int = gen_closure_signature(closure_id);
+  let value_name_emit: int = gen_mangled_type_symbol(sig_emit);
+  let duplicate_value_emit: int = 0;
+  let value_scan_emit: int = 0;
+  while value_scan_emit < gen_closure_count {
+    if gen_closure_node[value_scan_emit] == closure_id then break;
+    if gen_closure_value_type_name[value_scan_emit] == value_name_emit then duplicate_value_emit = 1;
+    value_scan_emit = value_scan_emit + 1;
+  }
+  if duplicate_value_emit == 1 then return;
+  code_emit(C_KW, 12); code_emit(C_IDENT, value_name_emit); code_emit(C_PUNCT, 13);
+  code_emit(C_KW, 4); code_emit(C_PUNCT, 1); code_emit(C_IDENT, gen_closure_name(0, "env")); code_emit(C_PUNCT, 12); code_emit(C_NEWLINE, 0);
+  let ret_emit: int = node_b[sig_emit];
+  gen_type(node_kind[ret_emit], ret_emit, node_value[ret_emit]);
+  code_emit(C_PUNCT, 4); code_emit(C_PUNCT, 9); code_emit(C_IDENT, gen_closure_name(0, "fn")); code_emit(C_PUNCT, 5);
+  code_emit(C_PUNCT, 4); code_emit(C_KW, 4); code_emit(C_PUNCT, 1);
+  let param_emit: int = node_a[sig_emit];
+  if param_emit != 0 then code_emit(C_PUNCT, 7);
+  while param_emit != 0 {
+    gen_type(node_kind[param_emit], param_emit, node_value[param_emit]);
+    if node_next[param_emit] != 0 then code_emit(C_PUNCT, 7);
+    param_emit = node_next[param_emit];
+  }
+  code_emit(C_PUNCT, 8); code_emit(C_PUNCT, 12); code_emit(C_NEWLINE, 0);
+  code_emit(C_PUNCT, 14); code_emit(C_PUNCT, 12); code_emit(C_NEWLINE, 0);
+}
+func gen_closure_emit_invoke_prototype(serial: int, closure_id: int): void {
+  let sig_proto: int = gen_closure_signature(closure_id);
+  let ret_proto: int = node_b[sig_proto];
+  gen_type(node_kind[ret_proto], ret_proto, node_value[ret_proto]);
+  code_emit(C_IDENT, gen_closure_invoke_name(serial)); code_emit(C_PUNCT, 6);
+  code_emit(C_KW, 4); code_emit(C_PUNCT, 1); code_emit(C_IDENT, gen_closure_env_param_name(serial));
+  let param_proto: int = node_c[closure_id];
+  if param_proto != 0 then code_emit(C_PUNCT, 7);
+  while param_proto != 0 {
+    gen_decl(node_b[param_proto], node_a[param_proto]);
+    if node_next[param_proto] != 0 then code_emit(C_PUNCT, 7);
+    param_proto = node_next[param_proto];
+  }
+  code_emit(C_PUNCT, 8); code_emit(C_PUNCT, 12); code_emit(C_NEWLINE, 0);
+}
+func gen_closure_emit_call_helper(sig: int): void {
+  let call_name_emit: int = gen_closure_call_name(sig);
+  let ret_call: int = node_b[sig];
+  gen_type(node_kind[ret_call], ret_call, node_value[ret_call]);
+  code_emit(C_IDENT, call_name_emit); code_emit(C_PUNCT, 6);
+  gen_type(TY_CLOSURE, sig, 0); code_emit(C_IDENT, gen_closure_name(0, "value"));
+  let param_call: int = node_a[sig];
+  if param_call != 0 then code_emit(C_PUNCT, 7);
+  while param_call != 0 {
+    gen_decl(param_call, gen_closure_name(0, "arg"));
+    if node_next[param_call] != 0 then code_emit(C_PUNCT, 7);
+    param_call = node_next[param_call];
+  }
+  code_emit(C_PUNCT, 8); code_emit(C_PUNCT, 13);
+  if node_kind[ret_call] == TY_VOID then {
+    code_emit(C_IDENT, gen_closure_name(0, "value")); code_emit(C_PUNCT, 17); code_emit(C_IDENT, gen_closure_name(0, "fn")); code_emit(C_PUNCT, 6);
+  } else {
+    code_emit(C_KW, 5); code_emit(C_IDENT, gen_closure_name(0, "value")); code_emit(C_PUNCT, 17); code_emit(C_IDENT, gen_closure_name(0, "fn")); code_emit(C_PUNCT, 6);
+  }
+  code_emit(C_IDENT, gen_closure_name(0, "value")); code_emit(C_PUNCT, 17); code_emit(C_IDENT, gen_closure_name(0, "env"));
+  let arg_call: int = node_a[sig];
+  if arg_call != 0 then code_emit(C_PUNCT, 7);
+  while arg_call != 0 { code_emit(C_IDENT, gen_closure_name(0, "arg")); if node_next[arg_call] != 0 then code_emit(C_PUNCT, 7); arg_call = node_next[arg_call]; }
+  code_emit(C_PUNCT, 8); code_emit(C_PUNCT, 12);
+  code_emit(C_PUNCT, 14); code_emit(C_NEWLINE, 0);
+}
+func gen_closure_emit_factory(serial: int, closure_id: int): void {
+  let sig_factory: int = gen_closure_signature(closure_id);
+  let value_factory: int = gen_mangled_type_symbol(sig_factory);
+  gen_type(TY_CLOSURE, sig_factory, 0); code_emit(C_IDENT, gen_closure_factory_name(serial)); code_emit(C_PUNCT, 6);
+  let cap_factory: int = node_a[closure_id];
+  while cap_factory != 0 {
+    let cap_ty_factory: int = node_b[cap_factory];
+    if node_aux[cap_factory] == 2 || node_aux[cap_factory] == 3 then {
+      let cap_ptr_factory: int = ast_node(TY_PTR, cap_ty_factory, 0, 0, 0, 0);
+      gen_decl(cap_ptr_factory, node_a[cap_factory]);
+    } else gen_decl(cap_ty_factory, node_a[cap_factory]);
+    if node_next[cap_factory] != 0 then code_emit(C_PUNCT, 7);
+    cap_factory = node_next[cap_factory];
+  }
+  code_emit(C_PUNCT, 8); code_emit(C_PUNCT, 13);
+  code_emit(C_KW, 12); code_emit(C_IDENT, gen_closure_env_name(serial)); code_emit(C_PUNCT, 1); code_emit(C_IDENT, gen_closure_env_local_name(serial)); code_emit(C_PUNCT, 11);
+  code_emit(C_IDENT, -1016); code_emit(C_PUNCT, 6); code_emit(C_INT, 1); code_emit(C_PUNCT, 7); code_emit(C_IDENT, -1011); code_emit(C_PUNCT, 4); code_emit(C_KW, 12); code_emit(C_IDENT, gen_closure_env_name(serial)); code_emit(C_PUNCT, 5); code_emit(C_PUNCT, 8); code_emit(C_PUNCT, 12);
+  cap_factory = node_a[closure_id];
+  while cap_factory != 0 {
+    code_emit(C_IDENT, gen_closure_env_local_name(serial)); code_emit(C_PUNCT, 27); code_emit(C_IDENT, sym_c_symbol(node_a[cap_factory])); code_emit(C_PUNCT, 11);
+    code_emit(C_IDENT, sym_c_symbol(node_a[cap_factory])); code_emit(C_PUNCT, 12); code_emit(C_NEWLINE, 0);
+    cap_factory = node_next[cap_factory];
+  }
+  code_emit(C_KW, 5); code_emit(C_PUNCT, 4); code_emit(C_KW, 12); code_emit(C_IDENT, value_factory); code_emit(C_PUNCT, 5); code_emit(C_PUNCT, 24);
+  code_emit(C_PUNCT, 17); code_emit(C_IDENT, gen_closure_name(0, "env")); code_emit(C_PUNCT, 11); code_emit(C_IDENT, gen_closure_env_local_name(serial));
+  code_emit(C_PUNCT, 7); code_emit(C_PUNCT, 17); code_emit(C_IDENT, gen_closure_name(0, "fn")); code_emit(C_PUNCT, 11); code_emit(C_IDENT, gen_closure_invoke_name(serial));
+  code_emit(C_PUNCT, 25); code_emit(C_PUNCT, 12); code_emit(C_PUNCT, 14); code_emit(C_NEWLINE, 0);
+}
+func gen_closure_emit_invoke(serial: int, closure_id: int): void {
+  let sig_invoke: int = gen_closure_signature(closure_id);
+  let ret_invoke: int = node_b[sig_invoke];
+  gen_type(node_kind[ret_invoke], ret_invoke, node_value[ret_invoke]); code_emit(C_IDENT, gen_closure_invoke_name(serial)); code_emit(C_PUNCT, 6);
+  code_emit(C_KW, 4); code_emit(C_PUNCT, 1); code_emit(C_IDENT, gen_closure_env_param_name(serial));
+  let param_invoke: int = node_c[closure_id];
+  if param_invoke != 0 then code_emit(C_PUNCT, 7);
+  while param_invoke != 0 { gen_decl(node_b[param_invoke], node_a[param_invoke]); if node_next[param_invoke] != 0 then code_emit(C_PUNCT, 7); param_invoke = node_next[param_invoke]; }
+  code_emit(C_PUNCT, 8); code_emit(C_PUNCT, 13);
+  code_emit(C_KW, 12); code_emit(C_IDENT, gen_closure_env_name(serial)); code_emit(C_PUNCT, 1); code_emit(C_IDENT, gen_closure_env_local_name(serial)); code_emit(C_PUNCT, 11); code_emit(C_PUNCT, 4); code_emit(C_KW, 12); code_emit(C_IDENT, gen_closure_env_name(serial)); code_emit(C_PUNCT, 1); code_emit(C_PUNCT, 5); code_emit(C_IDENT, gen_closure_env_param_name(serial)); code_emit(C_PUNCT, 12); code_emit(C_NEWLINE, 0);
+  let cap_invoke: int = node_a[closure_id];
+  if cap_invoke == 0 then {
+    code_emit(C_PUNCT, 4); code_emit(C_KW, 4); code_emit(C_PUNCT, 5); code_emit(C_PUNCT, 4); code_emit(C_IDENT, gen_closure_env_local_name(serial)); code_emit(C_PUNCT, 5); code_emit(C_PUNCT, 12); code_emit(C_NEWLINE, 0);
+  }
+  while cap_invoke != 0 {
+    if node_aux[cap_invoke] == 1 then {
+      gen_type(node_kind[node_b[cap_invoke]], node_b[cap_invoke], node_value[node_b[cap_invoke]]); code_emit(C_IDENT, sym_c_symbol(node_a[cap_invoke])); code_emit(C_PUNCT, 11); code_emit(C_IDENT, gen_closure_env_local_name(serial)); code_emit(C_PUNCT, 27); code_emit(C_IDENT, sym_c_symbol(node_a[cap_invoke])); code_emit(C_PUNCT, 12); code_emit(C_NEWLINE, 0);
+    }
+    cap_invoke = node_next[cap_invoke];
+  }
+  let old_active_closure_emit: int = gen_active_closure;
+  let old_active_function_emit: int = gen_active_function;
+  gen_active_closure = closure_id; gen_active_function = closure_id;
+  gen_stmt(node_b[closure_id]);
+  code_emit(C_PUNCT, 14);
+  gen_active_function = old_active_function_emit; gen_active_closure = old_active_closure_emit;
+}
+func gen_closure_emit_all(): void {
+  let closure_i: int = 0;
+  while closure_i < gen_closure_count { gen_closure_emit_value(gen_closure_node[closure_i]); closure_i = closure_i + 1; }
+  closure_i = 0;
+  while closure_i < gen_closure_count { gen_closure_emit_env(gen_closure_serial[closure_i], gen_closure_node[closure_i]); closure_i = closure_i + 1; }
+  closure_i = 0;
+  while closure_i < gen_closure_count { gen_closure_emit_invoke_prototype(gen_closure_serial[closure_i], gen_closure_node[closure_i]); closure_i = closure_i + 1; }
+  closure_i = 0;
+  while closure_i < gen_closure_count {
+    let helper_seen: int = 0;
+    let helper_scan: int = 0;
+    while helper_scan < closure_i {
+      if gen_closure_value_type_name[helper_scan] == gen_closure_value_type_name[closure_i] then helper_seen = 1;
+      helper_scan = helper_scan + 1;
+    }
+    if helper_seen == 0 then gen_closure_emit_call_helper(gen_closure_sig[closure_i]);
+    closure_i = closure_i + 1;
+  }
+  closure_i = 0;
+  while closure_i < gen_closure_count { gen_closure_emit_factory(gen_closure_serial[closure_i], gen_closure_node[closure_i]); closure_i = closure_i + 1; }
+  closure_i = 0;
+  while closure_i < gen_closure_count { gen_closure_emit_invoke(gen_closure_serial[closure_i], gen_closure_node[closure_i]); closure_i = closure_i + 1; }
+}
+
 func gen_program(id: int): void {
   let gen_saved_node_count: int = node_count;
   gen_source_pos = 0;
   gen_source_epoch = 0;
   gen_match_serial = 0;
+  gen_closure_count = 0;
+  gen_closure_serial_next = 0;
   gen_tuple_count = 0;
   ffi_header_count = 0;
   code_reset(); gen_spec_count = 0; gen_name_override = 0; emit_defer_count = 0; emit_scope_depth = 0; emit_loop_depth = 0;
@@ -1941,6 +2248,7 @@ func gen_program(id: int): void {
     }
     scan_si = scan_si + 1;
   }
+  gen_closure_emit_all();
   // Definitions for ordinary and specialized structs in dependency order.
   ensure_gen_struct_state(node_count + 1);
   ensure_gen_spec_state(gen_spec_count);
@@ -2095,6 +2403,7 @@ let T_NOT: int = 89;
 let T_MOVE: int = 90;
 let T_BORROW: int = 91;
 let T_BORROW_MUT: int = 92;
+let T_CLOSURE: int = 93;
 
 let input_kind: int* = 0;
 let input_value: int* = 0;
@@ -2197,6 +2506,25 @@ func ast_type(): int {
       ty = ast_node(TY_ARRAY, ty, 0, 0, size, 0);
     }
     return ty;
+  }
+  if input_take(T_CLOSURE) == 1 then {
+    if input_take(T_LPAREN) == 0 then return 0;
+    let args: int = 0;
+    if input_peek() != T_RPAREN then {
+      let at: int = ast_type();
+      if at == 0 then return 0;
+      args = at;
+      while input_take(T_COMMA) == 1 {
+        at = ast_type();
+        if at == 0 then return 0;
+        args = ast_link(args, at);
+      }
+    }
+    if input_take(T_RPAREN) == 0 then return 0;
+    if input_take(T_COLON) == 0 then return 0;
+    let ret: int = ast_type();
+    if ret == 0 then return 0;
+    return ast_node(TY_CLOSURE, args, ret, 0, 0, 0);
   }
   if input_take(T_FN) == 1 then {
     if input_take(T_LPAREN) == 0 then return 0;
@@ -2314,6 +2642,35 @@ func ast_call_args(): int {
 }
 
 func ast_primary(): int {
+  if input_take(T_FN) == 1 then {
+    let captures: int = 0;
+    if input_take(T_LBRACK) == 1 then {
+      if input_peek() != T_RBRACK then {
+        while 1 == 1 {
+          let mode: int = 2;
+          if input_take(T_MOVE) == 1 then mode = 1;
+          else if input_take(T_BORROW) == 1 then mode = 2;
+          else if input_take(T_BORROW_MUT) == 1 then mode = 3;
+          if input_peek() != T_ID then return (0 - 1);
+          let capture_name: int = input_payload(); input_pos = input_pos + 1;
+          let capture: int = ast_node(N_PARAM, capture_name, 0, 0, 0, mode);
+          if captures == 0 then captures = capture; else captures = ast_link(captures, capture);
+          if input_take(T_COMMA) == 0 then break;
+        }
+      }
+      if input_take(T_RBRACK) == 0 then return (0 - 1);
+    }
+    if input_take(T_LPAREN) == 0 then return (0 - 1);
+    let params: int = ast_params();
+    if params < 0 then return (0 - 1);
+    if input_take(T_RPAREN) == 0 then return (0 - 1);
+    if input_take(T_COLON) == 0 then return (0 - 1);
+    let ret_ty: int = ast_type();
+    if ret_ty == 0 then return (0 - 1);
+    let body: int = ast_stmt();
+    if body < 0 then return (0 - 1);
+    return ast_node(N_CLOSURE, captures, body, params, ret_ty, 0);
+  }
   if input_peek() == T_CHAR then {
     let value: int = input_payload(); input_pos = input_pos + 1;
     return ast_node(N_CHAR, 0, 0, 0, value, 0);
@@ -3106,6 +3463,7 @@ let L_MOVE: int = 91;
 let L_BORROW: int = 92;
 let L_BORROW_MUT: int = 93;
 let L_NOT: int = 94;
+let L_CLOSURE: int = 95;
 
 let source: int* = 0;
 let source_len: int = 0;
@@ -3654,7 +4012,10 @@ func word_code(start: int, length: int): int {
     if source[start] == 102 && source[start+1] == 108 && source[start+2] == 111 && source[start+3] == 97 && source[start+4] == 116 then return L_TFLOAT;
     if source[start] == 117 && source[start+1] == 115 && source[start+2] == 105 && source[start+3] == 122 && source[start+4] == 101 then return L_TUSIZE;
   }
-  if length == 7 then { if source[start] == 97 && source[start+1] == 108 && source[start+2] == 105 && source[start+3] == 103 && source[start+4] == 110 && source[start+5] == 97 && source[start+6] == 115 then return L_ALIGNAS; }
+  if length == 7 then {
+    if source[start] == 97 && source[start+1] == 108 && source[start+2] == 105 && source[start+3] == 103 && source[start+4] == 110 && source[start+5] == 97 && source[start+6] == 115 then return L_ALIGNAS;
+    if source[start] == 99 && source[start+1] == 108 && source[start+2] == 111 && source[start+3] == 115 && source[start+4] == 117 && source[start+5] == 114 && source[start+6] == 101 then return L_CLOSURE;
+  }
   if length == 9 then { if source[start] == 110 && source[start+1] == 97 && source[start+2] == 109 && source[start+3] == 101 && source[start+4] == 115 && source[start+5] == 112 && source[start+6] == 97 && source[start+7] == 99 && source[start+8] == 101 then return L_NAMESPACE; }
   if length == 10 then { if source[start] == 98 && source[start+1] == 111 && source[start+2] == 114 && source[start+3] == 114 && source[start+4] == 111 && source[start+5] == 119 && source[start+6] == 95 && source[start+7] == 109 && source[start+8] == 117 && source[start+9] == 116 then return L_BORROW_MUT; }
   if length == 6 then { if source[start] == 100 && source[start+1] == 111 && source[start+2] == 117 && source[start+3] == 98 && source[start+4] == 108 && source[start+5] == 101 then return L_TDOUBLE; }
@@ -3939,6 +4300,7 @@ func map_token(k: int): int {
   if k == L_MOVE then return T_MOVE;
   if k == L_BORROW then return T_BORROW;
   if k == L_BORROW_MUT then return T_BORROW_MUT;
+  if k == L_CLOSURE then return T_CLOSURE;
   if k == L_COLON then return T_COLON;
   if k == L_LPAREN then return T_LPAREN;
   if k == L_RPAREN then return T_RPAREN;
@@ -4034,6 +4396,8 @@ let tc_var_borrow_mut: int* = 0;
 let tc_var_borrow_source: int* = 0;
 let tc_var_param: int* = 0;
 let tc_var_mode: int* = 0;
+let tc_var_closure_caps: int* = 0;
+let tc_var_closure_moved: int* = 0;
 let tc_last_var_type: int = 0;
 let tc_last_var_owned: int = 0;
 let tc_last_var_moved: int = 0;
@@ -4075,6 +4439,8 @@ func ensure_tc_vars(need: int): void {
   tc_var_borrow_source = grow_ints(tc_var_borrow_source, tc_var_cap, n);
   tc_var_param = grow_ints(tc_var_param, tc_var_cap, n);
   tc_var_mode = grow_ints(tc_var_mode, tc_var_cap, n);
+  tc_var_closure_caps = grow_ints(tc_var_closure_caps, tc_var_cap, n);
+  tc_var_closure_moved = grow_ints(tc_var_closure_moved, tc_var_cap, n);
   tc_var_cap = n;
 }
 
@@ -4104,6 +4470,20 @@ func tc_leave_scope(): void {
     if source_index < 0 then { } else if source_index < begin then {
       if tc_var_borrow_mut[source_index] > 0 then tc_var_borrow_mut[source_index] = tc_var_borrow_mut[source_index] - 1;
       else if tc_var_borrow_count[source_index] > 0 then tc_var_borrow_count[source_index] = tc_var_borrow_count[source_index] - 1;
+    }
+    let closure_cap: int = tc_var_closure_caps[i];
+    while closure_cap != 0 {
+      let closure_source: int = node_c[closure_cap];
+      if closure_source >= 0 then {
+        if closure_source < begin then {
+          if node_aux[closure_cap] == 3 then {
+            if tc_var_borrow_mut[closure_source] > 0 then tc_var_borrow_mut[closure_source] = tc_var_borrow_mut[closure_source] - 1;
+          } else {
+            if tc_var_borrow_count[closure_source] > 0 then tc_var_borrow_count[closure_source] = tc_var_borrow_count[closure_source] - 1;
+          }
+        }
+      }
+      closure_cap = node_next[closure_cap];
     }
     i = i + 1;
   }
@@ -4238,7 +4618,7 @@ func tc_type_equal(a: int, b: int): int {
     if x != 0 || y != 0 then return 0;
     return 1;
   }
-  if ak == TY_FUN then {
+  if ak == TY_FUN || ak == TY_CLOSURE then {
     if tc_type_equal(node_b[a], node_b[b]) == 0 then return 0;
     let x: int = node_a[a]; let y: int = node_a[b];
     while x != 0 && y != 0 { if tc_type_equal(x, y) == 0 then return 0; x = node_next[x]; y = node_next[y]; }
@@ -4266,6 +4646,7 @@ func tc_signature_type(entry: int): int {
 func tc_type_node_from_summary(kind: int, name: int, elem_kind: int, elem_name: int): int {
   if kind == TY_GENERIC then { if name != 0 then return name; }
   if kind == TY_TUPLE then { if name != 0 then return name; }
+  if kind == TY_CLOSURE then { if name != 0 then return name; }
   if kind == TY_NAMED then return ast_node(TY_NAMED, 0, 0, 0, name, 0);
   if kind == TY_VARIANT then return ast_node(TY_VARIANT, 0, 0, 0, name, elem_name);
   if kind == TY_PTR then return ast_node(TY_PTR, tc_type_node_from_summary(elem_kind, elem_name, 0, 0), 0, 0, 0, 0);
@@ -4391,6 +4772,10 @@ func tc_same_full(a_kind: int, a_name: int, a_elem_kind: int, a_elem_name: int, 
   }
   if a_kind == TY_TUPLE || b_kind == TY_TUPLE then {
     if a_kind == TY_TUPLE && b_kind == TY_TUPLE then return tc_type_equal(a_name, b_name);
+    return 0;
+  }
+  if a_kind == TY_CLOSURE || b_kind == TY_CLOSURE then {
+    if a_kind == TY_CLOSURE && b_kind == TY_CLOSURE then return tc_type_equal(a_name, b_name);
     return 0;
   }
   if a_kind == TY_PTR && b_kind == TY_PTR then {
@@ -4580,12 +4965,14 @@ func tc_release_name(name: int): int {
 
 func tc_owned_initializer(id: int): int {
   if id == 0 then return 0;
+  if node_kind[id] == N_CLOSURE then return 1;
   if node_kind[id] == N_MOVE then return 1;
   if node_kind[id] != N_CALL then return 0;
   if bi_has_flag(node_value[id], BI_FLAG_OWNED) == 1 then return 1;
   return 0;
 }
 func tc_is_owner_kind(kind: int): int {
+  if kind == TY_CLOSURE then return 1;
   if kind == TY_DYN_ARRAY then return 1;
   if kind == TY_GENERIC then return 1;
   return 0;
@@ -4717,6 +5104,8 @@ func tc_add_var(name: int, kind: int, named: int, elem_kind: int, elem_name: int
   tc_var_borrow_source[tc_var_count] = 0 - 1;
   tc_var_param[tc_var_count] = 0;
   tc_var_mode[tc_var_count] = 0;
+  tc_var_closure_caps[tc_var_count] = 0;
+  tc_var_closure_moved[tc_var_count] = 0;
   tc_last_var_index = tc_var_count;
   sym_type[name] = kind;
   sym_elem_kind[name] = elem_kind;
@@ -4764,7 +5153,7 @@ func tc_type_node(ty: int): void {
   if ty == 0 then { tc_kind = TY_VOID; tc_name = 0; return; }
   tc_kind = node_kind[ty];
   if tc_kind == TY_NAMED then { tc_name = node_value[ty]; }
-  else if (tc_kind == TY_GENERIC || tc_kind == TY_TUPLE || tc_kind == TY_PARAM) then { tc_name = ty; }
+  else if (tc_kind == TY_GENERIC || tc_kind == TY_TUPLE || tc_kind == TY_CLOSURE || tc_kind == TY_PARAM) then { tc_name = ty; }
   else { tc_name = 0; }
   if tc_kind == TY_PTR && node_a[ty] != 0 then {
     tc_elem_kind = node_kind[node_a[ty]];
@@ -4833,6 +5222,48 @@ func tc_check_variant(id: int): int {
   return 1;
 }
 
+func tc_check_closure_escape(id: int): void {
+  if id == 0 then return;
+  let cap: int = node_a[id];
+  while cap != 0 {
+    if node_aux[cap] != 1 then {
+      if node_c[cap] < tc_global_count then { } else if node_c[cap] < tc_var_count && tc_var_param[node_c[cap]] == 1 then { } else tc_fail(60);
+    }
+    cap = node_next[cap];
+  }
+}
+func tc_check_closure_value_escape(id: int): void {
+  if id == 0 then return;
+  if node_kind[id] == N_CLOSURE then { tc_check_closure_escape(id); return; }
+  if node_kind[id] == N_VAR then {
+    if tc_lookup_var(node_value[id]) == 1 then {
+      let cap: int = tc_var_closure_caps[tc_last_var_index];
+      while cap != 0 {
+        if node_aux[cap] != 1 then {
+      if node_c[cap] < tc_global_count then { } else if node_c[cap] < tc_var_count && tc_var_param[node_c[cap]] == 1 then { } else tc_fail(60);
+    }
+        cap = node_next[cap];
+      }
+    }
+  }
+}
+func tc_attach_closure_caps(destination: int, caps: int): void {
+  if destination < 0 then return;
+  if destination >= tc_var_count then return;
+  tc_var_closure_caps[destination] = caps;
+  let cap: int = caps;
+  while cap != 0 {
+    let cap_source: int = node_c[cap];
+    if cap_source >= 0 then {
+      if cap_source < tc_var_count then {
+        if node_aux[cap] == 3 then tc_var_borrow_mut[cap_source] = tc_var_borrow_mut[cap_source] + 1;
+        else if node_aux[cap] == 2 then tc_var_borrow_count[cap_source] = tc_var_borrow_count[cap_source] + 1;
+      }
+    }
+    cap = node_next[cap];
+  }
+}
+
 func tc_expr(id: int): void {
   tc_kind = TY_INT; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0; tc_result_type = 0; tc_expr_borrow_source = 0 - 1; tc_expr_owner_source = 0 - 1; tc_expr_is_owned = 0;
   if id != 0 && tc_ok == 1 then tc_error_pos = node_pos[id];
@@ -4852,6 +5283,88 @@ func tc_expr(id: int): void {
     tc_kind = tc_kind;
     tc_expr_borrow_source = 0 - 1;
     tc_expr_owner_source = 0 - 1;
+    tc_expr_is_owned = 1;
+    return;
+  }
+  if k == N_CLOSURE then {
+    let cap: int = node_a[id];
+    while cap != 0 {
+      let cap_name: int = node_a[cap];
+      if tc_lookup_var(cap_name) == 0 then tc_fail(5);
+      else {
+        let source_index: int = tc_last_var_index;
+        let source_type: int = tc_last_var_type;
+        node_b[cap] = source_type;
+        node_c[cap] = source_index;
+        if node_aux[cap] == 1 then {
+          if tc_is_owner_type(source_type) == 0 then tc_fail(58);
+          else if tc_var_moved[source_index] == 1 then tc_fail(61);
+          else {
+            tc_move_var(source_index);
+            if tc_var_moved[source_index] == 1 then tc_var_closure_moved[source_index] = 1;
+          }
+        } else if node_aux[cap] == 2 then {
+          if tc_var_moved[source_index] == 1 then tc_fail(33);
+          else if tc_var_borrow_mut[source_index] > 0 then tc_fail(37);
+        } else if node_aux[cap] == 3 then {
+          if tc_var_moved[source_index] == 1 then tc_fail(33);
+          else if tc_var_borrow_count[source_index] > 0 || tc_var_borrow_mut[source_index] > 0 then tc_fail(37);
+        }
+      }
+      cap = node_next[cap];
+    }
+    tc_enter_scope();
+    let body_cap: int = node_a[id];
+    while body_cap != 0 {
+      let body_cap_type: int = node_b[body_cap];
+      tc_type_node(body_cap_type);
+      let body_cap_kind: int = tc_kind; let body_cap_name: int = tc_name; let body_cap_elem_kind: int = tc_elem_kind; let body_cap_elem_name: int = tc_elem_name;
+      tc_add_var(node_a[body_cap], body_cap_kind, body_cap_name, body_cap_elem_kind, body_cap_elem_name, body_cap_type);
+      tc_var_mode[tc_last_var_index] = node_aux[body_cap];
+      if node_aux[body_cap] == 1 then tc_var_owned[tc_last_var_index] = 1;
+      else {
+        tc_var_borrow_source[tc_last_var_index] = node_c[body_cap];
+        if node_aux[body_cap] == 3 then tc_var_borrow_mut[tc_last_var_index] = 1;
+        else tc_var_borrow_count[tc_last_var_index] = 1;
+      }
+      body_cap = node_next[body_cap];
+    }
+    let p: int = node_c[id];
+    while p != 0 {
+      tc_type_node(node_b[p]);
+      let pk: int = tc_kind; let pn: int = tc_name; let pek: int = tc_elem_kind; let pen: int = tc_elem_name;
+      tc_add_var(node_a[p], pk, pn, pek, pen, node_b[p]);
+      tc_var_param[tc_last_var_index] = 1;
+      tc_var_mode[tc_last_var_index] = node_aux[p];
+      if node_aux[p] == 1 then tc_var_owned[tc_last_var_index] = 1;
+      else if node_aux[p] == 3 then tc_var_borrow_mut[tc_last_var_index] = 1;
+      else if tc_is_owner_kind(pk) == 1 then tc_var_owned[tc_last_var_index] = 1;
+      p = node_next[p];
+    }
+    let saved_expected_elem_kind: int = tc_expected_elem_kind;
+    let saved_expected_elem_name: int = tc_expected_elem_name;
+    tc_type_node(node_value[id]);
+    let ret_kind: int = tc_kind; let ret_name: int = tc_name;
+    tc_expected_elem_kind = tc_elem_kind;
+    tc_expected_elem_name = tc_elem_name;
+    tc_stmt(node_b[id], ret_kind, ret_name);
+    tc_expected_elem_kind = saved_expected_elem_kind;
+    tc_expected_elem_name = saved_expected_elem_name;
+    tc_leave_scope();
+    let sig_args: int = 0;
+    let sp: int = node_c[id];
+    while sp != 0 {
+      let src: int = node_b[sp];
+      let q: int = ast_node(node_kind[src], node_a[src], node_b[src], node_c[src], node_value[src], node_aux[src]);
+      if sig_args == 0 then sig_args = q; else sig_args = ast_link(sig_args, q);
+      sp = node_next[sp];
+    }
+    let sig_ty: int = ast_node(TY_CLOSURE, sig_args, node_value[id], 0, 0, 0);
+    tc_kind = TY_CLOSURE;
+    tc_name = sig_ty;
+    tc_elem_kind = 0;
+    tc_elem_name = 0;
+    tc_result_type = sig_ty;
     tc_expr_is_owned = 1;
     return;
   }
@@ -4885,7 +5398,7 @@ func tc_expr(id: int): void {
     return;
   }
   if k == N_VAR then {
-    if tc_lookup_var(node_value[id]) == 1 then { if tc_last_var_moved == 1 then tc_fail(33); tc_expr_borrow_source = tc_var_borrow_source[tc_last_var_index]; if tc_last_var_owned == 1 then tc_expr_owner_source = tc_last_var_index; tc_expr_is_owned = 0; tc_result_type = tc_last_var_type; node_aux[id] = tc_last_var_type; return; }
+    if tc_lookup_var(node_value[id]) == 1 then { if tc_last_var_moved == 1 then { if tc_var_closure_moved[tc_last_var_index] == 1 then tc_fail(61); else tc_fail(33); } tc_expr_borrow_source = tc_var_borrow_source[tc_last_var_index]; if tc_last_var_owned == 1 then tc_expr_owner_source = tc_last_var_index; tc_expr_is_owned = 0; tc_result_type = tc_last_var_type; node_aux[id] = tc_last_var_type; return; }
     let e: int = tc_find_enum_value(node_value[id]);
     if e != 0 then { tc_kind = TY_NAMED; tc_name = e; tc_result_type = ast_node(TY_NAMED, 0, 0, 0, e, 0); node_aux[id] = tc_result_type; return; }
     tc_error_symbol = node_value[id]; tc_fail(5); return;
@@ -5255,7 +5768,8 @@ func tc_expr(id: int): void {
   }
   if k == N_INDIRECT_CALL then {
     tc_expr(node_a[id]);
-    if tc_kind != TY_FUN || tc_result_type == 0 || node_kind[tc_result_type] != TY_FUN then { tc_fail_types(12, TY_FUN, tc_kind); return; }
+    if tc_kind == TY_CLOSURE && tc_result_type != 0 && node_kind[tc_result_type] == TY_CLOSURE then { }
+    else if tc_kind != TY_FUN || tc_result_type == 0 || node_kind[tc_result_type] != TY_FUN then { tc_fail_types(12, TY_FUN, tc_kind); return; }
     let fty: int = tc_result_type;
     let arg: int = node_b[id]; let param: int = node_a[fty];
     while arg != 0 && param != 0 {
@@ -5436,6 +5950,17 @@ func tc_emit_field_type(id: int): int {
 
 func tc_emit_arg_type(id: int): int {
   if id == 0 then return 0;
+  if node_kind[id] == N_CLOSURE then {
+    if node_aux[id] > 0 then {
+      let closure_serial_value: int = node_aux[id] - 1;
+      let closure_scan: int = 0;
+      while closure_scan < gen_closure_count {
+        if gen_closure_serial[closure_scan] == closure_serial_value then return gen_closure_sig[closure_scan];
+        closure_scan = closure_scan + 1;
+      }
+    }
+    return gen_closure_signature(id);
+  }
   if node_kind[id] == N_FIELD_ACCESS && node_aux[id] != 0 && node_kind[node_aux[id]] == TY_VARIANT then return node_aux[id];
   if node_kind[id] == N_FIELD_ACCESS then {
     let field_ty: int = tc_emit_field_type(id);
@@ -5462,6 +5987,7 @@ func tc_emit_arg_type(id: int): int {
 }
 
 func tc_expr_kind_for_emit(id: int): int {
+  if id != 0 && node_kind[id] == N_CLOSURE then return TY_CLOSURE;
   if id != 0 && node_kind[id] == N_CALL && node_aux[id] != 0 then return node_kind[node_aux[id]];
   if id != 0 && node_kind[id] == N_INDIRECT_CALL then {
     tc_expr(id);
@@ -5529,6 +6055,7 @@ func tc_stmt(id: int, expected_kind: int, expected_name: int): void {
     if dk == TY_DYN_ARRAY && node_kind[node_c[id]] == N_VAR then tc_move_value(node_c[id]);
     tc_add_var(node_a[id], dk, dn, de, den, node_b[id]);
     if tc_is_owner_kind(dk) == 1 || tc_owned_initializer(node_c[id]) == 1 then tc_var_owned[tc_last_var_index] = 1;
+    if dk == TY_CLOSURE && node_kind[node_c[id]] == N_CLOSURE then tc_attach_closure_caps(tc_last_var_index, node_a[node_c[id]]);
     if dk == TY_PTR then { if rhs_borrow < 0 then { } else tc_record_borrow(tc_last_var_index, rhs_borrow); }
   } else if k == N_ASSIGN || k == N_COMPOUND_ASSIGN then {
     if node_kind[node_a[id]] == N_VAR && sym_type[node_value[node_a[id]]] > 100 then tc_fail(31);
@@ -5608,7 +6135,7 @@ func tc_stmt(id: int, expected_kind: int, expected_name: int): void {
   else if k == N_EXPR then { tc_expr(node_a[id]); if node_kind[node_a[id]] == N_CALL then tc_consume_call(node_a[id]); }
   else if k == N_RETURN then {
     if node_a[id] == 0 then { if expected_kind != TY_VOID then tc_fail(22); }
-    else { tc_mark_float_expr(node_a[id], expected_kind); tc_expr(node_a[id]); let return_borrow: int = tc_expr_borrow_source; if tc_literal_fits(node_a[id], expected_kind) == 0 then tc_fail(54); if expected_kind == TY_PTR then tc_check_return_escape(return_borrow); if tc_same_full(expected_kind, expected_name, tc_expected_elem_kind, tc_expected_elem_name, tc_kind, tc_name, tc_elem_kind, tc_elem_name) == 0 then if node_kind[node_a[id]] != N_NULL then tc_fail_types(23, expected_kind, tc_kind); }
+    else { tc_mark_float_expr(node_a[id], expected_kind); tc_expr(node_a[id]); let return_borrow: int = tc_expr_borrow_source; if tc_literal_fits(node_a[id], expected_kind) == 0 then tc_fail(54); if expected_kind == TY_PTR then tc_check_return_escape(return_borrow); if expected_kind == TY_CLOSURE then tc_check_closure_value_escape(node_a[id]); if tc_same_full(expected_kind, expected_name, tc_expected_elem_kind, tc_expected_elem_name, tc_kind, tc_name, tc_elem_kind, tc_elem_name) == 0 then if node_kind[node_a[id]] != N_NULL then tc_fail_types(23, expected_kind, tc_kind); }
   } else if k == N_BREAK || k == N_CONTINUE then { if tc_loop_depth == 0 then tc_fail(24);   } else if k == N_BLOCK then {
     tc_enter_scope();
     let x: int = node_a[id]; while x != 0 { tc_stmt(x, expected_kind, expected_name); x = node_next[x]; }
@@ -5729,6 +6256,8 @@ func tc_print_hint(code: int): void {
   else if code == 57 then print "header path must contain only alphanumeric characters, '.', '/', '_', '-'";
   else if code == 58 then print "move only an owned binding or an owned container result";
   else if code == 59 then print "pass a tracked variable or address expression to a borrow parameter";
+  else if code == 60 then print "keep a borrowed capture within the source binding's lexical lifetime";
+  else if code == 61 then print "closure moved-capture used after move";
   else if code == 31 then print "assign only to a mutable binding";
   else print "inspect the expression at the reported source location";
 }
@@ -5770,6 +6299,8 @@ func tc_diag(): void {
   else if tc_error_code == 57 then print "type error: extern header path contains invalid characters";
   else if tc_error_code == 58 then print "type error: explicit move requires an owned value";
   else if tc_error_code == 59 then print "type error: borrow parameter requires a tracked source";
+  else if tc_error_code == 60 then print "type error: closure capture escapes its source lifetime";
+  else if tc_error_code == 61 then print "type error: closure moved-capture used after move";
   else if tc_error_code == 44 then print "type error: distinct functions collide after C mangling";
   else print "type error: invalid expression";
   print "diagnostic.code";

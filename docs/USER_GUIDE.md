@@ -8,14 +8,9 @@ This guide introduces Basalt from the ground up: how to build it, write programs
 
 Basalt is a small, statically typed programming language that compiles to portable C11. It is designed for small systems programs, compiler implementation, and data-oriented utilities.
 
-The project is **self-hosting**: it contains two complete implementations of the same language pipeline.
+The project is **self-hosting** and its production workflow is deliberately **Bootstrap-only**. The active compiler is written in Basalt at `src/bootstrap/basaltc.basalt`; the checked-in C seed at `src/bootstrap/basaltc.seed.c` is the only compiler seed used to build it. The historical OCaml implementation under `src/compiler/` is frozen and MUST NOT be modified, built, or used for this workflow.
 
-| Implementation | Language | Role |
-| --- | --- | --- |
-| Host compiler | OCaml (`src/compiler/`) | Reference implementation; defines the "correct" behavior |
-| Bootstrap compiler | Basalt itself (`src/bootstrap/basaltc.basalt`) | Proves the language is expressive enough to compile itself |
-
-A language change is considered complete only when **both** compilers accept the same valid programs, reject the same invalid programs, emit compilable C11, and produce identical runtime behavior. A fixed-point process then proves that the Bootstrap compiler can compile its own source and that two successive generations are byte-identical (see `docs/DEVELOPER_GUIDE.md`).
+A language change is complete only when the frozen seed compiles the current Bootstrap source, the generated C compiles as strict C11, the Bootstrap-only compatibility and stress suites pass, and the fixed-point generations are byte-identical (see `docs/DEVELOPER_GUIDE.md`).
 
 ### Design philosophy
 
@@ -31,43 +26,32 @@ A language change is considered complete only when **both** compilers accept the
 ### Requirements
 
 - A C compiler (`gcc` recommended) supporting C11
-- OCaml and Dune (only to build the Host compiler)
-- `bash`, `make`-free shell scripts under `scripts/`
+- `bash` and the repository scripts under `scripts/`
 
-### Build the Host compiler
+### Build the Bootstrap compiler
+
+All compiler artifacts belong under `.tmp/`. Build the current compiler through the frozen C seed:
 
 ```sh
-./scripts/build.sh
+source scripts/bootstrap_stage.sh
+current_bin=$(bootstrap_stage "$PWD" .tmp/user-stage \\
+  -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror)
 ```
 
-This runs `dune build` in `src/compiler/` and produces:
-
-```
-src/compiler/_build/default/bin/basaltc.exe
-```
+The stage command first builds `src/bootstrap/basaltc.seed.c`, then uses that seed binary to translate `src/bootstrap/basaltc.basalt` into a current C compiler and builds the current compiler binary.
 
 ### Compile a Basalt program
-
-```sh
-src/compiler/_build/default/bin/basaltc.exe hello.basalt
-```
-
-The Host compiler writes the generated C **beside the source file**, using the source filename with `.c` appended (`hello.basalt` → `hello.basalt.c`). Then compile and run the C with gcc:
-
-```sh
-gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror hello.basalt.c -o hello
-./hello
-```
-
-### Use the Bootstrap compiler
 
 The Bootstrap compiler accepts an explicit output path:
 
 ```sh
-src/bootstrap/basaltc hello.basalt out.c
+"$current_bin" hello.basalt .tmp/hello.c
+gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror \\
+  .tmp/hello.c -o .tmp/hello.bin
+.tmp/hello.bin
 ```
 
-Where `src/bootstrap/basaltc` is produced by `./scripts/fixed_point.sh` (see the Developer Guide). For everyday use, the Host compiler is simpler; the Bootstrap compiler exists to prove self-hosting.
+For a stable self-hosted compiler, run `bash scripts/fixed_point.sh`; it verifies the frozen seed through successive Bootstrap generations. The OCaml files under `src/compiler/` are intentionally outside this workflow.
 
 ---
 
@@ -84,9 +68,13 @@ func main(): int {
 ```
 
 ```sh
-src/compiler/_build/default/bin/basaltc.exe hello.basalt
-gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror hello.basalt.c -o hello
-./hello
+source scripts/bootstrap_stage.sh
+current_bin=$(bootstrap_stage "$PWD" .tmp/hello-stage \\
+  -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror)
+"$current_bin" hello.basalt .tmp/hello.c
+gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror \\
+  .tmp/hello.c -o .tmp/hello.bin
+.tmp/hello.bin
 ```
 
 Output:
@@ -215,7 +203,51 @@ struct Pair<A, B> {
 
 Generic calls do not require explicit type arguments; they are inferred from the arguments (`first_or(1, 1, 0)`).
 
-### 4.7 Arrays: fixed and dynamic
+### 4.7 Closures
+
+Closures are typed function values that may capture selected bindings. Captures are explicit, so the ownership behavior is visible at the point where the closure is created:
+
+```basalt
+func main(): int {
+  let base: int = 10;
+  let add_base: closure(int): int = fn[borrow base](amount: int): int {
+    return base + amount;
+  };
+  print (add_base)(5);
+  return 0;
+}
+```
+
+Use `move` when the closure should own an already-owned value. The source cannot be used after the move:
+
+```basalt
+func main(): int {
+  let inner: closure(): int = fn[](): int { return 9; };
+  let invoke_later: closure(): int = fn[move inner](): int {
+    return (inner)();
+  };
+  print (invoke_later)();
+  return 0;
+}
+```
+
+Use `borrow_mut` for an exclusive mutable capture when the closure is used within the source binding’s lifetime:
+
+```basalt
+func main(): int {
+  let value: int = 1;
+  let increment: closure(): int = fn[borrow_mut value](): int {
+    value = value + 1;
+    return value;
+  };
+  print (increment)();
+  return 0;
+}
+```
+
+A closure that borrows a block-local binding MUST NOT be returned from that block or stored where it outlives the binding. A move capture is also a compile-time ownership transfer, not a runtime copy. The Bootstrap compiler reports code **60** for a borrowed capture that escapes its source lifetime and code **61** when a moved-capture source is used again.
+
+### 4.8 Arrays: fixed and dynamic
 
 **Fixed arrays** have a compile-time length and are zero-initialized with `= 0`:
 

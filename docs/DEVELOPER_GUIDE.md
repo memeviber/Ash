@@ -23,9 +23,9 @@ The active implementation keeps lexer, parser, type checker, generator, and diag
 
 | Stage | Responsibility |
 | --- | --- |
-| Lexer | Bytes → tokens (`src/compiler/lib/lexer.mll`, bootstrap `lexer_next`) |
-| Parser | Tokens → AST (`src/compiler/lib/parser.mly`, bootstrap `ast_*`) |
-| AST | Deterministic node arenas (both compilers) |
+| Lexer | Bytes → tokens (active Bootstrap `lexer_next`; frozen Host path retained only for reference) |
+| Parser | Tokens → AST (active Bootstrap `ast_*`; frozen Host grammar retained only for reference) |
+| AST | Deterministic Bootstrap node arenas |
 | Type checker | Names, scopes, generics, fields, ownership, operator constraints |
 | Specializer | Monomorphizes generic functions and types actually used |
 | C generator | Emits an intermediate C-token stream, serializes to C11 |
@@ -45,18 +45,36 @@ Ownership is implemented entirely in the Bootstrap type checker. Parameter nodes
 
 The checker keeps ownership metadata beside the scope stack: moved state, owned state, parameter origin, shared-borrow count, mutable-borrow count, borrow source, and active parameter mode. Generic owner types are recognized recursively so `array::Array<T>` and related container specializations participate in the same state machine as dynamic arrays. Call checking applies the parameter mode uniformly to ordinary, generic, built-in, and indirect calls. A move-mode parameter accepts only an explicit `N_MOVE`; borrow modes resolve a tracked source and enforce shared/exclusive conflicts before the call proceeds.
 
-Scope exit unwinds borrow counts associated with bindings declared in that scope. Return checking propagates the source of pointer expressions and rejects pointers derived from block-local owners while allowing globals and formal parameters under lifetime elision. This is a conservative escape analysis: it does not inspect arbitrary C inside `includec`, and raw FFI pointers remain an explicit unsafe boundary. Ownership errors use stable diagnostics 33, 35, 37, 38, 40, 58, and 59; new fixtures must assert the semantic code and source excerpt.
+Scope exit unwinds borrow counts associated with bindings declared in that scope. Return checking propagates the source of pointer expressions and rejects pointers derived from block-local owners while allowing globals and formal parameters under lifetime elision. This is a conservative escape analysis: it does not inspect arbitrary C inside `includec`, and raw FFI pointers remain an explicit unsafe boundary. Ownership errors use stable diagnostics 33, 35, 37, 38, 40, 58, 59, 60, and 61; new fixtures must assert the semantic code and source excerpt.
 
-Any ownership change must be developed in `src/bootstrap/basaltc.basalt`, rebuilt from the frozen seed with strict C11 flags, exercised by `scripts/run_ownership_stress.sh`, and only then synchronized into `basaltc.seed.c` and `fixed_point_production.sha256`. Do not modify, build, or use `src/compiler/` for this workflow.
+### Captured closures and generated ABI
+
+Closure syntax is parsed into `N_CLOSURE` with four payloads: the linked capture list in `node_a`, the body statement in `node_b`, the parameter list in `node_c`, and the declared return type in `node_value`. Capture mode remains in each capture node's `node_aux`: `1` for move, `2` for borrow, and `3` for borrow_mut. The type checker creates an inner scope, installs capture aliases and parameters, checks the body against the declared return type, and produces a structural `TY_CLOSURE` signature.
+
+The generator registers each closure literal deterministically during collection. A closure signature gets one shared fat-value struct and one call wrapper; each literal gets a serial-specific environment, factory, and lifted invoke function. The generated shape is equivalent to:
+
+```c
+struct __basalt_closure_value_SIG {
+  void *env;
+  RET (*fn)(void *, PARAMS);
+};
+```
+
+Factories allocate and initialize environments through the existing tracked allocator. Lifted invokes receive a typed environment pointer before user parameters. Borrowed captures are emitted as dereferenced environment fields, while moved captures are emitted as values stored in the environment. Capture-free environments contain a dummy field so the generated C remains valid on all conforming C11 implementations. Closure calls dispatch through the fat value's `fn` and `env` members; ordinary function pointers continue to use the existing indirect-call path.
+
+The closure registry is reset before each generation and populated before closure ABI declarations are emitted. This ordering is important: an environment may store another closure value by value, so shared closure-value structs must be complete before environment definitions. Any change to closure collection or emission must test repeated generation, nested captures, empty environments, strict GCC, and the no-artifact-on-rejection invariant.
+
+A closure borrow that escapes its source binding reports diagnostic **60**. A source binding used after a move capture reports diagnostic **61**. Both errors are checked before C emission.
+
+Any ownership or closure change must be developed in `src/bootstrap/basaltc.basalt`, rebuilt from the frozen seed with strict C11 flags, exercised by `scripts/run_ownership_stress.sh`, and only then synchronized into `basaltc.seed.c` and `fixed_point_production.sha256`. Do not modify, build, or use `src/compiler/` for this workflow.
 
 ---
 
 ## 2. Repository layout
 
 ```
-src/compiler/            OCaml Host compiler (lexer.mll, parser.mly, ast.ml,
-                         typechecker.ml, compiler.ml, parser.conflicts)
-src/bootstrap/           basaltc.basalt (source), basaltc.basalt.c (checked-in artifact),
+src/compiler/            Frozen OCaml reference (do not modify, build, or use)
+src/bootstrap/           basaltc.basalt (source), basaltc.seed.c (checked-in seed),
                          fixed_point_production.sha256
 src/stdlib/              array.basalt, slice.basalt, map.basalt, option.basalt, result.basalt, string.basalt
 tests/regression/        focused compiler + language tests (valid and expect-reject)
@@ -75,15 +93,17 @@ For Windows UCRT64 bootstrap compilation, see [`WINDOWS_UCRT64_BOOTSTRAP.md`](WI
 
 ## 3. The verification machinery
 
-### 3.1 Build the Host
+### 3.1 Build the current Bootstrap compiler
 
 ```sh
-./scripts/build.sh
+source scripts/bootstrap_stage.sh
+current_bin=$(bootstrap_stage "$PWD" .tmp/developer-stage \\
+  -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror)
 ```
 
-Runs `dune build` in `src/compiler/` and then checks parser conflict counts (`check_parser_conflicts.sh`) so grammar changes cannot silently grow the conflict set.
+This builds the frozen `src/bootstrap/basaltc.seed.c` and uses it to translate `src/bootstrap/basaltc.basalt`. It never enters `src/compiler/`.
 
-### 3.2 Verify the bootstrap fixed point
+### 3.2 Verify the Bootstrap fixed point
 
 ```sh
 ./scripts/fixed_point.sh
@@ -91,28 +111,25 @@ Runs `dune build` in `src/compiler/` and then checks parser conflict counts (`ch
 
 The script:
 
-1. Host-compiles `src/bootstrap/basaltc.basalt` → `basaltc.basalt.c` (overwriting the working copy, **not** the checked-in one).
-2. Builds `n1.bin` from that C with the strict GCC profile.
-3. Runs `n1.bin basaltc.basalt n2.c`, builds `n2.bin` from `n2.c`.
-4. Runs `n2.bin basaltc.basalt n3.c`.
-5. Requires `n2.c == n3.c` byte-for-byte, and `sha256sum n2.c == fixed_point_production.sha256`.
+1. Builds `n1.bin` directly from the frozen `src/bootstrap/basaltc.seed.c` with the strict GCC profile.
+2. Runs `n1.bin basaltc.basalt n2.c`, then builds `n2.bin` from `n2.c`.
+3. Runs `n2.bin basaltc.basalt n3.c`, then builds `n3.bin` from `n3.c`.
+4. Runs `n3.bin basaltc.basalt n4.c` and requires `n3.c == n4.c` byte-for-byte.
+5. Verifies the frozen seed checksum against `fixed_point_production.sha256`; after a validated change, the stable n3 artifact and checksum are synchronized back into the seed.
 
 A passing fixed point proves the self-hosting compiler is stable: the compiler built by itself produces the same compiler artifact.
 
-**After changing `basaltc.basalt`, you must** regenerate the checked-in artifacts. The exact sequence used by maintainers:
+**After changing `basaltc.basalt`, you must** run the Bootstrap-only fixed-point chain, synchronize the stable n3 artifact, and rerun the chain:
 
 ```sh
-./scripts/build.sh
-src/compiler/_build/default/bin/basaltc.exe src/bootstrap/basaltc.basalt
-gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror \
-  src/bootstrap/basaltc.basalt.c -o .tmp/n1.bin
-.tmp/n1.bin src/bootstrap/basaltc.basalt .tmp/n2.c
-gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror .tmp/n2.c -o .tmp/n2.bin
-.tmp/n2.bin src/bootstrap/basaltc.basalt .tmp/n3.c
-cmp .tmp/n2.c .tmp/n3.c && sha256sum .tmp/n2.c
+bash scripts/fixed_point.sh
+cp .tmp/fixed-point/n3.c src/bootstrap/basaltc.seed.c
+sha256sum src/bootstrap/basaltc.seed.c | awk '{print $1}' > \\
+  src/bootstrap/fixed_point_production.sha256
+bash scripts/fixed_point.sh
 ```
 
-Then write the new hash into `src/bootstrap/fixed_point_production.sha256` and commit the new `basaltc.basalt.c` and checksum together with the `.basalt` change. If the checksum does not change while the artifact does, something is wrong.
+Only after the synchronized fixed point passes may the full ownership-stress suite be run and the change committed. All generated binaries and intermediate C files remain under `.tmp/`.
 
 ### 3.3 The full suite
 
@@ -120,13 +137,13 @@ Then write the new hash into `src/bootstrap/fixed_point_production.sha256` and c
 ./scripts/run_ownership_stress.sh
 ```
 
-This is the master runner. It builds both compilers and executes, in order:
+This is the master runner. It builds the current compiler from the frozen C seed and executes the Bootstrap-only validation stages in order:
 
-1. **Ownership stress**: the move/borrow valid fixture (compiled by both compilers, strict GCC, ASan + UBSan + leak check, identical runtime output) and five negative fixtures that **both** compilers must reject.
-2. **Regression** (`scripts/run_regression.sh`): `compile_run` fixtures (both compilers must compile, pass strict GCC, and run) and `expect_reject` fixtures (both must reject). Also checks the runtime prologue is emitted exactly once for include tests.
-3. **Stress** (`scripts/run_stress.sh`): the 164-case corpus plus modulo stress.
-4. **Adversarial** (`scripts/run_adversarial.sh`): sanitizer-driven tests; the OOB negative fixture must terminate with exit code `2` in both compiler paths.
-5. **Conformance** (`scripts/run_conformance.sh`): generated Host/Bootstrap conformance material.
+1. **Ownership stress**: move/borrow valid and negative fixtures under strict GCC, ASan, UBSan, and leak checks.
+2. **Regression** (`scripts/run_regression.sh`): valid fixtures must compile, pass strict GCC, and run; invalid fixtures must be rejected before C emission.
+3. **Stress** (`scripts/run_stress.sh`): the larger corpus plus modulo stress.
+4. **Adversarial** (`scripts/run_adversarial.sh`): sanitizer-driven workloads.
+5. **Conformance** (`scripts/run_conformance.sh`): Bootstrap-generated conformance material against checked-in expectations; it does not build the frozen Host.
 6. **Fixed point**: `fixed_point.sh`.
 7. **ELF guard**: no executable binaries may be left under `tests/` (all artifacts live in `.tmp/`).
 
@@ -134,10 +151,10 @@ If you add a fixture, register it in `scripts/run_regression.sh`:
 
 ```sh
 compile_run "$ROOT/tests/regression/my_feature.basalt" my_feature          # valid program
-expect_reject "$ROOT/tests/regression/my_feature_invalid.basalt" my_feature_invalid  # both compilers must reject
+expect_reject "$ROOT/tests/regression/my_feature_invalid.basalt" my_feature_invalid  # Bootstrap must reject before C emission
 ```
 
-`compile_run` compiles the fixture with the Host from the fixture's directory (so relative `include` paths resolve), then with the Bootstrap, then requires strict-GCC acceptance and a successful run of both binaries.
+`compile_run` compiles the fixture with the current Bootstrap compiler from the fixture's directory (so relative `include` paths resolve), then requires strict-GCC acceptance and a successful run. `expect_reject` requires rejection before a generated C artifact is accepted. The frozen Host implementation is not invoked.
 
 ---
 
@@ -145,8 +162,8 @@ expect_reject "$ROOT/tests/regression/my_feature_invalid.basalt" my_feature_inva
 
 Built-ins live in two tables that must agree:
 
-- Host: `Ast.builtin_funcs` in `src/compiler/lib/ast.ml` (type signature) and `reserved_names` in `src/compiler/lib/typechecker.ml`.
 - Bootstrap: `bi_init()` in `src/bootstrap/basaltc.basalt` — a data-driven registry built from `bi_register(name, tc_tag, flags)`.
+- The OCaml tables under `src/compiler/` are historical reference material only and must not be edited or used as part of a feature change.
 
 The registry replaced a set of hardcoded name-hash checks. Tags: `BI_TC_NONE/VOID/INT/STRING/PTR_INT/PTR_VOID/MEM_ALLOC/MEM_RESIZE/MEM_FREE`; flags: `BI_FLAG_RESERVED/OWNED/CONSUME/DYNFIELD/MAIN`. Lookup is by `sym_len` + `sym_hash`, matching what the old code did, but adding a built-in is now a table entry instead of touching five functions.
 
@@ -158,13 +175,7 @@ The registry replaced a set of hardcoded name-hash checks. Tags: `BI_TC_NONE/VOI
    bi_register("basalt_inc_join", BI_TC_STRING, BI_FLAG_RESERVED);
    ```
 
-2. Host: one line in `ast.ml`:
-
-   ```ocaml
-   ("basalt_inc_join", ([TString; TString], TString))
-   ```
-
-3. Add a fixture (`tests/regression/builtin_join_test.basalt`) and register it.
+2. Add a fixture (`tests/regression/builtin_join_test.basalt`) and register it.
 
 That is the whole change. Before the registry, the same addition touched the reserved list, the type-check dispatch, the emitter dispatch, and the ownership tables — five independent hardcoded hash lists that could drift apart.
 
@@ -173,9 +184,9 @@ That is the whole change. Before the registry, the same addition touched the res
 - `bi_init()` is **lazy**: it runs on the first `bi_lookup` during type checking. Eager initialization in `main()` fails because type-checking `bi_register`'s own body needs the registry (`grow_ints`) — a circular dependency.
 - `bi_register` interns names into the **symbol-text region** (`source_len + sym_text_len`), exactly like `sym_qualified`. Writing at plain `source_len` **overwrites the qualified-name region** used by namespace symbols (e.g. `map::free`) and breaks resolution for programs longer than the registry's footprint. This was a real bug: `stdlib_containers_test.basalt` failed with `unknown function` at a line inside the map section while short programs passed.
 - `bi_lookup` compares `sym_len` and `sym_hash` only — never the source text — so the comparison is immune to later buffer reuse.
-- A built-in that is reserved but not callable (`printf`, `malloc`, `strlen`, ...) gets `BI_TC_NONE`. `write_int` was originally registered with `BI_TC_INT` by mistake; the old compiler treated it as reserved-only, and the Host has no `write_int` entry — so it must be `BI_TC_NONE` to preserve parity.
+- A built-in that is reserved but not callable (`printf`, `malloc`, `strlen`, ...) gets `BI_TC_NONE`. `write_int` was originally registered with `BI_TC_INT` by mistake; it is reserved-only and must remain `BI_TC_NONE` in the active Bootstrap registry.
 
-**Adding a *new* runtime helper** (not just exposing one) requires more: the runtime prologue is emitted independently by both compilers (`compiler.ml` prologue strings and the bootstrap's `write_string` prologue emission), and both copies must stay identical, or Host and Bootstrap binaries diverge.
+**Adding a *new* runtime helper** requires updating the Bootstrap runtime-prologue emission and its Bootstrap-only fixtures. Keep the generated prologue centralized and verify that each required header or helper is emitted exactly once.
 
 ---
 

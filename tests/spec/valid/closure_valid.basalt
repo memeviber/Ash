@@ -1,0 +1,23 @@
+func main(): int {
+  let add: closure(int): int = fn[](x: int): int {
+    return x + 1;
+  };
+  if (add)(4) != 5 then return 1;
+
+  let offset: int = 3;
+  let plus_offset: closure(int): int = fn[borrow offset](x: int): int {
+    return x + offset;
+  };
+  if (plus_offset)(4) != 7 then return 2;
+
+  let inner: closure(): int = fn[](): int {
+    return 9;
+  };
+  let moved_closure: closure(): int = fn[move inner](): int {
+    return (inner)();
+  };
+  if (moved_closure)() != 9 then return 3;
+  return 0;
+}
+// diagnostic: valid
+// end

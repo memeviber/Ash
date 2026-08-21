@@ -90,11 +90,27 @@ An unannotated parameter has compatibility mode and does not consume its argumen
 
 The `move expression` has the form `move expression`. It is valid only for an owned binding or an owned container result. After a successful move, the source binding is unusable until it is reinitialized. The checker applies these transitions at all ordinary, generic, built-in, and indirect call sites rather than only to expression statements.
 
-A borrowed value MUST NOT outlive its owner. Returning a pointer derived from a block-local owner is a lifetime error; returning a pointer derived from a global or formal parameter is permitted under lifetime elision. Borrow metadata is unwound when the lexical binding leaves scope, so a borrow held only by an inner binding does not leak into an outer scope. Closure-capture lifetime inference and named lifetime parameters are not yet part of the language contract.
+A borrowed value MUST NOT outlive its owner. Returning a pointer derived from a block-local owner is a lifetime error; returning a pointer derived from a global or formal parameter is permitted under lifetime elision. Borrow metadata is unwound when the lexical binding leaves scope, so a borrow held only by an inner binding does not leak into an outer scope. Closure captures use the same ownership state: a borrowed capture is valid only while its source binding remains in lexical scope, and a moved capture makes the source unusable after the capture.
 
 `defer statement;` registers cleanup in the active scope. Deferred operations MUST execute in reverse registration order on the corresponding exit path, including explicit returns covered by the implementation. A resource transferred out of a scope MUST NOT also be freed by the originating scope.
 
 The `null` literal represents a null pointer value. A raw zero MAY be accepted in pointer contexts covered by the C-oriented compatibility rules, but `null` is the portable spelling for new code.
+
+## Closures
+
+A closure literal has the form `fn[captures](parameters): ReturnType { body }`. The capture list is explicit and each capture MUST specify one of the following modes:
+
+| Capture mode | Meaning | Lifetime and ownership rule |
+| --- | --- | --- |
+| `borrow x` | Shared borrow of `x`. | The closure value MUST NOT escape the lexical lifetime of `x`; shared and mutable borrows conflict. |
+| `borrow_mut x` | Exclusive mutable borrow of `x`. | The closure value MUST NOT escape the lexical lifetime of `x`; no competing borrow or mutation is permitted. |
+| `move x` | Transfer ownership of `x` into the closure environment. | `x` MUST be owned and MUST NOT be used after the capture. |
+
+A closure type annotation has the form `closure(parameters): ReturnType`. Closure types are structurally compared by parameter types and return type. A closure value is distinct from a plain function pointer even when its visible signature is the same, because it carries an environment.
+
+Calling a closure uses the ordinary postfix-call syntax, for example `(increment)(4)`. The generated C representation is a deterministic fat value containing an environment pointer and an invoke-function pointer. The environment stores captured values, while the invoke function receives the environment pointer before the declared closure parameters. Capture-free closures still use the same representation with an empty environment marker, which keeps the ABI uniform.
+
+A closure literal MUST be type-checked before C emission. Its parameters form an inner scope, captured names are available in the body, and the body MUST return a value compatible with the declared return type. Returning a closure that borrows a block-local binding is rejected with diagnostic code **60**. Using a binding after moving it into a closure is rejected with diagnostic code **61**. These checks apply to direct closure literals and closure values stored in local bindings.
 
 ## Functions, generics, namespaces, and containers
 
@@ -159,7 +175,7 @@ Unsafe extern parameter types use diagnostic code 55, unsafe return types use co
 
 Every compile-time failure MUST produce a nonzero exit status and MUST NOT leave a C artifact at the requested output path. The Bootstrap formatter emits a concise message followed by stable fields: `diagnostic.code`, `diagnostic.file`, one-based `diagnostic.line`, one-based `diagnostic.column`, `diagnostic.excerpt`, and `diagnostic.hint`. The file and excerpt are derived from the source byte span associated with the first failure; included files MUST report their own canonicalized source path.
 
-For type mismatch codes 12, 20, 21, 23, and 36, the formatter MUST additionally emit `diagnostic.expected` and `diagnostic.found` with human-readable type names. Ownership and lifetime violations use stable codes 33 (use after move), 35 (release requires an owned value), 37 (borrow or mutation conflict), 38 (borrowed value escapes its lifetime), 40 (owned parameter requires an explicit move), 58 (explicit move requires an owned value), and 59 (borrow parameter source cannot be tracked). The compiler MUST preserve the first failing span while type checking so later traversal cannot overwrite the originating location. Diagnostic wording MAY evolve, but stable codes, field labels, rejection behavior, and source-location semantics are compatibility requirements. Tests MUST assert semantic rejection and the documented structured fields rather than depending only on incidental prose.
+For type mismatch codes 12, 20, 21, 23, and 36, the formatter MUST additionally emit `diagnostic.expected` and `diagnostic.found` with human-readable type names. Ownership and lifetime violations use stable codes 33 (use after move), 35 (release requires an owned value), 37 (borrow or mutation conflict), 38 (borrowed value escapes its lifetime), 40 (owned parameter requires an explicit move), 58 (explicit move requires an owned value), 59 (borrow parameter source cannot be tracked), 60 (closure capture escapes its source lifetime), and 61 (closure moved-capture used after move). The compiler MUST preserve the first failing span while type checking so later traversal cannot overwrite the originating location. Diagnostic wording MAY evolve, but stable codes, field labels, rejection behavior, and source-location semantics are compatibility requirements. Tests MUST assert semantic rejection and the documented structured fields rather than depending only on incidental prose.
 
 ## Generated C and platform contract
 

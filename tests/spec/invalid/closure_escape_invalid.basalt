@@ -1,0 +1,14 @@
+func make_closure(): closure(): int {
+  let value: int = 7;
+  return fn[borrow value](): int {
+    return value;
+  };
+}
+func main(): void {
+  let escaped: closure(): int = make_closure();
+  print (escaped)();
+}
+// diagnostic.code: 60
+// diagnostic.hint: keep a borrowed capture within the source binding's lexical lifetime
+// diagnostic.excerpt: return value;
+// end

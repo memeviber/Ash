@@ -1,0 +1,13 @@
+func main(): void {
+  let inner: closure(): int = fn[](): int {
+    return 9;
+  };
+  let moved: closure(): int = fn[move inner](): int {
+    return (inner)();
+  };
+  print (inner)();
+}
+// diagnostic.code: 61
+// diagnostic.hint: closure moved-capture used after move
+// diagnostic.excerpt: print (inner)();
+// end
