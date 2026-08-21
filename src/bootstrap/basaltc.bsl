@@ -541,14 +541,49 @@ func gen_spec_exists(kind: int, decl: int, name: int): int {
   while i < gen_spec_count { if gen_spec_kind[i] == kind && gen_spec_decl[i] == decl && gen_spec_name[i] == name then return 1; i = i + 1; }
   return 0;
 }
+func gen_collect_struct_fields(decl: int, inst: int): void {
+  let saved_count: int = gen_bind_count;
+  ensure_gen_bind(saved_count + saved_count);
+  let save_i: int = 0;
+  while save_i < saved_count {
+    gen_bind_name[saved_count + save_i] = gen_bind_name[save_i];
+    gen_bind_type[saved_count + save_i] = gen_bind_type[save_i];
+    save_i = save_i + 1;
+  }
+  gen_bind_decl(decl, inst);
+  let field: int = node_a[decl];
+  while field != 0 {
+    let field_type: int = gen_substitute_type(node_b[field]);
+    gen_collect_type(field_type);
+    field = node_next[field];
+  }
+  gen_bind_clear();
+  let restore_i: int = 0;
+  while restore_i < saved_count {
+    gen_bind_name[restore_i] = gen_bind_name[saved_count + restore_i];
+    gen_bind_type[restore_i] = gen_bind_type[saved_count + restore_i];
+    restore_i = restore_i + 1;
+  }
+  gen_bind_count = saved_count;
+}
+
 func gen_add_struct_spec(ty: int): void {
   let q: int = gen_substitute_type(ty);
   if q == 0 || node_kind[q] != TY_GENERIC then return;
   let decl: int = tc_find_struct(node_value[q]); if decl == 0 then return;
   let name: int = gen_mangled_type_symbol(q);
   if gen_spec_exists(1, decl, name) == 1 then return;
-  ensure_gen_specs(gen_spec_count); gen_spec_kind[gen_spec_count] = 1; gen_spec_decl[gen_spec_count] = decl; gen_spec_type[gen_spec_count] = q; gen_spec_name[gen_spec_count] = name; gen_spec_count = gen_spec_count + 1;
+  let slot: int = gen_spec_count;
+  ensure_gen_specs(gen_spec_count);
+  gen_spec_kind[slot] = 1; gen_spec_decl[slot] = decl; gen_spec_type[slot] = q; gen_spec_name[slot] = name; gen_spec_count = gen_spec_count + 1;
   let a: int = node_a[q]; while a != 0 { gen_collect_type(a); a = node_next[a]; }
+  gen_collect_struct_fields(decl, q);
+  let last: int = gen_spec_count - 1;
+  while slot < last {
+    gen_spec_kind[slot] = gen_spec_kind[slot + 1]; gen_spec_decl[slot] = gen_spec_decl[slot + 1]; gen_spec_type[slot] = gen_spec_type[slot + 1]; gen_spec_name[slot] = gen_spec_name[slot + 1];
+    slot = slot + 1;
+  }
+  gen_spec_kind[last] = 1; gen_spec_decl[last] = decl; gen_spec_type[last] = q; gen_spec_name[last] = name;
 }
 func gen_type_has_param(ty: int): int {
   if ty == 0 then return 0;
