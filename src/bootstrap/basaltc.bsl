@@ -136,6 +136,7 @@ let source_active_file: int = 0;
 let source_active_line: int = 1;
 let gen_source_pos: int = 0;
 let gen_source_epoch: int = 0;
+let emit_pending_space: int = 0;
 
 func next_capacity(old: int, need: int): int {
   let n: int = old;
@@ -5465,37 +5466,41 @@ func emit_source_line(out: int*, pos: int): void {
 }
 
 func emit_c_token(out: int*, kind: int, value: int): void {
+  if emit_pending_space == 1 then {
+    if kind == C_KW || kind == C_IDENT || kind == C_INT || kind == C_STRING || kind == C_RAW || kind == C_RAW_U64 then write_char(out, 32);
+    emit_pending_space = 0;
+  }
   if kind == C_KW then {
-    if value == 1 then write_string(out, "int ");
-    else if value == 2 then write_string(out, "int ");
-    else if value == 3 then write_string(out, "char* ");
-    else if value == 4 then write_string(out, "void ");
-    else if value == 5 then write_string(out, "return ");
-    else if value == 6 then write_string(out, "if ");
-    else if value == 7 then write_string(out, "else ");
-    else if value == 8 then write_string(out, "while ");
-    else if value == 9 then write_string(out, "break ");
-    else if value == 10 then write_string(out, "continue ");
-    else if value == 11 then write_string(out, "for ");
-    else if value == 12 then write_string(out, "struct ");
-    else if value == 13 then write_string(out, "enum ");
-    else if value == 14 then write_string(out, "typedef ");
-    else if value == 15 then write_string(out, "double ");
-    else if value == 16 then write_string(out, "const ");
-    else if value == 18 then write_string(out, "float ");
-    else if value == 19 then write_string(out, "long ");
-    else if value == 20 then write_string(out, "long long ");
-    else if value == 21 then write_string(out, "uint8_t ");
-    else if value == 22 then write_string(out, "uint16_t ");
-    else if value == 23 then write_string(out, "uint32_t ");
-    else if value == 24 then write_string(out, "uint64_t ");
-    else if value == 25 then write_string(out, "int8_t ");
-    else if value == 26 then write_string(out, "int16_t ");
-    else if value == 27 then write_string(out, "int32_t ");
-    else if value == 28 then write_string(out, "int64_t ");
-    else if value == 29 then write_string(out, "size_t ");
-    else if value == 30 then write_string(out, "union ");
-    else if value == 17 then write_string(out, "char ");
+    if value == 1 then { write_string(out, "int"); emit_pending_space = 1; }
+    else if value == 2 then { write_string(out, "int"); emit_pending_space = 1; }
+    else if value == 3 then { write_string(out, "char*"); emit_pending_space = 1; }
+    else if value == 4 then { write_string(out, "void"); emit_pending_space = 1; }
+    else if value == 5 then { write_string(out, "return"); emit_pending_space = 1; }
+    else if value == 6 then { write_string(out, "if"); emit_pending_space = 1; }
+    else if value == 7 then { write_string(out, "else"); emit_pending_space = 1; }
+    else if value == 8 then { write_string(out, "while"); emit_pending_space = 1; }
+    else if value == 9 then { write_string(out, "break"); emit_pending_space = 1; }
+    else if value == 10 then { write_string(out, "continue"); emit_pending_space = 1; }
+    else if value == 11 then { write_string(out, "for"); emit_pending_space = 1; }
+    else if value == 12 then { write_string(out, "struct"); emit_pending_space = 1; }
+    else if value == 13 then { write_string(out, "enum"); emit_pending_space = 1; }
+    else if value == 14 then { write_string(out, "typedef"); emit_pending_space = 1; }
+    else if value == 15 then { write_string(out, "double"); emit_pending_space = 1; }
+    else if value == 16 then { write_string(out, "const"); emit_pending_space = 1; }
+    else if value == 18 then { write_string(out, "float"); emit_pending_space = 1; }
+    else if value == 19 then { write_string(out, "long"); emit_pending_space = 1; }
+    else if value == 20 then { write_string(out, "long long"); emit_pending_space = 1; }
+    else if value == 21 then { write_string(out, "uint8_t"); emit_pending_space = 1; }
+    else if value == 22 then { write_string(out, "uint16_t"); emit_pending_space = 1; }
+    else if value == 23 then { write_string(out, "uint32_t"); emit_pending_space = 1; }
+    else if value == 24 then { write_string(out, "uint64_t"); emit_pending_space = 1; }
+    else if value == 25 then { write_string(out, "int8_t"); emit_pending_space = 1; }
+    else if value == 26 then { write_string(out, "int16_t"); emit_pending_space = 1; }
+    else if value == 27 then { write_string(out, "int32_t"); emit_pending_space = 1; }
+    else if value == 28 then { write_string(out, "int64_t"); emit_pending_space = 1; }
+    else if value == 29 then { write_string(out, "size_t"); emit_pending_space = 1; }
+    else if value == 30 then { write_string(out, "union"); emit_pending_space = 1; }
+    else if value == 17 then { write_string(out, "char"); emit_pending_space = 1; }
   } else if kind == C_IDENT then {
     if value == -1001 then write_string(out, "printf");
     else if value == -1002 then write_string(out, "runtime_string_concat");
@@ -5640,8 +5645,10 @@ func emit_c_file(path: string): void {
   while ci < c_source_len { write_char(out, c_source[ci]); ci = ci + 1; }
   let i: int = 0;
   let last_epoch: int = (0 - 1);
+  emit_pending_space = 0;
   while i < code_count {
     if code_epoch[i] != last_epoch then {
+      emit_pending_space = 0;
       emit_source_line(out, code_pos[i]);
       last_epoch = code_epoch[i];
     }
