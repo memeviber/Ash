@@ -60,7 +60,7 @@ The compiler accepts `--line` and `--no-line` before the input path. Mapping is 
 "$current_bin" --no-line hello.basalt .tmp/hello-no-line.c
 ```
 
-For a one-command build, use auto-compile mode. It keeps compiler arguments as separate argv elements and never builds a shell command by string concatenation:
+For a one-command build, use auto-compile mode. It disables `#line` source mapping by default, keeping the generated C free of source directives for ordinary compiler builds. Add `--line` explicitly when debugger/source mapping records are wanted. It keeps compiler arguments as separate argv elements and never builds a shell command by string concatenation:
 
 ```sh
 "$current_bin" --compile hello.basalt -o .tmp/hello.bin \

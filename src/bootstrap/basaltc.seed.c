@@ -1058,7 +1058,7 @@ int basalt_compile_argv(const char* compiler, const char* input_c, const char* o
 #line 6914 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
 int cli_arg_eq(char* a, char* b);
 
-#line 6977 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+#line 6983 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
 int main(int argc, char**argv);
 
 #line 10 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
@@ -37187,7 +37187,7 @@ else
 return 1;
 }
 
-#line 6977 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+#line 6983 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
 int main(int argc, char**argv){
 
 #line 6917 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
@@ -37200,260 +37200,288 @@ int output_index = (0-1);
 int auto_compile = 0;
 
 #line 6920 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-char* compiler = "cc";
+int line_explicit = 0;
 
 #line 6921 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-char* binary_path = "";
+char* compiler = "cc";
 
 #line 6922 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-int has_binary_path = 0;
+char* binary_path = "";
 
 #line 6923 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-int extra_start = 0;
+int has_binary_path = 0;
 
 #line 6924 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-int extra_count = 0;
+int extra_start = 0;
 
 #line 6925 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+int extra_count = 0;
+
+#line 6926 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
 int i = 1;
 
-#line 6958 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+#line 6961 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
 while(i<argc)
-#line 6958 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+#line 6961 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
 {
 
-#line 6957 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+#line 6960 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
 if(cli_arg_eq(argv[i], "--")==1)
-#line 6931 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+#line 6932 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
 {
-
-#line 6928 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-extra_start = (i+1);
 
 #line 6929 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-extra_count = ((argc-i)-1);
+extra_start = (i+1);
 
 #line 6930 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+extra_count = ((argc-i)-1);
+
+#line 6931 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
 i = argc;
 }
 else
-#line 6957 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+#line 6960 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
 if(cli_arg_eq(argv[i], "--line")==1)
-#line 6934 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+#line 6936 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
 {
-
-#line 6932 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-emit_line_directives = 1;
 
 #line 6933 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-i = (i+1);
-}
-else
-#line 6957 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-if(cli_arg_eq(argv[i], "--no-line")==1)
-#line 6937 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-{
+emit_line_directives = 1;
+
+#line 6934 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+line_explicit = 1;
 
 #line 6935 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-emit_line_directives = 0;
-
-#line 6936 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
 i = (i+1);
 }
 else
-#line 6957 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-if(cli_arg_eq(argv[i], "--compile")==1)
+#line 6960 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+if(cli_arg_eq(argv[i], "--no-line")==1)
 #line 6940 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
 {
 
+#line 6937 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+emit_line_directives = 0;
+
 #line 6938 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-auto_compile = 1;
+line_explicit = 1;
 
 #line 6939 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
 i = (i+1);
 }
 else
-#line 6957 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-if(cli_arg_eq(argv[i], "--cc")==1)
-#line 6944 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+#line 6960 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+if(cli_arg_eq(argv[i], "--compile")==1)
+#line 6943 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
 {
 
 #line 6941 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-if((i+1)>=argc)
-#line 6941 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-return 1;
-else
-#line 6941 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-{
-}
+auto_compile = 1;
 
 #line 6942 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-compiler = argv[(i+1)];
-
-#line 6943 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-i = (i+2);
-}
-else
-#line 6957 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-if(cli_arg_eq(argv[i], "-o")==1)
-#line 6949 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-{
-
-#line 6945 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-if((i+1)>=argc)
-#line 6945 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-return 1;
-else
-#line 6945 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-{
-}
-
-#line 6946 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-binary_path = argv[(i+1)];
-
-#line 6947 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-has_binary_path = 1;
-
-#line 6948 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-i = (i+2);
-}
-else
-#line 6957 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-if(input_index<0)
-#line 6952 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-{
-
-#line 6950 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-input_index = i;
-
-#line 6951 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
 i = (i+1);
 }
 else
-#line 6957 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-if(output_index<0)
+#line 6960 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+if(cli_arg_eq(argv[i], "--cc")==1)
+#line 6947 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+{
+
+#line 6944 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+if((i+1)>=argc)
+#line 6944 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+return 1;
+else
+#line 6944 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+{
+}
+
+#line 6945 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+compiler = argv[(i+1)];
+
+#line 6946 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+i = (i+2);
+}
+else
+#line 6960 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+if(cli_arg_eq(argv[i], "-o")==1)
+#line 6952 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+{
+
+#line 6948 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+if((i+1)>=argc)
+#line 6948 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+return 1;
+else
+#line 6948 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+{
+}
+
+#line 6949 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+binary_path = argv[(i+1)];
+
+#line 6950 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+has_binary_path = 1;
+
+#line 6951 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+i = (i+2);
+}
+else
+#line 6960 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+if(input_index<0)
 #line 6955 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
 {
 
 #line 6953 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-output_index = i;
+input_index = i;
 
 #line 6954 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
 i = (i+1);
 }
 else
-#line 6957 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+#line 6960 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+if(output_index<0)
+#line 6958 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
 {
 
 #line 6956 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-return 1;
-}
-}
+output_index = i;
 
-#line 6959 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-if(input_index<0)
-#line 6959 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-return 1;
+#line 6957 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+i = (i+1);
+}
 else
-#line 6959 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-{
-}
-
 #line 6960 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-int ok = pipeline_main(argv[input_index]);
-
-#line 6961 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-if(ok!=0)
-#line 6961 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-return ok;
-else
-#line 6961 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
 {
+
+#line 6959 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+return 1;
+}
 }
 
 #line 6962 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-char* c_path = "";
-
-#line 6963 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-int has_c_path = 0;
-
-#line 6965 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-if(output_index>=0)
-#line 6964 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-{
-
-#line 6964 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-c_path = argv[output_index];
-
-#line 6964 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-has_c_path = 1;
-}
+if(input_index<0)
+#line 6962 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+return 1;
 else
+#line 6962 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+{
+}
+
 #line 6965 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
 if(auto_compile==1)
 #line 6965 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
 {
 
-#line 6965 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-c_path = runtime_string_concat(argv[input_index], ".c");
-
-#line 6965 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-has_c_path = 1;
+#line 6964 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+if(line_explicit==0)
+#line 6964 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+emit_line_directives = 0;
+else
+#line 6964 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+{
+}
 }
 else
 #line 6965 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
 {
 }
 
-#line 6971 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-if(has_c_path==1)
-#line 6971 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-{
+#line 6966 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+int ok = pipeline_main(argv[input_index]);
 
-#line 6970 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-if(pipeline_root>0)
-#line 6970 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+#line 6967 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+if(ok!=0)
+#line 6967 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+return ok;
+else
+#line 6967 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
 {
+}
 
 #line 6968 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
-(void)(gen_program(pipeline_root));
+char* c_path = "";
 
 #line 6969 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+int has_c_path = 0;
+
+#line 6971 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+if(output_index>=0)
+#line 6970 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+{
+
+#line 6970 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+c_path = argv[output_index];
+
+#line 6970 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+has_c_path = 1;
+}
+else
+#line 6971 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+if(auto_compile==1)
+#line 6971 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+{
+
+#line 6971 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+c_path = runtime_string_concat(argv[input_index], ".c");
+
+#line 6971 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+has_c_path = 1;
+}
+else
+#line 6971 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+{
+}
+
+#line 6977 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+if(has_c_path==1)
+#line 6977 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+{
+
+#line 6976 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+if(pipeline_root>0)
+#line 6976 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+{
+
+#line 6974 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+(void)(gen_program(pipeline_root));
+
+#line 6975 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
 (void)(emit_c_file(c_path));
 }
 else
-#line 6970 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+#line 6976 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
 {
 }
 }
 else
-#line 6971 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+#line 6977 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
 {
 }
 
-#line 6975 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+#line 6981 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
 if(auto_compile==1)
-#line 6975 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+#line 6981 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
 {
 
-#line 6973 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+#line 6979 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
 if(has_binary_path==0)
-#line 6973 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+#line 6979 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
 binary_path = runtime_string_concat(argv[input_index], ".out");
 else
-#line 6973 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+#line 6979 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
 {
 }
 
-#line 6974 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+#line 6980 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
 return basalt_compile_argv(compiler, c_path, binary_path, argv, extra_start, extra_count);
 }
 else
-#line 6975 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+#line 6981 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
 {
 }
 
-#line 6976 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
+#line 6982 "/home/ubuntu/ash_github_publish/src/bootstrap/basaltc.basalt"
 return ok;
 return 0;
 }
