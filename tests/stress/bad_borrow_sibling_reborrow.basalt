@@ -1,0 +1,10 @@
+func main(): int {
+  let value: int = 1;
+  let root: int* = &mut value;
+  let shared_child: int* = &*root;
+  let sibling: int* = &mut value;
+  return *shared_child + *sibling;
+}
+
+// diagnostic.code: 37
+// diagnostic: mutable sibling borrow conflicts with a live shared reborrow

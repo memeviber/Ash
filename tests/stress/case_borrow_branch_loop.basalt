@@ -1,0 +1,30 @@
+func main(): int {
+  let value: int = 3;
+  let i: int = 0;
+  while i < 32 {
+    if i % 3 == 0 then {
+      let a: int* = &value;
+      {
+        let b: int* = &*a;
+        if *b != 3 then return 1;
+      }
+      if *a != 3 then return 2;
+    } else if i % 3 == 1 then {
+      let c: int* = &value;
+      let d: int* = &value;
+      if *c + *d != 6 then return 3;
+    } else {
+      let e: int* = &value;
+      if *e != 3 then return 4;
+    }
+    i = i + 1;
+  }
+  {
+    let root: int* = &mut value;
+    let child: int* = &mut *root;
+    *child = 13;
+  }
+  return value - 13;
+}
+
+// diagnostic: valid

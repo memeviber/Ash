@@ -1,0 +1,31 @@
+func identity_shared(borrow p: int*): int* {
+  return &*p;
+}
+
+func forward_shared(borrow p: int*): int* {
+  return identity_shared(p);
+}
+
+func identity_mutable(borrow_mut p: int*): int* {
+  return p;
+}
+
+func main(): int {
+  let first: int = 7;
+  let second: int = 12;
+  {
+    let shared: int* = forward_shared(&first);
+    if *shared != 7 then return 1;
+  }
+  {
+    let mutable: int* = identity_mutable(&mut first);
+    *mutable = 23;
+  }
+  {
+    let shared_second: int* = forward_shared(&second);
+    if *shared_second != 12 then return 2;
+  }
+  return first - 23;
+}
+
+// diagnostic: valid

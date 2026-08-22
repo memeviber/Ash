@@ -1,0 +1,31 @@
+func read_value(borrow p: int*): int {
+  return *p;
+}
+
+func main(): int {
+  let first_value: int = 11;
+  let second_value: int = 29;
+  {
+    let alias: int* = &first_value;
+    let i: int = 0;
+    while i < 18 {
+      if read_value(alias) != 11 then return 1;
+      alias = &second_value;
+      if *alias != 29 then return 2;
+      alias = &first_value;
+      i = i + 1;
+    }
+  }
+  {
+    let shared_a: int* = &first_value;
+    let shared_b: int* = &first_value;
+    if *shared_a + *shared_b != 22 then return 3;
+  }
+  {
+    let mutable: int* = &mut first_value;
+    *mutable = 41;
+  }
+  return first_value - 41;
+}
+
+// diagnostic: valid

@@ -1,0 +1,18 @@
+func identity_shared(borrow p: int*): int* {
+  return &*p;
+}
+
+func choose_shared(borrow first: int*, borrow second: int*): int* {
+  if 1 then return identity_shared(first);
+  else return identity_shared(second);
+}
+
+func main(): int {
+  let first: int = 1;
+  let second: int = 2;
+  let result: int* = choose_shared(&first, &second);
+  return *result;
+}
+
+// diagnostic.code: 69
+// diagnostic: return-borrow lifetime is ambiguous through a helper chain

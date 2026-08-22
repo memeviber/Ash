@@ -104,6 +104,10 @@ run_valid "$ROOT/tests/spec/valid/rust_borrow_valid.basalt"
 run_valid "$ROOT/tests/spec/valid/rust_borrow_flow_valid.basalt"
 run_valid "$ROOT/tests/spec/valid/rust_borrow_loop_move_valid.basalt"
 run_valid "$ROOT/tests/stress/case_borrow_lexical_nested.basalt"
+run_valid "$ROOT/tests/stress/case_borrow_alias_rebind.basalt"
+run_valid "$ROOT/tests/stress/case_borrow_branch_loop.basalt"
+run_valid "$ROOT/tests/stress/case_borrow_pointer_depth.basalt"
+run_valid "$ROOT/tests/stress/case_borrow_return_chain.basalt"
 run_stdlib_valid "$ROOT/tests/regression/stdlib_filesystem_path_string_test.basalt"
 run_stdlib_valid "$ROOT/tests/regression/stdlib_utf8_test.basalt"
 run_stdlib_valid "$ROOT/tests/regression/stdlib_time_process_format_random_test.basalt"
@@ -123,7 +127,11 @@ for source in \
   "$ROOT/tests/spec/invalid/rust_return_mixed_lifetime_invalid.basalt" \
   "$ROOT/tests/spec/invalid/rust_move_while_borrowed_invalid.basalt" \
   "$ROOT/tests/spec/invalid/rust_flow_shared_then_mut_invalid.basalt" \
-  "$ROOT/tests/stress/bad_borrow_loop_conflict.basalt"; do
+  "$ROOT/tests/stress/bad_borrow_loop_conflict.basalt" \
+  "$ROOT/tests/stress/bad_borrow_branch_join_conflict.basalt" \
+  "$ROOT/tests/stress/bad_borrow_global_const.basalt" \
+  "$ROOT/tests/stress/bad_borrow_sibling_reborrow.basalt" \
+  "$ROOT/tests/stress/bad_borrow_return_mixed_chain.basalt"; do
   run_invalid "$source"
 done
 

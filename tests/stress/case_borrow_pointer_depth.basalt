@@ -1,0 +1,20 @@
+func read_value(borrow p: int*): int {
+  return *p;
+}
+
+func main(): int {
+  let value: int = 5;
+  let direct: int* = &value;
+  {
+    let shared: int* = &*direct;
+    if read_value(shared) != 5 then return 1;
+  }
+  {
+    let mutable: int* = &mut *direct;
+    *mutable = 17;
+  }
+  if *direct != 17 then return 2;
+  return value - 17;
+}
+
+// diagnostic: valid

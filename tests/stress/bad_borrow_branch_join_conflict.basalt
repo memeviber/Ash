@@ -1,0 +1,19 @@
+func main(): int {
+  let value: int = 10;
+  let shared: int* = &value;
+  if 1 then {
+    let first: int* = &value;
+    if *first != 10 then return 1;
+  } else {
+    let second: int* = &value;
+    if *second != 10 then return 2;
+  }
+  {
+    let mutable: int* = &mut value;
+    *mutable = 20;
+  }
+  return *shared;
+}
+
+// diagnostic.code: 37
+// diagnostic: mutable borrow conflicts with an active shared loan after control-flow join

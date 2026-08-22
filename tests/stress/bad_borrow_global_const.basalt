@@ -1,0 +1,9 @@
+const LIMIT: int = 64;
+
+func main(): int {
+  let pointer: int* = &mut LIMIT;
+  return *pointer;
+}
+
+// diagnostic.code: 70
+// diagnostic: mutable borrow of a const place

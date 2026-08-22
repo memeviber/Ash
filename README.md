@@ -205,7 +205,7 @@ For a full overview of the language surface, see the [`tests`](tests) folder and
 | `src/bootstrap/` | Canonical self-hosting Basalt compiler source, generated C bootstrap artefact, and fixed-point checksum |
 | `src/stdlib/` | Generic containers, text/path APIs, OS boundaries, concurrency, formatting, randomness, and standard library modules |
 | `tests/regression/` | Focused language and compiler regression programs |
-| `tests/stress/` | The stress corpus, dedicated borrow-flow stress fixtures, modulo stress, and negative tests |
+| `tests/stress/` | The 174-case stress corpus, dedicated borrow-flow fixtures, modulo stress, and negative tests |
 | `tests/conformance/` | Host/Bootstrap conformance programs and runner material |
 | `tests/adversarial/` | Sanitizer-oriented and adversarial compiler tests |
 | `tests/benchmark/` | Cross-language benchmark source material |
