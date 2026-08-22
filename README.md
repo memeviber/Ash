@@ -1,4 +1,5 @@
 <p align="center">
+    <img src="basalt-logo.png" alt="Basalt Logo" width="200" /></p>
   <h1 align="center">Basalt Programming Language</h1>
   <p align="center">
     <img src="https://img.shields.io/badge/OCaml-Host%20Compiler-EC6813?style=for-the-badge&logo=ocaml" alt="OCaml Host Compiler" />
