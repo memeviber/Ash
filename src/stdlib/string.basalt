@@ -1,4 +1,29 @@
+include "array.basalt"
+includec "string_runtime.c"
+
+extern func str_alloc_owned(count: int): string;
+extern func str_free_owned(value: string): void;
+extern func str_copy_owned(data: char*, count: int): string;
+
 namespace str {
+  struct StringView {
+    source: string;
+    offset: int;
+    len: int;
+  }
+
+  func allocate(count: int): string {
+    return str_alloc_owned(count);
+  }
+
+  func free(value: string): void {
+    str_free_owned(value);
+  }
+
+  func from_buffer(data: char*, count: int): string {
+    return str_copy_owned(data, count);
+  }
+
   func byte_len(s: string): int {
     let i: int = 0;
     while s[i] != '\0' {
@@ -30,6 +55,183 @@ namespace str {
 
   func concat(a: string, b: string): string {
     return a ++ b;
+  }
+
+  func substring(s: string, start: int, count: int): string {
+    let begin: int = start;
+    let take: int = count;
+    let n: int = byte_len(s);
+    if begin < 0 then begin = 0;
+    if begin > n then begin = n;
+    if take < 0 then take = 0;
+    if take > n - begin then take = n - begin;
+    let out: string = str::allocate(take + 1);
+    let i: int = 0;
+    while i < take {
+      out[i] = s[begin + i];
+      i = i + 1;
+    }
+    out[take] = '\0';
+    return out;
+  }
+
+  func matches_at(s: string, offset: int, needle: string, needle_len: int): bool {
+    let j: int = 0;
+    while j < needle_len {
+      if s[offset + j] != needle[j] then return false;
+      j = j + 1;
+    }
+    return true;
+  }
+
+  func find(s: string, needle: string): int {
+    let n: int = byte_len(s);
+    let m: int = byte_len(needle);
+    if m == 0 then return 0;
+    if m > n then return (0 - 1);
+    let i: int = 0;
+    while i <= n - m {
+      if matches_at(s, i, needle, m) then return i;
+      i = i + 1;
+    }
+    return (0 - 1);
+  }
+
+  func starts_with(s: string, prefix: string): bool {
+    let n: int = byte_len(s);
+    let m: int = byte_len(prefix);
+    if m > n then return false;
+    let i: int = 0;
+    while i < m {
+      if s[i] != prefix[i] then return false;
+      i = i + 1;
+    }
+    return true;
+  }
+
+  func ends_with(s: string, suffix: string): bool {
+    let n: int = byte_len(s);
+    let m: int = byte_len(suffix);
+    if m > n then return false;
+    let i: int = 0;
+    while i < m {
+      if s[n - m + i] != suffix[i] then return false;
+      i = i + 1;
+    }
+    return true;
+  }
+
+  func trim(s: string): string {
+    let n: int = byte_len(s);
+    let begin: int = 0;
+    let end: int = n;
+    while begin < end {
+      let c: int = byte_at(s, begin);
+      if c != 9 && c != 10 && c != 13 && c != 32 then break;
+      begin = begin + 1;
+    }
+    while end > begin {
+      let c: int = byte_at(s, end - 1);
+      if c != 9 && c != 10 && c != 13 && c != 32 then break;
+      end = end - 1;
+    }
+    return substring(s, begin, end - begin);
+  }
+
+  func replace(s: string, from: string, to: string): string {
+    let from_len: int = byte_len(from);
+    let to_len: int = byte_len(to);
+    if from_len == 0 then return substring(s, 0, byte_len(s));
+    let count: int = 0;
+    let cursor: int = 0;
+    let n: int = byte_len(s);
+    while cursor <= n - from_len {
+      if matches_at(s, cursor, from, from_len) then {
+        count = count + 1;
+        cursor = cursor + from_len;
+      } else cursor = cursor + 1;
+    }
+    let out_len: int = n + count * (to_len - from_len);
+    if out_len < 0 then out_len = n;
+    let out: string = str::allocate(out_len + 1);
+    let in_pos: int = 0;
+    let out_pos: int = 0;
+    while in_pos < n {
+      let matched: int = 0;
+      if in_pos <= n - from_len && matches_at(s, in_pos, from, from_len) then matched = 1;
+      if matched == 1 then {
+        let j: int = 0;
+        while j < to_len { out[out_pos + j] = to[j]; j = j + 1; }
+        out_pos = out_pos + to_len;
+        in_pos = in_pos + from_len;
+      } else {
+        out[out_pos] = s[in_pos];
+        out_pos = out_pos + 1;
+        in_pos = in_pos + 1;
+      }
+    }
+    out[out_pos] = '\0';
+    return out;
+  }
+
+  func split(s: string, separator: string): array::Array<string> {
+    let out: array::Array<string> = array::new(4, "");
+    let sep_len: int = byte_len(separator);
+    let n: int = byte_len(s);
+    if sep_len == 0 then return array::push(out, substring(s, 0, n), "");
+    let begin: int = 0;
+    let cursor: int = 0;
+    while cursor <= n - sep_len {
+      let j: int = 0;
+      while j < sep_len && s[cursor + j] == separator[j] { j = j + 1; }
+      if j == sep_len then {
+        out = array::push(out, substring(s, begin, cursor - begin), "");
+        cursor = cursor + sep_len;
+        begin = cursor;
+      } else cursor = cursor + 1;
+    }
+    out = array::push(out, substring(s, begin, n - begin), "");
+    return out;
+  }
+
+  func split_free(parts: array::Array<string>): array::Array<string> {
+    let i: int = 0;
+    while i < parts.len {
+      str::free(parts.data[i]);
+      i = i + 1;
+    }
+    return array::free(parts);
+  }
+
+  func view(s: string, start: int, count: int): StringView {
+    let v: StringView = 0;
+    let begin: int = start;
+    let take: int = count;
+    let n: int = byte_len(s);
+    if begin < 0 then begin = 0;
+    if begin > n then begin = n;
+    if take < 0 then take = 0;
+    if take > n - begin then take = n - begin;
+    v.source = s;
+    v.offset = begin;
+    v.len = take;
+    return v;
+  }
+
+  func view_len(v: StringView): int { return v.len; }
+
+  func view_byte_at(v: StringView, index: int): int {
+    if index < 0 then return (0 - 1);
+    if index >= v.len then return (0 - 1);
+    return v.source[v.offset + index] & 255;
+  }
+
+  func view_to_string(v: StringView): string {
+    let out: string = str::allocate(v.len + 1);
+    let i: int = 0;
+    while i < v.len { out[i] = v.source[v.offset + i]; i = i + 1; }
+    out[v.len] = '\0';
+    return out;
   }
 
   // UTF-8 helpers. byte_len and byte_at are byte-oriented; codepoint_* APIs are UTF-8 aware.

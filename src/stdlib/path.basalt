@@ -1,0 +1,135 @@
+include "string.basalt"
+includec "path_runtime.c"
+
+extern func basalt_path_separator_char(): char;
+
+namespace path {
+  func is_separator(value: int): bool {
+    return value == '/' || value == '\\';
+  }
+
+  func separator(): char {
+    return basalt_path_separator_char();
+  }
+
+  func join(left: string, right: string): string {
+    let left_len: int = str::byte_len(left);
+    let right_len: int = str::byte_len(right);
+    let begin: int = 0;
+    while begin < right_len && is_separator(right[begin]) { begin = begin + 1; }
+    let end: int = left_len;
+    while end > 0 && is_separator(left[end - 1]) { end = end - 1; }
+    if end == 0 then {
+      if left_len > 0 then {
+        let rooted: string = str::allocate(1 + right_len - begin + 1);
+        rooted[0] = separator();
+        let rooted_i: int = 0;
+        while rooted_i < right_len - begin {
+          rooted[1 + rooted_i] = right[begin + rooted_i];
+          rooted_i = rooted_i + 1;
+        }
+        rooted[1 + right_len - begin] = '\0';
+        return rooted;
+      }
+      return str::substring(right, begin, right_len - begin);
+    }
+    if begin == right_len then return str::substring(left, 0, end);
+    let out: string = str::allocate(end + 1 + right_len - begin + 1);
+    let i: int = 0;
+    while i < end { out[i] = left[i]; i = i + 1; }
+    out[end] = separator();
+    i = 0;
+    while i < right_len - begin {
+      out[end + 1 + i] = right[begin + i];
+      i = i + 1;
+    }
+    out[end + 1 + right_len - begin] = '\0';
+    return out;
+  }
+
+  func normalize(value: string): string {
+    let n: int = str::byte_len(value);
+    let absolute: int = 0;
+    if n > 0 && is_separator(value[0]) then absolute = 1;
+    let parts: array::Array<string> = array::new(4, "");
+    let start: int = 0;
+    while start < n {
+      while start < n && is_separator(value[start]) { start = start + 1; }
+      let stop: int = start;
+      while stop < n && !is_separator(value[stop]) { stop = stop + 1; }
+      if stop > start then {
+        let part: string = str::substring(value, start, stop - start);
+        if str::eq(part, ".") == 1 then {
+          str::free(part);
+        } else {
+          if str::eq(part, "..") == 1 then {
+            if parts.len > 0 && str::eq(parts.data[parts.len - 1], "..") == 0 then {
+              str::free(parts.data[parts.len - 1]);
+              parts.len = parts.len - 1;
+              str::free(part);
+            } else {
+              if absolute == 1 then str::free(part);
+              else parts = array::push(parts, part, "");
+            }
+          } else {
+            parts = array::push(parts, part, "");
+          }
+        }
+      }
+      start = stop;
+    }
+    let out: string = str::substring(value, 0, 0);
+    if absolute == 1 then {
+      str::free(out);
+      out = str::substring(value, 0, 1);
+    }
+    let i: int = 0;
+    while i < parts.len {
+      let component: string = parts.data[i];
+      let next: string = "";
+      if str::byte_len(out) == 0 then next = str::substring(component, 0, str::byte_len(component));
+      else next = join(out, component);
+      str::free(out);
+      out = next;
+      str::free(component);
+      i = i + 1;
+    }
+    parts = array::free(parts);
+    if str::byte_len(out) == 0 then {
+      str::free(out);
+      if absolute == 1 then return str::substring(value, 0, 1);
+      return str::substring(".", 0, 1);
+    }
+    return out;
+  }
+
+  func basename(value: string): string {
+    let n: int = str::byte_len(value);
+    let end: int = n;
+    while end > 0 && is_separator(value[end - 1]) { end = end - 1; }
+    if end == 0 then return str::substring(value, 0, 0);
+    let start: int = end;
+    while start > 0 && !is_separator(value[start - 1]) { start = start - 1; }
+    return str::substring(value, start, end - start);
+  }
+
+  func extension(value: string): string {
+    let name: string = basename(value);
+    let n: int = str::byte_len(name);
+    let i: int = n;
+    while i > 0 {
+      i = i - 1;
+      if name[i] == '.' then {
+        if i == 0 || i == n - 1 then {
+          str::free(name);
+          return str::substring("", 0, 0);
+        }
+        let out: string = str::substring(name, i + 1, n - i - 1);
+        str::free(name);
+        return out;
+      }
+    }
+    str::free(name);
+    return str::substring("", 0, 0);
+  }
+}

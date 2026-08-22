@@ -1,3 +1,14 @@
+includec "concurrency_runtime.c"
+
+extern func basalt_mutex_make(): void*;
+extern func basalt_mutex_lock(value: void*): int;
+extern func basalt_mutex_unlock(value: void*): int;
+extern func basalt_mutex_free(value: void*): int;
+extern func basalt_cancel_make(): void*;
+extern func basalt_cancel_request(value: void*): int;
+extern func basalt_cancelled(value: void*): int;
+extern func basalt_cancel_free(value: void*): void;
+
 // C11 concurrency primitives exposed through a small, explicit Basalt API.
 //
 // Atomic operations use acquire/release or acq_rel ordering internally:
@@ -63,5 +74,37 @@ namespace concurrency {
 
   func thread_yield(): void {
     basalt_thread_yield();
+  }
+
+  func mutex_make(): void* {
+    return basalt_mutex_make();
+  }
+
+  func mutex_lock(value: void*): int {
+    return basalt_mutex_lock(value);
+  }
+
+  func mutex_unlock(value: void*): int {
+    return basalt_mutex_unlock(value);
+  }
+
+  func mutex_free(value: void*): int {
+    return basalt_mutex_free(value);
+  }
+
+  func cancel_make(): void* {
+    return basalt_cancel_make();
+  }
+
+  func cancel_request(value: void*): int {
+    return basalt_cancel_request(value);
+  }
+
+  func cancelled(value: void*): int {
+    return basalt_cancelled(value);
+  }
+
+  func cancel_free(value: void*): void {
+    basalt_cancel_free(value);
   }
 }

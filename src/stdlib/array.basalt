@@ -149,6 +149,22 @@ namespace array {
     return out;
   }
 
+  // Stable in-place insertion sort. Equal elements retain their input order.
+  func sort_stable<T>(a: Array<T>, before: fn(T, T): bool): Array<T> {
+    let i: int = 1;
+    while i < a.len {
+      let value: T = a.data[i];
+      let j: int = i;
+      while j > 0 && before(value, a.data[j - 1]) {
+        a.data[j] = a.data[j - 1];
+        j = j - 1;
+      }
+      a.data[j] = value;
+      i = i + 1;
+    }
+    return a;
+  }
+
   // Keep elements for which predicate returns true.
   func filter<T>(a: Array<T>, predicate: fn(T): bool, zero: T): Array<T> {
     let out: Array<T> = array::new(a.len, zero);

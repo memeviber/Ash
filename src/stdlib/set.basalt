@@ -1,0 +1,48 @@
+include "map.basalt"
+
+namespace set {
+  struct Set<K> {
+    inner: map::HashMap<K, int>;
+  }
+
+  func new<K>(key_zero: K): Set<K> {
+    let s: Set<K> = 0;
+    s.inner = map::new(key_zero, 0);
+    return s;
+  }
+
+  func with_hasher<K>(key_zero: K, hasher: fn(K): int, equals: fn(K, K): bool): Set<K> {
+    let s: Set<K> = 0;
+    s.inner = map::new_with_hasher(key_zero, 0, hasher, equals);
+    return s;
+  }
+
+  func insert<K>(s: Set<K>, key: K): Set<K> {
+    s.inner = map::put(s.inner, key, 1);
+    return s;
+  }
+
+  func contains<K>(s: Set<K>, key: K): bool {
+    return map::contains_key(s.inner, key);
+  }
+
+  func remove<K>(s: Set<K>, key: K): Set<K> {
+    s.inner = map::remove(s.inner, key);
+    return s;
+  }
+
+  func clear<K>(s: Set<K>): Set<K> {
+    s.inner = map::clear(s.inner);
+    return s;
+  }
+
+  func length<K>(s: Set<K>): int { return map::length(s.inner); }
+  func len<K>(s: Set<K>): int { return map::len(s.inner); }
+  func capacity<K>(s: Set<K>): int { return map::capacity(s.inner); }
+  func is_empty<K>(s: Set<K>): bool { return map::is_empty(s.inner); }
+
+  func free<K>(s: Set<K>): Set<K> {
+    s.inner = map::free(s.inner);
+    return s;
+  }
+}

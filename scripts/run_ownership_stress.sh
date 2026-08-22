@@ -50,6 +50,37 @@ run_valid() {
   printf 'PASS %s (Bootstrap accepted, strict GCC, sanitizer)\n' "$name"
 }
 
+run_stdlib_valid() {
+  local source=$1
+  local name
+  name=$(basename "$source" .basalt)
+  local dir="$OUT/$name"
+  mkdir -p "$dir"
+
+  if ! "$BOOT_BIN" "$source" "$dir/$name.boot.c" >"$dir/bootstrap.compile.out" 2>"$dir/bootstrap.compile.err"; then
+    printf 'FAIL %s: Bootstrap rejected stdlib fixture\n' "$name" >&2
+    return 1
+  fi
+
+  gcc "${STRICT_FLAGS[@]}" -pthread "$dir/$name.boot.c" -o "$dir/strict.bin" \
+    >"$dir/strict.gcc.out" 2>"$dir/strict.gcc.err"
+  (cd "$ROOT" && "$dir/strict.bin" >"$dir/strict.run.out" 2>"$dir/strict.run.err")
+
+  gcc "${SAN_FLAGS[@]}" -pthread "$dir/$name.boot.c" -o "$dir/san.bin" \
+    >"$dir/san.gcc.out" 2>"$dir/san.gcc.err"
+  if ! (cd "$ROOT" && ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
+      "$dir/san.bin" >"$dir/san.run.out" 2>"$dir/san.run.err"); then
+    printf 'FAIL %s: sanitizer execution failed\n' "$name" >&2
+    return 1
+  fi
+  if grep -Eqi 'ERROR:|runtime error:|LeakSanitizer|AddressSanitizer|UndefinedBehaviorSanitizer' \
+      "$dir/san.run.err"; then
+    printf 'FAIL %s: sanitizer diagnostics detected\n' "$name" >&2
+    return 1
+  fi
+  printf 'PASS %s (stdlib strict GCC, sanitizer)\n' "$name"
+}
+
 run_invalid() {
   local source=$1
   local name
@@ -69,6 +100,10 @@ run_invalid() {
 printf '%s\n' '[2/3] Running ownership fixtures.'
 run_valid "$ROOT/tests/stress/move_borrow_valid.basalt"
 run_valid "$ROOT/tests/spec/valid/ownership_lifetime_valid.basalt"
+run_stdlib_valid "$ROOT/tests/regression/stdlib_filesystem_path_string_test.basalt"
+run_stdlib_valid "$ROOT/tests/regression/stdlib_time_process_format_random_test.basalt"
+run_stdlib_valid "$ROOT/tests/regression/stdlib_concurrency_extended_test.basalt"
+run_stdlib_valid "$ROOT/tests/regression/string_builder_iter_test.basalt"
 for source in "$ROOT"/tests/stress/move_borrow_invalid_*.basalt; do
   run_invalid "$source"
 done

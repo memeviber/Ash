@@ -1,0 +1,125 @@
+include "option.basalt"
+
+namespace deque {
+  struct Deque<T> {
+    data: T*;
+    head: int;
+    len: int;
+    cap: int;
+    zero: T;
+  }
+
+  struct PopResult<T> {
+    deque: Deque<T>;
+    value: option::Option<T>;
+  }
+
+  func new<T>(capacity: int, zero: T): Deque<T> {
+    let d: Deque<T> = 0;
+    let cap: int = capacity;
+    if cap < 1 then cap = 4;
+    d.data = memory_alloc(cap, zero);
+    d.head = 0;
+    d.len = 0;
+    d.cap = cap;
+    d.zero = zero;
+    return d;
+  }
+
+  func grow<T>(d: Deque<T>, required: int): Deque<T> {
+    if required <= d.cap && d.data != 0 then return d;
+    let next: int = d.cap;
+    if next < 1 then next = 4;
+    while next < required {
+      let grown: int = next * 2;
+      if grown < next then { grown = required; }
+      next = grown;
+    }
+    let data: T* = memory_alloc(next, d.zero);
+    let i: int = 0;
+    while i < d.len {
+      data[i] = d.data[(d.head + i) % d.cap];
+      i = i + 1;
+    }
+    if d.data != 0 then memory_free(d.data);
+    d.data = data;
+    d.head = 0;
+    d.cap = next;
+    return d;
+  }
+
+  func push_back<T>(d: Deque<T>, value: T): Deque<T> {
+    d = deque::grow(d, d.len + 1);
+    d.data[(d.head + d.len) % d.cap] = value;
+    d.len = d.len + 1;
+    return d;
+  }
+
+  func push_front<T>(d: Deque<T>, value: T): Deque<T> {
+    d = deque::grow(d, d.len + 1);
+    d.head = (d.head + d.cap - 1) % d.cap;
+    d.data[d.head] = value;
+    d.len = d.len + 1;
+    return d;
+  }
+
+  func pop_front<T>(d: Deque<T>): PopResult<T> {
+    let out: PopResult<T> = 0;
+    if d.len < 1 then {
+      out.deque = d;
+      out.value = option::none(d.zero);
+      return out;
+    }
+    let value: T = d.data[d.head];
+    d.head = (d.head + 1) % d.cap;
+    d.len = d.len - 1;
+    out.deque = d;
+    out.value = option::some(value);
+    return out;
+  }
+
+  func pop_back<T>(d: Deque<T>): PopResult<T> {
+    let out: PopResult<T> = 0;
+    if d.len < 1 then {
+      out.deque = d;
+      out.value = option::none(d.zero);
+      return out;
+    }
+    let pos: int = (d.head + d.len - 1) % d.cap;
+    let value: T = d.data[pos];
+    d.len = d.len - 1;
+    out.deque = d;
+    out.value = option::some(value);
+    return out;
+  }
+
+  func front_or<T>(d: Deque<T>, fallback: T): T {
+    if d.len < 1 then return fallback;
+    return d.data[d.head];
+  }
+
+  func back_or<T>(d: Deque<T>, fallback: T): T {
+    if d.len < 1 then return fallback;
+    return d.data[(d.head + d.len - 1) % d.cap];
+  }
+
+  func clear<T>(d: Deque<T>): Deque<T> {
+    d.head = 0;
+    d.len = 0;
+    return d;
+  }
+
+  func length<T>(d: Deque<T>): int { return d.len; }
+  func len<T>(d: Deque<T>): int { return d.len; }
+  func capacity<T>(d: Deque<T>): int { return d.cap; }
+  func is_empty<T>(d: Deque<T>): bool { return d.len == 0; }
+
+  func free<T>(d: Deque<T>): Deque<T> {
+    if d.data != 0 then memory_free(d.data);
+    d.data = 0;
+    d.head = 0;
+    d.len = 0;
+    d.cap = 0;
+    return d;
+  }
+}

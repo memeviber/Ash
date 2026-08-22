@@ -1,0 +1,107 @@
+include "../../src/stdlib/array.basalt"
+include "../../src/stdlib/format.basalt"
+include "../../src/stdlib/process.basalt"
+include "../../src/stdlib/random.basalt"
+include "../../src/stdlib/string.basalt"
+include "../../src/stdlib/time.basalt"
+
+func main(): int {
+  let status: int = 0;
+
+  let wall: result::Result<i64, int> = time::wall_seconds();
+  if wall.ok == 0 || wall.value < 0 then status = 1;
+  let start_result: result::Result<i64, int> = time::monotonic_ns();
+  if start_result.ok == 0 then status = 2;
+  let zero_duration: result::Result<time::Duration, int> = time::duration_ms(0);
+  if zero_duration.ok == 0 then status = 3;
+  if start_result.ok == 1 && zero_duration.ok == 1 then {
+    let elapsed_now: result::Result<bool, int> = time::elapsed(start_result.value, zero_duration.value);
+    if elapsed_now.ok == 0 || elapsed_now.value == false then status = 4;
+  }
+  let negative_duration: result::Result<time::Duration, int> = time::duration_ms((0 - 1));
+  if negative_duration.ok == 1 || negative_duration.error != 1 then status = 5;
+  let bad_elapsed: result::Result<bool, int> = time::elapsed((0 - 1), zero_duration.value);
+  if bad_elapsed.ok == 1 || bad_elapsed.error != 1 then status = 6;
+  let slept: result::Result<bool, int> = time::sleep_ms(0);
+  if slept.ok == 0 then status = 7;
+
+  let formatter: format::Formatter = format::new();
+  formatter = format::append_string(formatter, "n=");
+  formatter = format::append_int(formatter, 42);
+  formatter = format::append_char(formatter, ':');
+  formatter = format::append_i64(formatter, 9000000000);
+  formatter = format::append_char(formatter, ':');
+  formatter = format::append_f64(formatter, 1.25);
+  if format::length(formatter) != 20 then status = 8;
+  let formatted_result: format::FinishResult = format::finish(formatter);
+  formatter = formatted_result.formatter;
+  let formatted: string = formatted_result.value;
+  if str::eq(formatted, "n=42:9000000000:1.25") == 0 then status = 9;
+  str::free(formatted);
+  formatter = format::free(formatter);
+
+  let rng_a: random::Rng = random::seed(123456789);
+  let rng_b: random::Rng = random::seed(123456789);
+  let a_first: u64 = random::next_u64(rng_a);
+  let b_first: u64 = random::next_u64(rng_b);
+  if a_first != b_first then status = 10;
+  if random::next_u64(rng_a) != random::next_u64(rng_b) then status = 11;
+  let bounded_zero: result::Result<u64, int> = random::next_bounded(rng_a, 0);
+  if bounded_zero.ok == 1 || bounded_zero.error != 1 then status = 12;
+  let bounded: result::Result<u64, int> = random::next_bounded(rng_a, 17);
+  if bounded.ok == 0 || bounded.value >= 17 then status = 13;
+  let random_float: f64 = random::next_float(rng_a);
+  if random_float < 0.0 || random_float >= 1.0 then status = 14;
+  rng_a = random::free(rng_a);
+  rng_b = random::free(rng_b);
+
+  let seeded: result::Result<random::Rng, int> = random::try_seed(987654321);
+  if seeded.ok == 0 then status = 15;
+  if seeded.ok == 1 then {
+    let seeded_rng: random::Rng = seeded.value;
+    if random::next_u64(seeded_rng) == 0 then status = 16;
+    random::free(seeded_rng);
+  }
+  let entropy: result::Result<u64, int> = random::entropy_u64();
+  if entropy.ok == 0 && entropy.error != 2 then status = 17;
+
+  let variable_name: string = "BASALT_STDLIB_PROCESS_TEST";
+  let variable_value: string = "safe-value";
+  let set_result: result::Result<bool, int> = process::setenv(variable_name, variable_value);
+  if set_result.ok == 0 then status = 18;
+  let got: result::Result<string, int> = process::getenv(variable_name);
+  if got.ok == 0 || str::eq(got.value, variable_value) == 0 then status = 19;
+  str::free(got.value);
+  let current: result::Result<string, int> = process::cwd();
+  if current.ok == 0 then status = 20;
+  if current.ok == 1 then {
+    let changed: result::Result<bool, int> = process::chdir(current.value);
+    if changed.ok == 0 then status = 21;
+    str::free(current.value);
+  }
+  let unset_result: result::Result<bool, int> = process::unsetenv(variable_name);
+  if unset_result.ok == 0 then status = 22;
+
+  let no_args: array::Array<string> = array::new(1, "");
+  let child: result::Result<void*, int> = process::spawn("true", no_args);
+  if child.ok == 0 then status = 23;
+  if child.ok == 1 then {
+    let premature_free: result::Result<bool, int> = process::free(child.value);
+    if premature_free.ok == 1 || premature_free.error != 6 then status = 24;
+    let child_status: result::Result<int, int> = process::wait(child.value);
+    if child_status.ok == 0 || child_status.value != 0 then status = 25;
+  }
+  no_args = array::free(no_args);
+
+  let second_child: result::Result<void*, int> = process::spawn("true", no_args);
+  if second_child.ok == 1 then {
+    let timeout_result: result::Result<int, int> = process::wait_timeout(second_child.value, (0 - 1));
+    if timeout_result.ok == 1 || (timeout_result.error != 1 && timeout_result.error != 8) then status = 26;
+    let second_wait: result::Result<int, int> = process::wait(second_child.value);
+    if second_wait.ok == 0 || second_wait.value != 0 then status = 27;
+  }
+  let missing_child: result::Result<void*, int> = process::spawn("basalt-program-that-does-not-exist", no_args);
+  if missing_child.ok == 1 then status = 28;
+
+  return status;
+}

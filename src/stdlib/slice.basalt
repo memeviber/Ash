@@ -98,6 +98,21 @@ namespace slice {
     return out;
   }
 
+  func sort_stable<T>(s: Slice<T>, before: fn(T, T): bool): Slice<T> {
+    let i: int = 1;
+    while i < s.len {
+      let value: T = s.data[i];
+      let j: int = i;
+      while j > 0 && before(value, s.data[j - 1]) {
+        s.data[j] = s.data[j - 1];
+        j = j - 1;
+      }
+      s.data[j] = value;
+      i = i + 1;
+    }
+    return s;
+  }
+
   func filter<T>(s: Slice<T>, predicate: fn(T): bool): Slice<T> {
     let out: Slice<T> = slice::with_capacity(s.len, s.zero);
     let i: int = 0;

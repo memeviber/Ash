@@ -559,17 +559,85 @@ func main(): int {
 
 ## 6. The standard library
 
-| Module | File | Contents |
+Basalt's standard library is namespace-qualified and is implemented in Basalt except for small, audited C11/POSIX/Windows boundary shims. Heap-backed values are returned by value, so a mutating operation must be assigned back to the owner. The exact ownership and error contract is maintained in [`STDLIB_API.md`](STDLIB_API.md).
+
+| Module | File | Main capabilities |
 | --- | --- | --- |
-| `array` | `src/stdlib/array.basalt` | Owned dynamic arrays: `new`, `push`, `get`, `set`, `len`, `free` |
-| `slice` | `src/stdlib/slice.basalt` | Lightweight slices over arrays |
-| `map` | `src/stdlib/map.basalt` | Hash map: `new`, `put`, `get_or`, `remove`, `free` |
-| `option` | `src/stdlib/option.basalt` | `Option<T>`: `some`, `none`, `is_some`, `is_none`, `unwrap_or` |
-| `result` | `src/stdlib/result.basalt` | `Result<T, E>`: `ok`, `err`, `is_ok`, `is_err`, `unwrap_or`, `error_or` |
-| `string` | `src/stdlib/string.basalt` | `byte_len`, `byte_at`, `eq`, and string helpers |
+| `array` | `src/stdlib/array.basalt` | Generic owned dynamic arrays, growth, reserve, map, filter, slicing, and stable sort |
+| `slice` | `src/stdlib/slice.basalt` | Generic growable slice values with indexing, map, filter, and stable sort |
+| `map` | `src/stdlib/map.basalt` | Generic open-addressed `HashMap<K,V>`, custom hash/equality, growth, removal, and clear |
+| `set` | `src/stdlib/set.basalt` | Generic set built on the map implementation, insertion/removal/membership, and iteration |
+| `deque` | `src/stdlib/deque.basalt` | Generic ring-buffer double-ended queue; `push_front`, `push_back`, and ownership-safe pop results |
+| `iter` | `src/stdlib/iter.basalt` | Iterators and `for_each`/`any`/`all`/`fold` helpers for arrays, slices, maps, sets, and deques |
+| `option` | `src/stdlib/option.basalt` | Total `Option<T>` operations such as `some`, `none`, `map`, `filter`, and fallback access |
+| `result` | `src/stdlib/result.basalt` | Generic `Result<T,E>` construction, inspection, mapping, composition, and fallback access |
+| `string` | `src/stdlib/string.basalt` | Byte-oriented UTF-8 validation, search, substring, trim, replacement, split, and `StringView` |
+| `string_builder` | `src/stdlib/string_builder.basalt` | Owned append buffer and ownership-safe `finish` returning value plus reset builder |
+| `path` | `src/stdlib/path.basalt` | Platform separator, root-aware join, normalization, basename, and extension |
+| `filesystem` | `src/stdlib/filesystem.basalt` | Result-based text file open/read/write/close, metadata, directory listing, and cleanup |
+| `time` | `src/stdlib/time.basalt` | Monotonic and wall clocks, durations, elapsed checks, and sleep |
+| `process` | `src/stdlib/process.basalt` | Environment, working directory, bounded stdin, argv-safe process handles, wait, timeout, and signal |
+| `concurrency` | `src/stdlib/concurrency.basalt` | Atomics, bounded channels, threads, mutexes, and cooperative cancellation |
+| `format` | `src/stdlib/format.basalt` | Typed fixed-format integer, character, floating-point, and string appends |
+| `random` | `src/stdlib/random.basalt` | Deterministic SplitMix64 PRNG, bounded sampling, floating output, and OS entropy |
+| `io` | `src/stdlib/io.basalt` | Standard input/output helpers, including line and integer input |
 | `sys` | `src/stdlib/sys.basalt` | Structured argv-oriented process execution and bounded stdout/stderr capture |
 
-All modules are **generic** and namespace-qualified:
+### 6.1 Generic collections and iterators
+
+`array::Array<T>`, `slice::Slice<T>`, `map::HashMap<K,V>`, `set::Set<K>`, and `deque::Deque<T>` support typed values rather than an int-only special case. Arrays, slices, maps, and deques grow through their own `reserve`/`ensure_capacity` policy; callers do not call a separate raw memory module. Stable sorting takes a typed comparison function and preserves the relative order of equivalent elements.
+
+Because Basalt passes structs by value, operations that change ownership or cursor state return the updated value. A deque pop therefore returns `deque::PopResult<T>`, containing both `deque` and `option::Option<T>`:
+
+```basalt
+include "../../src/stdlib/deque.basalt"
+include "../../src/stdlib/option.basalt"
+
+func main(): int {
+  let queue: deque::Deque<int> = deque::new(2, 0);
+  queue = deque::push_back(queue, 10);
+  queue = deque::push_back(queue, 20);
+  let popped: deque::PopResult<int> = deque::pop_front(queue);
+  queue = popped.deque;
+  print option::unwrap_or(popped.value, 0); // 10
+  queue = deque::free(queue);
+  return 0;
+}
+```
+
+An iterator has the same explicit progression rule. Assign `step.iterator` after every `next` call; an exhausted iterator returns an absent option. Map iteration visits occupied buckets, while set iteration uses the set's underlying key/state arrays without copying or freeing the collection.
+
+### 6.2 Strings, views, builders, and paths
+
+The `string` module is **byte-oriented**. `byte_len`, `byte_at`, and `StringView` use UTF-8 storage offsets; `utf8_validate`, `codepoint_len`, and `codepoint_at` provide validation and basic code-point queries. A view is non-owning and is represented as `{source, offset, len}`, not as an independently allocated pointer. `view_to_string`, `substring`, `trim`, `replace`, `split`, and `concat` return owned strings or owned string arrays and must be released with the matching helper.
+
+`StringView` does not keep the source alive. It must not outlive or outlast the source string's ownership, and its offsets are byte offsets. This deliberate representation avoids unsupported string-pointer arithmetic in the Bootstrap type checker.
+
+`string_builder::finish` and `format::finish` return a result struct containing the produced owned string and a reset builder/formatter. The caller must assign the returned builder field before freeing it. This prevents a by-value struct copy from leaving two owners for the same buffer.
+
+`path::join` is root-aware, `normalize` removes `.` and resolves lexical `..` components while preserving the appropriate root/relative form, and `basename`/`extension` use both the platform separator and the accepted alternate separator. Path functions return owned strings. Filesystem reads are intentionally text-oriented: the result is NUL-terminated and is not a binary buffer API, so arbitrary embedded NUL bytes are not faithfully represented.
+
+### 6.3 Filesystem and time
+
+Filesystem functions return `result::Result<..., int>`. The public error categories include `1` for invalid argument or handle, `2` for a missing path, `3` for permission failure, and `5` for directory end-of-stream. `filesystem::directory` returns an owned `array::Array<string>`; release every entry with `filesystem::free_entries`, including an error path's partially built list.
+
+`time::monotonic_ns` is suitable for elapsed measurements and `time::wall_seconds` is a wall-clock timestamp. `time::duration_ms` validates nonnegative durations, `time::elapsed` compares a start timestamp with a duration, and `time::sleep_ms` may return an operating-system error. These APIs do not treat wall-clock adjustment as a valid monotonic timeout source.
+
+### 6.4 Process and concurrency boundaries
+
+The `process` module passes executable names and argument arrays directly to the operating system; it does not construct a shell command. On POSIX, an exec-error pipe reports lookup/setup failures to the parent before a process handle is returned. A successful handle must be reaped with `wait` or a supported wait operation. `process::free` rejects an un-awaited handle with error `6` rather than silently creating a zombie. Timeout and signal support return the documented unsupported error `8` on Windows where the implementation cannot provide the same capability.
+
+Environment and working-directory strings returned by `process::getenv` and `process::cwd` are owned copies. `stdin_line` is bounded by its requested length. Callers must inspect every `Result` and release successful owned strings.
+
+Concurrency handles are opaque runtime resources. Atomics provide load/store/fetch-add/compare-exchange, channels are bounded and closeable, threads must be joined, mutexes must be unlocked before release, and cancellation is cooperative: a worker must poll `cancelled(handle)`. Invalid handles return an error status where the API exposes one; no operation makes an invalid opaque pointer valid.
+
+### 6.5 Formatting and randomness
+
+`format` accepts typed values through separate functions rather than accepting a user-controlled C `printf` format string. `append_int`, `append_i64`, `append_f64`, `append_char`, and `append_string` use fixed internal conversion formats. The formatter's result is an owned string and follows the same reset-builder ownership rule described above.
+
+`random::seed` creates a deterministic SplitMix64 generator. Equal seeds produce equal sequences on the same Basalt ABI, and `next_bounded` rejects a zero bound. `random::try_seed` exposes allocation failure as a `Result`; `entropy_u64` uses the operating-system source where available and reports an error rather than claiming cryptographic guarantees for an unavailable platform source. The deterministic generator is reproducible, not a substitute for cryptographic randomness.
+
+All modules are **generic** and namespace-qualified. A minimal map example is:
 
 ```basalt
 include "../../src/stdlib/map.basalt"

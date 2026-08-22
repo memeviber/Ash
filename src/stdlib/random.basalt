@@ -1,0 +1,62 @@
+includec "random_runtime.c"
+include "result.basalt"
+
+extern func basalt_random_status(): int;
+extern func basalt_random_seed(seed: u64): void*;
+extern func basalt_random_next_u64(rng: void*): u64;
+extern func basalt_random_next_u32(rng: void*): u32;
+extern func basalt_random_next_bounded(rng: void*, bound: u64): u64;
+extern func basalt_random_next_float(rng: void*): f64;
+extern func basalt_random_entropy(output: u64*): int;
+extern func basalt_random_free(rng: void*): void;
+
+namespace random {
+  struct Rng {
+    handle: void*;
+  }
+
+  func seed(value: u64): Rng {
+    let rng: Rng = 0;
+    rng.handle = basalt_random_seed(value);
+    return rng;
+  }
+
+  func try_seed(value: u64): result::Result<Rng, int> {
+    let rng: Rng = random::seed(value);
+    let code: int = basalt_random_status();
+    if code != 0 then return result::err(rng, code);
+    return result::ok(rng, 0);
+  }
+
+  func next_u64(rng: Rng): u64 {
+    return basalt_random_next_u64(rng.handle);
+  }
+
+  func next_u32(rng: Rng): u32 {
+    return basalt_random_next_u32(rng.handle);
+  }
+
+  func next_bounded(rng: Rng, bound: u64): result::Result<u64, int> {
+    let value: u64 = basalt_random_next_bounded(rng.handle, bound);
+    let code: int = basalt_random_status();
+    if code != 0 then return result::err(value, code);
+    return result::ok(value, 0);
+  }
+
+  func next_float(rng: Rng): f64 {
+    return basalt_random_next_float(rng.handle);
+  }
+
+  func entropy_u64(): result::Result<u64, int> {
+    let value: u64 = 0;
+    let status: int = basalt_random_entropy(&value);
+    if status != 0 then return result::err(value, status);
+    return result::ok(value, 0);
+  }
+
+  func free(rng: Rng): Rng {
+    basalt_random_free(rng.handle);
+    rng.handle = 0;
+    return rng;
+  }
+}

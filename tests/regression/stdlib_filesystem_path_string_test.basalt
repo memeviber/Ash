@@ -1,0 +1,105 @@
+include "../../src/stdlib/array.basalt"
+include "../../src/stdlib/filesystem.basalt"
+include "../../src/stdlib/path.basalt"
+include "../../src/stdlib/string.basalt"
+
+func main(): int {
+  let status: int = 0;
+
+  let text_value: string = "  alpha::beta::::  ";
+  let trimmed: string = str::trim(text_value);
+  if str::eq(trimmed, "alpha::beta::::") == 0 then status = 1;
+  if str::find(trimmed, "beta") != 7 then status = 2;
+  if str::find(trimmed, "missing") != (0 - 1) then status = 3;
+  if str::starts_with(trimmed, "alpha") == false then status = 4;
+  if str::ends_with(trimmed, "::") == false then status = 5;
+  let replaced: string = str::replace(trimmed, "::", "/");
+  if str::eq(replaced, "alpha/beta//") == 0 then status = 6;
+  let pieces: array::Array<string> = str::split(trimmed, "::");
+  if pieces.len != 4 then status = 7;
+  if str::eq(pieces.data[0], "alpha") == 0 then status = 8;
+  if str::eq(pieces.data[1], "beta") == 0 then status = 9;
+  if str::eq(pieces.data[3], "") == 0 then status = 10;
+  pieces = str::split_free(pieces);
+  str::free(trimmed);
+  str::free(replaced);
+
+  let utf: string = "héh";
+  if str::utf8_validate(utf) == false then status = 11;
+  if str::byte_len(utf) != 4 then status = 12;
+  if str::codepoint_len(utf) != 3 then status = 13;
+  if str::codepoint_at(utf, 1) != 233 then status = 14;
+  let view: str::StringView = str::view(utf, 1, 2);
+  if str::view_len(view) != 2 then status = 15;
+  if str::view_byte_at(view, 0) != 195 then status = 16;
+  if str::view_byte_at(view, 1) != 169 then status = 17;
+  if str::view_byte_at(view, 2) != (0 - 1) then status = 18;
+  let view_copy: string = str::view_to_string(view);
+  if str::eq(view_copy, "é") == 0 then status = 19;
+  str::free(view_copy);
+
+  let joined: string = path::join("/tmp/", "/Basalt/");
+  if str::eq(joined, "/tmp/Basalt/") == 0 then status = 20;
+  let normalized: string = path::normalize("/tmp/./Basalt/../stdlib");
+  if str::eq(normalized, "/tmp/stdlib") == 0 then status = 21;
+  let relative: string = path::normalize("a/../b/./c");
+  if str::eq(relative, "b/c") == 0 then status = 22;
+  let base: string = path::basename("/tmp/Basalt/main.basalt");
+  let ext: string = path::extension("/tmp/Basalt/main.basalt");
+  if str::eq(base, "main.basalt") == 0 then status = 23;
+  if str::eq(ext, "basalt") == 0 then status = 24;
+  let hidden_ext: string = path::extension(".profile");
+  if str::eq(hidden_ext, "") == 0 then status = 25;
+  if path::separator() != '/' && path::separator() != '\\' then status = 26;
+  str::free(joined);
+  str::free(normalized);
+  str::free(relative);
+  str::free(base);
+  str::free(ext);
+  str::free(hidden_ext);
+
+  let file_path: string = ".tmp/basalt-stdlib-fs-test.txt";
+  let opened: result::Result<void*, int> = filesystem::open(file_path, "w");
+  if opened.ok == 0 then status = 27;
+  if opened.ok == 1 then {
+    let written: result::Result<int, int> = filesystem::write(opened.value, "Basalt-data");
+    if written.ok == 0 || written.value != 11 then status = 28;
+    let closed: result::Result<int, int> = filesystem::close(opened.value);
+    if closed.ok == 0 then status = 29;
+    let closed_again: result::Result<int, int> = filesystem::close(opened.value);
+    if closed_again.ok == 1 || closed_again.error != 1 then status = 30;
+  }
+
+  let read_open: result::Result<void*, int> = filesystem::open(file_path, "r");
+  if read_open.ok == 0 then status = 31;
+  if read_open.ok == 1 then {
+    let content: result::Result<string, int> = filesystem::read(read_open.value, 64);
+    if content.ok == 0 then status = 32;
+    if content.ok == 1 then {
+      if str::eq(content.value, "Basalt-data") == 0 then status = 33;
+      str::free(content.value);
+    }
+    let read_closed: result::Result<int, int> = filesystem::close(read_open.value);
+    if read_closed.ok == 0 then status = 34;
+  }
+
+  let info: result::Result<filesystem::Metadata, int> = filesystem::metadata(file_path);
+  if info.ok == 0 || info.value.kind != 1 || info.value.size < 11 then status = 35;
+  let missing: result::Result<void*, int> = filesystem::open(".tmp/basalt-no-such-file", "r");
+  if missing.ok == 1 || missing.error != 2 then status = 36;
+  let entries_result: result::Result<array::Array<string>, int> = filesystem::directory(".tmp");
+  if entries_result.ok == 0 then status = 37;
+  if entries_result.ok == 1 then {
+    let entries: array::Array<string> = entries_result.value;
+    let found: int = 0;
+    let i: int = 0;
+    while i < entries.len {
+      if str::eq(entries.data[i], "basalt-stdlib-fs-test.txt") == 1 then found = 1;
+      i = i + 1;
+    }
+    if found == 0 then status = 38;
+    filesystem::free_entries(entries);
+  }
+
+  return status;
+}

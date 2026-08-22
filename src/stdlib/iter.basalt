@@ -1,4 +1,44 @@
+include "array.basalt"
+include "slice.basalt"
+include "map.basalt"
+include "set.basalt"
+include "deque.basalt"
+include "option.basalt"
+
 namespace array {
+  struct Iterator<T> {
+    data: T*;
+    len: int;
+    index: int;
+    zero: T;
+  }
+
+  struct NextResult<T> {
+    iterator: Iterator<T>;
+    value: option::Option<T>;
+  }
+
+  func iter<T>(a: array::Array<T>, zero: T): Iterator<T> {
+    let out: Iterator<T> = 0;
+    out.data = a.data;
+    out.len = a.len;
+    out.index = 0;
+    out.zero = zero;
+    return out;
+  }
+
+  func next<T>(iterator: Iterator<T>): NextResult<T> {
+    let out: NextResult<T> = 0;
+    out.iterator = iterator;
+    if iterator.index >= iterator.len then {
+      out.value = option::none(iterator.zero);
+      return out;
+    }
+    out.value = option::some(iterator.data[iterator.index]);
+    out.iterator.index = iterator.index + 1;
+    return out;
+  }
+
   func for_each<T>(a: array::Array<T>, visit: fn(T): void): void {
     let i: int = 0;
     while i < a.len {
@@ -37,6 +77,39 @@ namespace array {
 }
 
 namespace slice {
+  struct Iterator<T> {
+    data: T*;
+    len: int;
+    index: int;
+    zero: T;
+  }
+
+  struct NextResult<T> {
+    iterator: Iterator<T>;
+    value: option::Option<T>;
+  }
+
+  func iter<T>(s: slice::Slice<T>): Iterator<T> {
+    let out: Iterator<T> = 0;
+    out.data = s.data;
+    out.len = s.len;
+    out.index = 0;
+    out.zero = s.zero;
+    return out;
+  }
+
+  func next<T>(iterator: Iterator<T>): NextResult<T> {
+    let out: NextResult<T> = 0;
+    out.iterator = iterator;
+    if iterator.index >= iterator.len then {
+      out.value = option::none(iterator.zero);
+      return out;
+    }
+    out.value = option::some(iterator.data[iterator.index]);
+    out.iterator.index = iterator.index + 1;
+    return out;
+  }
+
   func for_each<T>(s: slice::Slice<T>, visit: fn(T): void): void {
     let i: int = 0;
     while i < s.len {
@@ -75,6 +148,59 @@ namespace slice {
 }
 
 namespace map {
+  struct Entry<K, V> {
+    key: K;
+    value: V;
+  }
+
+  struct Iterator<K, V> {
+    keys: K*;
+    values: V*;
+    states: int*;
+    cap: int;
+    index: int;
+    key_zero: K;
+    value_zero: V;
+  }
+
+  struct NextResult<K, V> {
+    iterator: Iterator<K, V>;
+    value: option::Option<Entry<K, V> >;
+  }
+
+  func iter<K, V>(m: map::HashMap<K, V>): Iterator<K, V> {
+    let out: Iterator<K, V> = 0;
+    out.keys = m.keys;
+    out.values = m.values;
+    out.states = m.states;
+    out.cap = m.cap;
+    out.index = 0;
+    out.key_zero = m.key_zero;
+    out.value_zero = m.value_zero;
+    return out;
+  }
+
+  func next<K, V>(iterator: Iterator<K, V>): NextResult<K, V> {
+    let out: NextResult<K, V> = 0;
+    let index: int = iterator.index;
+    while index < iterator.cap && iterator.states[index] != 1 { index = index + 1; }
+    out.iterator = iterator;
+    out.iterator.index = index;
+    if index >= iterator.cap then {
+      let empty: Entry<K, V> = 0;
+      empty.key = iterator.key_zero;
+      empty.value = iterator.value_zero;
+      out.value = option::none(empty);
+      return out;
+    }
+    let entry: Entry<K, V> = 0;
+    entry.key = iterator.keys[index];
+    entry.value = iterator.values[index];
+    out.value = option::some(entry);
+    out.iterator.index = index + 1;
+    return out;
+  }
+
   func for_each<K, V>(m: map::HashMap<K, V>, visit: fn(K, V): void): void {
     let i: int = 0;
     while i < m.cap {
@@ -82,6 +208,118 @@ namespace map {
         visit(m.keys[i], m.values[i]);
       }
       i = i + 1;
+    }
+  }
+}
+
+namespace set {
+  struct Iterator<K> {
+    keys: K*;
+    states: int*;
+    cap: int;
+    index: int;
+    key_zero: K;
+  }
+
+  struct NextResult<K> {
+    iterator: Iterator<K>;
+    value: option::Option<K>;
+  }
+
+  func iter<K>(s: set::Set<K>): Iterator<K> {
+    let out: Iterator<K> = 0;
+    out.keys = s.inner.keys;
+    out.states = s.inner.states;
+    out.cap = s.inner.cap;
+    out.index = 0;
+    out.key_zero = s.inner.key_zero;
+    return out;
+  }
+
+  func next<K>(iterator: Iterator<K>): NextResult<K> {
+    let out: NextResult<K> = 0;
+    let index: int = iterator.index;
+    while index < iterator.cap && iterator.states[index] != 1 { index = index + 1; }
+    out.iterator = iterator;
+    out.iterator.index = index;
+    if index >= iterator.cap then {
+      out.value = option::none(iterator.key_zero);
+      return out;
+    }
+    out.value = option::some(iterator.keys[index]);
+    out.iterator.index = index + 1;
+    return out;
+  }
+}
+
+namespace deque {
+  struct Iterator<T> {
+    data: T*;
+    head: int;
+    len: int;
+    cap: int;
+    index: int;
+    zero: T;
+  }
+
+  struct NextResult<T> {
+    iterator: Iterator<T>;
+    value: option::Option<T>;
+  }
+
+  func iter<T>(d: deque::Deque<T>): Iterator<T> {
+    let out: Iterator<T> = 0;
+    out.data = d.data;
+    out.head = d.head;
+    out.len = d.len;
+    out.cap = d.cap;
+    out.index = 0;
+    out.zero = d.zero;
+    return out;
+  }
+
+  func next<T>(iterator: Iterator<T>): NextResult<T> {
+    let out: NextResult<T> = 0;
+    out.iterator = iterator;
+    if iterator.index >= iterator.len || iterator.cap < 1 then {
+      out.value = option::none(iterator.zero);
+      return out;
+    }
+    out.value = option::some(iterator.data[(iterator.head + iterator.index) % iterator.cap]);
+    out.iterator.index = iterator.index + 1;
+    return out;
+  }
+}
+
+namespace set {
+  func for_each<K>(s: set::Set<K>, visit: fn(K): void): void {
+    let iterator: set::Iterator<K> = set::iter(s);
+    while iterator.index < iterator.cap {
+      let step: set::NextResult<K> = set::next(iterator);
+      iterator = step.iterator;
+      if step.value.present == 1 then visit(step.value.value);
+    }
+  }
+}
+
+namespace deque {
+  func for_each<T>(d: deque::Deque<T>, visit: fn(T): void): void {
+    let iterator: deque::Iterator<T> = deque::iter(d);
+    while iterator.index < iterator.len {
+      let step: deque::NextResult<T> = deque::next(iterator);
+      iterator = step.iterator;
+      if step.value.present == 1 then visit(step.value.value);
+    }
+  }
+}
+
+namespace map {
+  func for_each_iter<K, V>(m: map::HashMap<K, V>, visit: fn(K, V): void): void {
+    let iterator: map::Iterator<K, V> = map::iter(m);
+    while iterator.index < iterator.cap {
+      let step: map::NextResult<K, V> = map::next(iterator);
+      iterator = step.iterator;
+      if step.value.present == 1 then visit(step.value.value.key, step.value.value.value);
     }
   }
 }

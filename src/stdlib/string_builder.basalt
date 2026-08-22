@@ -1,8 +1,15 @@
+include "string.basalt"
+
 namespace string_builder {
   struct Builder {
     data: char*;
     len: int;
     cap: int;
+  }
+
+  struct FinishResult {
+    builder: Builder;
+    value: string;
   }
 
   func new(): Builder {
@@ -56,8 +63,15 @@ namespace string_builder {
     return b;
   }
 
+  func finish(b: Builder): FinishResult {
+    let out: FinishResult = 0;
+    out.value = str::from_buffer(b.data, b.len);
+    out.builder = string_builder::free(b);
+    return out;
+  }
+
   func free(b: Builder): Builder {
-    memory_free(b.data);
+    if b.data != 0 then memory_free(b.data);
     b.data = 0;
     b.len = 0;
     b.cap = 0;

@@ -1,0 +1,95 @@
+includec "process_runtime.c"
+include "result.basalt"
+include "io.basalt"
+include "array.basalt"
+
+extern func basalt_process_status(): int;
+extern func basalt_process_getenv(name: string): string;
+extern func basalt_process_setenv(name: string, value: string): int;
+extern func basalt_process_unsetenv(name: string): int;
+extern func basalt_process_cwd(): string;
+extern func basalt_process_chdir(path: string): int;
+extern func basalt_process_spawn(executable: string, args: string*, arg_count: int): void*;
+extern func basalt_process_wait(handle: void*): int;
+extern func basalt_process_wait_timeout(handle: void*, timeout_ms: i64): int;
+extern func basalt_process_signal(handle: void*, signal_number: int): int;
+extern func basalt_process_free(handle: void*): int;
+
+namespace process {
+  func getenv(name: string): result::Result<string, int> {
+    let value: string = basalt_process_getenv(name);
+    let code: int = basalt_process_status();
+    if code != 0 then return result::err(value, code);
+    return result::ok(value, 0);
+  }
+
+  func setenv(name: string, value: string): result::Result<bool, int> {
+    let status: int = basalt_process_setenv(name, value);
+    if status != 0 then return result::err(false, status);
+    return result::ok(true, 0);
+  }
+
+  func unsetenv(name: string): result::Result<bool, int> {
+    let status: int = basalt_process_unsetenv(name);
+    if status != 0 then return result::err(false, status);
+    return result::ok(true, 0);
+  }
+
+  func cwd(): result::Result<string, int> {
+    let value: string = basalt_process_cwd();
+    let code: int = basalt_process_status();
+    if code != 0 then return result::err(value, code);
+    return result::ok(value, 0);
+  }
+
+  func chdir(path: string): result::Result<bool, int> {
+    let status: int = basalt_process_chdir(path);
+    if status != 0 then return result::err(false, status);
+    return result::ok(true, 0);
+  }
+
+  func stdin_line(max_len: int): result::Result<string, int> {
+    let value: string = io::read_line(max_len);
+    let code: int = io::status();
+    if code != 0 then return result::err(value, code);
+    return result::ok(value, 0);
+  }
+
+  func spawn(executable: string, args: array::Array<string>): result::Result<void*, int> {
+    let handle: void* = basalt_process_spawn(executable, args.data, args.len);
+    let code: int = basalt_process_status();
+    if code != 0 then {
+      let empty_handle: void* = 0;
+      return result::err(empty_handle, code);
+    }
+    return result::ok(handle, 0);
+  }
+
+  func wait(handle: void*): result::Result<int, int> {
+    let status: int = basalt_process_wait(handle);
+    let code: int = basalt_process_status();
+    if code != 0 then return result::err(status, code);
+    return result::ok(status, 0);
+  }
+
+  // Error 7 means timeout and leaves the handle owned by the caller.
+  // Error 8 means the target platform does not implement this capability.
+  func wait_timeout(handle: void*, timeout_ms: i64): result::Result<int, int> {
+    let status: int = basalt_process_wait_timeout(handle, timeout_ms);
+    let code: int = basalt_process_status();
+    if code != 0 then return result::err(status, code);
+    return result::ok(status, 0);
+  }
+
+  func send_signal(handle: void*, signal_number: int): result::Result<bool, int> {
+    let status: int = basalt_process_signal(handle, signal_number);
+    if status != 0 then return result::err(false, status);
+    return result::ok(true, 0);
+  }
+
+  func free(handle: void*): result::Result<bool, int> {
+    let status: int = basalt_process_free(handle);
+    if status != 0 then return result::err(false, status);
+    return result::ok(true, 0);
+  }
+}

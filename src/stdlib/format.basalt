@@ -1,0 +1,74 @@
+includec "format_runtime.c"
+include "string_builder.basalt"
+
+extern func basalt_format_int(value: int): string;
+extern func basalt_format_i64(value: i64): string;
+extern func basalt_format_f64(value: f64): string;
+extern func basalt_format_char(value: int): string;
+
+namespace format {
+  struct Formatter {
+    builder: string_builder::Builder;
+  }
+
+  struct FinishResult {
+    formatter: Formatter;
+    value: string;
+  }
+
+  func new(): Formatter {
+    let formatter: Formatter = 0;
+    formatter.builder = string_builder::new();
+    return formatter;
+  }
+
+  func append_string(formatter: Formatter, value: string): Formatter {
+    formatter.builder = string_builder::append(formatter.builder, value);
+    return formatter;
+  }
+
+  func append_char(formatter: Formatter, value: char): Formatter {
+    let text: string = basalt_format_char(value);
+    formatter.builder = string_builder::append(formatter.builder, text);
+    str::free(text);
+    return formatter;
+  }
+
+  func append_int(formatter: Formatter, value: int): Formatter {
+    let text: string = basalt_format_int(value);
+    formatter.builder = string_builder::append(formatter.builder, text);
+    str::free(text);
+    return formatter;
+  }
+
+  func append_i64(formatter: Formatter, value: i64): Formatter {
+    let text: string = basalt_format_i64(value);
+    formatter.builder = string_builder::append(formatter.builder, text);
+    str::free(text);
+    return formatter;
+  }
+
+  func append_f64(formatter: Formatter, value: f64): Formatter {
+    let text: string = basalt_format_f64(value);
+    formatter.builder = string_builder::append(formatter.builder, text);
+    str::free(text);
+    return formatter;
+  }
+
+  func length(formatter: Formatter): int {
+    return string_builder::length(formatter.builder);
+  }
+
+  func finish(formatter: Formatter): FinishResult {
+    let out: FinishResult = 0;
+    let built: string_builder::FinishResult = string_builder::finish(formatter.builder);
+    out.formatter.builder = built.builder;
+    out.value = built.value;
+    return out;
+  }
+
+  func free(formatter: Formatter): Formatter {
+    formatter.builder = string_builder::free(formatter.builder);
+    return formatter;
+  }
+}

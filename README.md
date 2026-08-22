@@ -6,7 +6,7 @@ The repository is organized for reproducible compiler work rather than for gener
 
 ## Highlights
 
-Basalt supports integers, booleans, characters, strings, floating-point values, pointers, fixed and dynamic arrays, structs, enums, namespaces, generic types, function pointers, controlled C FFI through `extern`, `include`, and `includec`, ownership checks, scope-aware type checking, and structured standard-library components such as `array`, `map`, `option`, and `result`.
+Basalt supports integers, booleans, characters, strings, floating-point values, pointers, fixed and dynamic arrays, structs, enums, namespaces, generic types, function pointers, controlled C FFI through `extern`, `include`, and `includec`, ownership checks, scope-aware type checking, and a namespace-qualified standard library covering `array`, `slice`, `map`, `set`, `deque`, `iter`, `option`, `result`, strings, paths, filesystem, time, processes, concurrency, formatting, randomness, I/O, and structured system execution.
 
 Safety is a first-class concern:
 
@@ -34,7 +34,7 @@ func main(): int {
 | --- | --- |
 | `src/compiler/` | OCaml Host compiler, Dune metadata, lexer, parser, type checker, AST, and C emitter |
 | `src/bootstrap/` | Canonical self-hosting Basalt compiler source, generated C bootstrap artefact, and fixed-point checksum |
-| `src/stdlib/` | Generic containers and standard library modules |
+| `src/stdlib/` | Generic containers, text/path APIs, OS boundaries, concurrency, formatting, randomness, and standard library modules |
 | `tests/regression/` | Focused language and compiler regression programs |
 | `tests/stress/` | The 164-case corpus plus the dedicated modulo stress and negative tests |
 | `tests/conformance/` | Host/Bootstrap conformance programs and runner material |
@@ -100,7 +100,7 @@ The master verification command is:
 ./scripts/run_ownership_stress.sh
 ```
 
-It builds both compiler paths, runs the move/borrow valid fixture under ASan/UBSan with leak detection, requires both compilers to reject every ownership-negative fixture, and then runs the regression, stress, adversarial, conformance, and fixed-point suites, plus a guard that no executable may be left under `tests/`.
+It builds the current Bootstrap compiler from the frozen C seed, runs the move/borrow and standard-library ownership fixtures under ASan/UBSan with leak detection, requires invalid ownership fixtures to be rejected, and then runs the regression, stress, adversarial, conformance, and fixed-point suites, plus a guard that no executable may be left under `tests/`. The stdlib fixtures cover file/path/string ownership, time/process/format/random boundaries, concurrency handles, and iterator/container lifecycles.
 
 The individual suites can be run directly:
 
@@ -112,7 +112,7 @@ The individual suites can be run directly:
 ./scripts/fixed_point.sh
 ```
 
-The regression suite compiles and executes every registered fixture through **both** compilers: valid programs must compile with strict GCC and run; `expect_reject` fixtures must be rejected by both. The modulo-specific checks cover ordinary residues, zero and one, self-modulo, loop accumulation, precedence, nested expressions, a negative-value simulation, a generic `Result` context, and rejection of string operands. The complete stress corpus currently reports 164/164 passing cases before the dedicated modulo cases are added to the release repository.
+The regression suite compiles and executes every registered fixture through the Bootstrap compiler with strict GCC: valid programs must compile and run; `expect_reject` fixtures must be rejected. Selected stdlib fixtures are also compiled with strict Clang and sanitizer builds. The corpus covers collection growth and hashing, iterator callbacks, stable sorting, UTF-8/string boundaries, path normalization, text filesystem errors, time validation, secure argv process handling, mutex/cancellation, typed formatting, deterministic PRNG behavior, and ownership cleanup.
 
 ## Guides
 
@@ -126,7 +126,7 @@ Start with [`docs/LANGUAGE_SPEC.md`](docs/LANGUAGE_SPEC.md) for syntax and seman
 
 ## Portability and safety
 
-Generated code is checked with strict C11 warnings and is exercised with AddressSanitizer and UndefinedBehaviorSanitizer in the adversarial and stress workflows. Dynamic-array allocation, resizing, indexing, mutation, and release use checked runtime helpers with registry validation, overflow guards, lifetime checks, and deterministic failure on invalid bounds. The Host and Bootstrap compilers share this fail-closed policy; the OOB negative fixture must terminate with exit code `2` in both paths.
+Generated code is checked with strict C11 warnings under GCC and Clang and is exercised with AddressSanitizer and UndefinedBehaviorSanitizer in the ownership, adversarial, and stress workflows. Dynamic-array allocation, resizing, indexing, mutation, and release use checked runtime helpers with registry validation, overflow guards, lifetime checks, and deterministic failure on invalid bounds. Filesystem, process, time, concurrency, and entropy APIs are explicit OS boundaries with `Result`/status checks; text file reads are not a binary buffer abstraction, process handles must be reaped before release, and unsupported Windows capabilities return documented errors rather than being emulated unsafely.
 
 Basalt does not yet provide complete Rust-style static borrow checking. Raw pointer dereference, pointer arithmetic, `extern`, and `includec` remain explicitly low-level interoperability boundaries. Programs using those features should follow the ownership rules documented in [`docs/MEMORY_SAFETY_AUDIT.md`](docs/MEMORY_SAFETY_AUDIT.md) and should be tested with sanitizers. The repository intentionally excludes compiler build directories, generated test outputs, caches, and local binaries from version control.
 

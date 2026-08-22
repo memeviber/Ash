@@ -1,0 +1,50 @@
+includec "time_runtime.c"
+include "result.basalt"
+
+extern func basalt_time_status(): int;
+extern func basalt_time_monotonic_ns(): i64;
+extern func basalt_time_wall_seconds(): i64;
+extern func basalt_time_sleep_ms(milliseconds: i64): int;
+
+namespace time {
+  struct Duration {
+    milliseconds: i64;
+  }
+
+  func monotonic_ns(): result::Result<i64, int> {
+    let value: i64 = basalt_time_monotonic_ns();
+    let code: int = basalt_time_status();
+    if code != 0 then return result::err(value, code);
+    return result::ok(value, 0);
+  }
+
+  func wall_seconds(): result::Result<i64, int> {
+    let value: i64 = basalt_time_wall_seconds();
+    let code: int = basalt_time_status();
+    if code != 0 then return result::err(value, code);
+    return result::ok(value, 0);
+  }
+
+  func duration_ms(milliseconds: i64): result::Result<Duration, int> {
+    let duration: Duration = 0;
+    if milliseconds < 0 then return result::err(duration, 1);
+    duration.milliseconds = milliseconds;
+    return result::ok(duration, 0);
+  }
+
+  func elapsed(start_ns: i64, duration: Duration): result::Result<bool, int> {
+    let now: i64 = basalt_time_monotonic_ns();
+    let code: int = basalt_time_status();
+    if code != 0 then return result::err(false, code);
+    if start_ns < 0 then return result::err(false, 1);
+    if duration.milliseconds < 0 then return result::err(false, 1);
+    if now < start_ns then return result::ok(false, 0);
+    return result::ok(now - start_ns >= duration.milliseconds * 1000000, 0);
+  }
+
+  func sleep_ms(milliseconds: i64): result::Result<bool, int> {
+    let status: int = basalt_time_sleep_ms(milliseconds);
+    if status != 0 then return result::err(false, status);
+    return result::ok(true, 0);
+  }
+}

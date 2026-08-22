@@ -1,7 +1,8 @@
 include "../../src/stdlib/array.basalt"
 include "../../src/stdlib/slice.basalt"
 include "../../src/stdlib/map.basalt"
-include "../../src/stdlib/string.basalt"
+include "../../src/stdlib/set.basalt"
+include "../../src/stdlib/deque.basalt"
 include "../../src/stdlib/string_builder.basalt"
 include "../../src/stdlib/iter.basalt"
 
@@ -72,18 +73,96 @@ func main(): int {
   if visited_pairs != 8064 then status = 9;
   if map::get_or(table, 63, 0) != 189 then status = 10;
 
+  let array_iterator: array::Iterator<int> = array::iter(values, 0);
+  let array_count: int = 0;
+  let array_sum: int = 0;
+  while array_iterator.index < array_iterator.len {
+    let array_step: array::NextResult<int> = array::next(array_iterator);
+    array_iterator = array_step.iterator;
+    if array_step.value.present == 1 then {
+      array_count = array_count + 1;
+      array_sum = array_sum + array_step.value.value;
+    }
+  }
+  if array_count != 32 || array_sum != 528 then status = 11;
+
+  let slice_iterator: slice::Iterator<int> = slice::iter(values_slice);
+  let slice_count: int = 0;
+  let slice_sum: int = 0;
+  while slice_iterator.index < slice_iterator.len {
+    let slice_step: slice::NextResult<int> = slice::next(slice_iterator);
+    slice_iterator = slice_step.iterator;
+    if slice_step.value.present == 1 then {
+      slice_count = slice_count + 1;
+      slice_sum = slice_sum + slice_step.value.value;
+    }
+  }
+  if slice_count != 8 || slice_sum != 36 then status = 12;
+
+  let map_iterator: map::Iterator<int, int> = map::iter(table);
+  let map_count: int = 0;
+  let map_sum: int = 0;
+  while map_iterator.index < map_iterator.cap {
+    let map_step: map::NextResult<int, int> = map::next(map_iterator);
+    map_iterator = map_step.iterator;
+    if map_step.value.present == 1 then {
+      map_count = map_count + 1;
+      map_sum = map_sum + map_step.value.value.value;
+    }
+  }
+  if map_count != 64 || map_sum != 6048 then status = 13;
+
+  let values_set: set::Set<int> = set::new(0);
+  i = 0;
+  while i < 16 {
+    values_set = set::insert(values_set, i);
+    i = i + 1;
+  }
+  values_set = set::remove(values_set, 7);
+  let set_iterator: set::Iterator<int> = set::iter(values_set);
+  let set_count: int = 0;
+  let set_sum: int = 0;
+  while set_iterator.index < set_iterator.cap {
+    let set_step: set::NextResult<int> = set::next(set_iterator);
+    set_iterator = set_step.iterator;
+    if set_step.value.present == 1 then {
+      set_count = set_count + 1;
+      set_sum = set_sum + set_step.value.value;
+    }
+  }
+  if set_count != 15 || set_sum != 113 then status = 14;
+
+  let queue: deque::Deque<int> = deque::new(2, 0);
+  queue = deque::push_back(queue, 2);
+  queue = deque::push_back(queue, 3);
+  queue = deque::push_front(queue, 1);
+  let deque_iterator: deque::Iterator<int> = deque::iter(queue);
+  let deque_count: int = 0;
+  let deque_sum: int = 0;
+  while deque_iterator.index < deque_iterator.len {
+    let deque_step: deque::NextResult<int> = deque::next(deque_iterator);
+    deque_iterator = deque_step.iterator;
+    if deque_step.value.present == 1 then {
+      deque_count = deque_count + 1;
+      deque_sum = deque_sum + deque_step.value.value;
+    }
+  }
+  if deque_count != 3 || deque_sum != 6 then status = 15;
+  queue = deque::free(queue);
+  values_set = set::free(values_set);
+
   let builder: string_builder::Builder = string_builder::new();
   builder = string_builder::append(builder, "Basalt");
   builder = string_builder::push_char(builder, ' ');
   builder = string_builder::append(builder, "Builder");
-  if string_builder::length(builder) != 14 then status = 11;
+  if string_builder::length(builder) != 14 then status = 16;
   let view_ptr: char* = string_builder::view(builder);
-  if view_ptr[0] != 'B' || view_ptr[6] != ' ' || view_ptr[7] != 'B' || view_ptr[13] != 'r' || view_ptr[14] != '\0' then status = 12;
-  if string_builder::capacity(builder) < 16 then status = 13;
+  if view_ptr[0] != 'B' || view_ptr[6] != ' ' || view_ptr[7] != 'B' || view_ptr[13] != 'r' || view_ptr[14] != '\0' then status = 17;
+  if string_builder::capacity(builder) < 16 then status = 18;
   builder = string_builder::clear(builder);
-  if string_builder::length(builder) != 0 then status = 14;
+  if string_builder::length(builder) != 0 then status = 19;
   view_ptr = string_builder::view(builder);
-  if view_ptr[0] != '\0' then status = 15;
+  if view_ptr[0] != '\0' then status = 20;
 
   values = array::free(values);
   values_slice = slice::free(values_slice);

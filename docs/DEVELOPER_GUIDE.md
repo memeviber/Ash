@@ -76,7 +76,7 @@ Any ownership or closure change must be developed in `src/bootstrap/basaltc.basa
 src/compiler/            Frozen OCaml reference (do not modify, build, or use)
 src/bootstrap/           basaltc.basalt (source), basaltc.seed.c (checked-in seed),
                          fixed_point_production.sha256
-src/stdlib/              array.basalt, slice.basalt, map.basalt, option.basalt, result.basalt, string.basalt
+src/stdlib/              generic collections, iterators, strings, paths, filesystem, time, process, concurrency, format, random
 tests/regression/        focused compiler + language tests (valid and expect-reject)
 tests/stress/            larger corpus (164 cases), move/borrow fixtures, modulo stress
 tests/conformance/       Host vs Bootstrap conformance material
@@ -91,9 +91,39 @@ For Windows UCRT64 bootstrap compilation, see [`WINDOWS_UCRT64_BOOTSTRAP.md`](WI
 
 ---
 
-## 3. The verification machinery
+## 3. Standard-library development
 
-### 3.1 Build the current Bootstrap compiler
+A standard-library module has a Basalt facade and, only where an operating-system boundary is unavoidable, a small tracked C helper included with `includec`. The facade owns the public namespace, generic types, `Option`/`Result` shape, and value-level ownership protocol. The helper must not define an alternative public API or bypass the runtime allocation registry.
+
+| Layer | Rule | Validation |
+| --- | --- | --- |
+| Basalt facade | Namespace-qualified, generic where appropriate, explicit `Result`/status and value ownership | Compile an isolated module probe from the Bootstrap compiler |
+| C boundary | C11 plus guarded POSIX/Windows branches; fixed internal formats; no shell interpolation | Strict GCC and Clang with `-Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror` |
+| Resource lifecycle | Handles are opaque; close/wait/unlock/join precede release where required | Valid lifecycle, invalid-handle, and repeated-operation cases |
+| Generated files | Source helpers are tracked; generated C, binaries, logs, and fixtures belong under `.tmp/` | ELF/artifact guard and clean-tree review |
+
+Struct-valued owners and iterator cursors are passed by value in the current language. Any operation that changes the owner or cursor must therefore return the updated struct. Callers must assign it back immediately. This applies to dynamic collections, deque `PopResult`, iterator `NextResult`, and builder/formatter `FinishResult`; silently mutating a copied struct is not a valid API design.
+
+String-returning helpers must document whether a value is an owned allocation, a literal, or a non-owning view. `StringView` stores `source`, `offset`, and `len`, so it does not extend the source lifetime. Text filesystem reads return NUL-terminated owned strings and are not a binary-byte API. Directory entries and environment/process strings are owned copies and require matching cleanup.
+
+OS boundaries must fail explicitly. Process execution receives an executable and argv array as separate values and must never concatenate untrusted arguments into a shell command. Child handles must be reaped before release. Timeouts and signals may return a documented unsupported code on a platform rather than silently degrading. Entropy APIs must distinguish deterministic reproducibility from cryptographic guarantees. C helper code must include guards, avoid duplicate runtime declarations, and compile as part of at least one combined generated-C fixture.
+
+The minimum test sequence for a new module is:
+
+```sh
+# Build/use the Bootstrap compiler only; all outputs are temporary.
+bash scripts/run_regression.sh
+bash scripts/run_ownership_stress.sh
+bash scripts/fixed_point.sh
+```
+
+For a focused fixture, generate C under `.tmp`, compile it directly with both strict compilers, run it normally and under ASan/UBSan, then add the source fixture to `scripts/run_regression.sh`. Include at least one success path, one boundary or invalid-input path, one ownership cleanup path, and one platform-specific capability assertion where applicable. Do not use or modify `src/compiler/` while developing or validating the module.
+
+---
+
+## 4. The verification machinery
+
+### 4.1 Build the current Bootstrap compiler
 
 ```sh
 source scripts/bootstrap_stage.sh
@@ -103,7 +133,7 @@ current_bin=$(bootstrap_stage "$PWD" .tmp/developer-stage \\
 
 This builds the frozen `src/bootstrap/basaltc.seed.c` and uses it to translate `src/bootstrap/basaltc.basalt`. It never enters `src/compiler/`.
 
-### 3.2 Verify the Bootstrap fixed point
+### 4.2 Verify the Bootstrap fixed point
 
 ```sh
 ./scripts/fixed_point.sh
@@ -129,7 +159,7 @@ bash scripts/fixed_point.sh
 
 `promote_seed.sh` verifies that the default `.tmp/fixed-point/n3.c` and `n4.c` are identical, copies the stable candidate into `src/bootstrap/basaltc.seed.c`, runs `scripts/format_seed_c.sh`, and refreshes `src/bootstrap/fixed_point_production.sha256`. To format an existing generated C file without promotion, run `scripts/format_seed_c.sh [path]`; use `--check` for a non-mutating verification. Only after the synchronized fixed point passes may the full ownership-stress suite be run and the change committed. All generated binaries and intermediate C files remain under `.tmp/`.
 
-### 3.3 The full suite
+### 4.3 The full suite
 
 ```sh
 ./scripts/run_ownership_stress.sh
@@ -154,7 +184,7 @@ expect_reject "$ROOT/tests/regression/my_feature_invalid.basalt" my_feature_inva
 
 `compile_run` compiles the fixture with the current Bootstrap compiler from the fixture's directory (so relative `include` paths resolve), then requires strict-GCC acceptance and a successful run. `expect_reject` requires rejection before a generated C artifact is accepted. The frozen Host implementation is not invoked.
 
-### 3.4 Package-manager validation
+### 4.4 Package-manager validation
 
 The package manager is a repository-side Python tool and must remain independent of `src/compiler/`. Its deterministic test suite uses only local registry fixtures, writes all temporary workspaces below `.tmp/`, and can be run directly:
 

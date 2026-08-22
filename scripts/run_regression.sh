@@ -206,6 +206,8 @@ compile_run "$ROOT/tests/super/integer_pointer_boundary_valid.basalt" integer_po
 compile_run "$ROOT/tests/super/closure_generic_nested_valid.basalt" closure_generic_nested_valid
 compile_run_with_output "$ROOT/tests/super/print_stream_valid.basalt" print_stream_valid $'Basalt-2026\nline-two\n42\n'
 compile_run "$ROOT/tests/regression/string_builder_iter_test.basalt" string_builder_iter_test
+compile_run "$ROOT/tests/regression/stdlib_filesystem_path_string_test.basalt" stdlib_filesystem_path_string_test
+compile_run "$ROOT/tests/regression/stdlib_time_process_format_random_test.basalt" stdlib_time_process_format_random_test
 compile_run "$ROOT/tests/regression/numeric_compound_test.basalt" numeric_compound_test
 compile_run "$ROOT/tests/regression/f32_f64_test.basalt" f32_f64_test
 compile_run "$ROOT/tests/regression/generic_float_bound_nested_test.basalt" generic_float_bound_nested_test
@@ -220,6 +222,7 @@ compile_run "$ROOT/tests/regression/defer_test.basalt" defer_test
 compile_run "$ROOT/tests/regression/match_test.basalt" match_test
 compile_run "$ROOT/tests/regression/tuple_test.basalt" tuple_test
 compile_run "$ROOT/tests/regression/concurrency_test.basalt" concurrency_test
+compile_run "$ROOT/tests/regression/stdlib_concurrency_extended_test.basalt" stdlib_concurrency_extended_test
 compile_run "$ROOT/tests/regression/aligned_alloc_test.basalt" aligned_alloc_test
 compile_run "$ROOT/tests/regression/fixed_width_integer_test.basalt" fixed_width_integer_test
 compile_run "$ROOT/tests/regression/integer_literal_boundary_test.basalt" integer_literal_boundary_test
