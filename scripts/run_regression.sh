@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+cd "$ROOT"
 BOOT_SOURCE="$ROOT/src/bootstrap/basaltc.basalt"
 BOOT_BIN="$ROOT/.tmp/bootstrap.bin"
 OUT="$ROOT/.tmp/regression"
@@ -35,7 +36,11 @@ assert_single_runtime_prologue() {
       return 1
     fi
   done
-  if printf '%s\n' "$prefix" | grep -Fq '#if !defined(_WIN32)'; then
+  if printf '%s\n' "$prefix" | awk '
+    previous == "#if !defined(_WIN32)" && $0 == "#define _POSIX_C_SOURCE 200809L" { found = 1 }
+    { previous = $0 }
+    END { exit(found ? 0 : 1) }
+  '; then
     echo "FAIL $label: obsolete duplicate feature prelude remains in generated C" >&2
     return 1
   fi
@@ -86,6 +91,23 @@ compile_run_with_output() {
     return 1
   fi
   printf 'PASS %s (stdout)\n' "$label"
+}
+
+build_process_probe() {
+  local probe="$ROOT/tests/regression/sys_process_probe.c"
+  local binary="$OUT/sys_process_probe"
+  cc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror "$probe" -o "$binary"
+}
+
+check_windows_process_compile() {
+  local source="$OUT/sys_process_portable_test.boot.c"
+  local object="$OUT/sys_process_portable_test.windows.o"
+  if ! command -v x86_64-w64-mingw32-gcc >/dev/null 2>&1; then
+    printf 'SKIP Windows process object compile (MinGW-w64 unavailable)\n'
+    return 0
+  fi
+  x86_64-w64-mingw32-gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror -c "$source" -o "$object"
+  printf 'PASS Windows process object compile\n'
 }
 
 check_cli_modes() {
@@ -217,6 +239,9 @@ compile_run "$ROOT/tests/regression/compound_assignment_side_effect_test.basalt"
 compile_run "$ROOT/tests/regression/source_mapping_test.basalt" source_mapping_test
 check_cli_modes
 compile_run_with_output "$ROOT/tests/regression/sys_process_test.basalt" sys_process_test $'0\n1\nhello world|quote"value\n\n0\n0\n'
+build_process_probe
+compile_run "$ROOT/tests/regression/sys_process_portable_test.basalt" sys_process_portable_test
+check_windows_process_compile
 auto_compile_cli
 compile_run "$ROOT/tests/regression/tagged_union_test.basalt" tagged_union_test
 compile_run "$ROOT/tests/regression/defer_test.basalt" defer_test

@@ -1,0 +1,48 @@
+include "../../src/stdlib/sys.basalt"
+include "../../src/stdlib/string.basalt"
+
+func probe_path(): string {
+  return ".tmp/regression/sys_process_probe";
+}
+
+func main(): int {
+  let args: array::Array<string> = array::new(0, "");
+  args = array::push(args, "args", "");
+  args = array::push(args, "", "");
+  args = array::push(args, "two words", "");
+  args = array::push(args, "quote\"slash\\tail;&|$", "");
+  let captured: sys::Output = sys::run(probe_path(), args, 4096);
+  if captured.status != 0 then return 1;
+  if captured.succeeded != 1 then return 2;
+  if captured.spawn_error != 0 then return 3;
+  if str::eq(captured.stdout, "0=\n1=two words\n2=quote\"slash\\tail;&|$\n") == false then return 4;
+  if captured.stderr[0] != '\0' then return 5;
+
+  let stream_args: array::Array<string> = array::new(0, "");
+  stream_args = array::push(stream_args, "streams", "");
+  stream_args = array::push(stream_args, "65536", "");
+  let streams: sys::Output = sys::run(probe_path(), stream_args, 128);
+  if streams.status != 0 then return 6;
+  if streams.succeeded != 1 then return 7;
+  if streams.spawn_error != 0 then return 8;
+  if streams.stdout[0] != 'O' then return 9;
+  if streams.stderr[0] != 'E' then return 10;
+  if streams.truncated != 1 then return 11;
+  if str::byte_len(streams.stdout) != 128 then return 12;
+  if str::byte_len(streams.stderr) != 128 then return 13;
+
+  let exit_args: array::Array<string> = array::new(0, "");
+  exit_args = array::push(exit_args, "exit", "");
+  exit_args = array::push(exit_args, "23", "");
+  let failed: sys::Output = sys::run(probe_path(), exit_args, 64);
+  if failed.status != 23 then return 14;
+  if failed.succeeded != 0 then return 15;
+  if failed.spawn_error != 0 then return 16;
+
+  let missing_args: array::Array<string> = array::new(0, "");
+  let missing: sys::Output = sys::run(".tmp/regression/missing-process-probe", missing_args, 64);
+  if missing.status >= 0 then return 17;
+  if missing.succeeded != 0 then return 18;
+  if missing.spawn_error <= 0 then return 19;
+  return 0;
+}

@@ -723,10 +723,394 @@ static BASALT_UNUSED void basalt_sys_drain(int fd, char *buf, size_t cap, size_t
   }
 }
 #endif
+#if defined(_WIN32)
+typedef struct basalt_sys_windows_reader {
+  HANDLE pipe;
+  char *buffer;
+  size_t cap;
+  size_t len;
+  int truncated;
+  DWORD error;
+} basalt_sys_windows_reader;
+static BASALT_UNUSED int basalt_sys_windows_error(DWORD value) {
+  if (value == 0)
+    return 4;
+  if (value > (DWORD)INT_MAX)
+    return INT_MAX;
+  return (int)value;
+}
+static BASALT_UNUSED int basalt_sys_utf8_to_wide(const char *value, wchar_t **result) {
+  int needed;
+  wchar_t *buffer;
+  if (!value || !result)
+    return 0;
+  needed = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value, -1, NULL, 0);
+  if (needed <= 0)
+    return 0;
+  buffer = (wchar_t *)malloc((size_t)needed * sizeof(*buffer));
+  if (!buffer)
+    basalt_panic(5);
+  if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value, -1, buffer, needed) != needed) {
+    free(buffer);
+    return 0;
+  }
+  *result = buffer;
+  return 1;
+}
+static BASALT_UNUSED int basalt_sys_size_add(size_t *value, size_t add) {
+  if (add > (size_t)-1 - *value)
+    return 0;
+  *value += add;
+  return 1;
+}
+static BASALT_UNUSED int basalt_sys_quote_len(const wchar_t *value, size_t *result) {
+  size_t total = 2;
+  size_t slashes = 0;
+  const wchar_t *p;
+  if (!value || !result)
+    return 0;
+  for (p = value; *p != L'\0'; p++) {
+    if (*p == L'\\') {
+      if (slashes == (size_t)-1)
+        return 0;
+      slashes++;
+    } else {
+      size_t add = slashes;
+      if (*p == L'"') {
+        if (slashes > ((size_t)-2) / 2)
+          return 0;
+        add = slashes * 2 + 1;
+      }
+      if (!basalt_sys_size_add(&total, add))
+        return 0;
+      slashes = 0;
+    }
+  }
+  if (slashes > ((size_t)-1) / 2)
+    return 0;
+  if (!basalt_sys_size_add(&total, slashes * 2))
+    return 0;
+  *result = total;
+  return 1;
+}
+static BASALT_UNUSED void basalt_sys_quote_append(const wchar_t *value, wchar_t *out, size_t *pos) {
+  size_t slashes = 0;
+  const wchar_t *p;
+  out[(*pos)++] = L'"';
+  for (p = value; *p != L'\0'; p++) {
+    if (*p == L'\\') {
+      slashes++;
+    } else {
+      size_t count = slashes;
+      if (*p == L'"')
+        count = slashes * 2 + 1;
+      while (count > 0) {
+        out[(*pos)++] = L'\\';
+        count--;
+      }
+      out[(*pos)++] = *p;
+      slashes = 0;
+    }
+  }
+  while (slashes > 0) {
+    out[(*pos)++] = L'\\';
+    out[(*pos)++] = L'\\';
+    slashes--;
+  }
+  out[(*pos)++] = L'"';
+}
+static DWORD WINAPI basalt_sys_windows_reader_thread(LPVOID raw) {
+  basalt_sys_windows_reader *reader = (basalt_sys_windows_reader *)raw;
+  char chunk[4096];
+  DWORD count;
+  BOOL ok;
+  for (;;) {
+    count = 0;
+    ok = ReadFile(reader->pipe, chunk, (DWORD)sizeof(chunk), &count, NULL);
+    if (!ok) {
+      DWORD error = GetLastError();
+      if (error != ERROR_BROKEN_PIPE)
+        reader->error = error;
+      break;
+    }
+    if (count == 0)
+      break;
+    {
+      size_t take = 0;
+      if (reader->len < reader->cap) {
+        take = (size_t)count;
+        if (take > reader->cap - reader->len)
+          take = reader->cap - reader->len;
+        if (take)
+          memcpy(reader->buffer + reader->len, chunk, take);
+        reader->len += take;
+      }
+      if ((size_t)count > take)
+        reader->truncated = 1;
+    }
+  }
+  CloseHandle(reader->pipe);
+  reader->pipe = NULL;
+  return 0;
+}
+#endif
+#if defined(_WIN32)
+static BASALT_UNUSED int basalt_sys_windows_run(const char *executable, char **args, int arg_count,
+                                                size_t cap, char *out, char *err, int *truncated,
+                                                int *spawn_error) {
+  HANDLE out_read = NULL, out_write = NULL, err_read = NULL, err_write = NULL, stdin_child = NULL;
+  int stdin_owned = 0;
+  SECURITY_ATTRIBUTES security;
+  STARTUPINFOEXW startup;
+  PROCESS_INFORMATION process;
+  wchar_t *exe_wide = NULL;
+  wchar_t **wide_args = NULL;
+  wchar_t *command_line = NULL;
+  size_t command_length = 0, item_length = 0, pos = 0;
+  int i;
+  int result = -1;
+  int process_created = 0;
+  DWORD wait_result = WAIT_FAILED;
+  DWORD exit_code = 1;
+  DWORD attribute_error = 0;
+  DWORD thread_error = 0;
+  SIZE_T attribute_size = 0;
+  LPPROC_THREAD_ATTRIBUTE_LIST attribute_list = NULL;
+  int attribute_initialized = 0;
+  basalt_sys_windows_reader readers[2];
+  HANDLE threads[2] = {NULL, NULL};
+  HANDLE inherited_handles[3] = {NULL, NULL, NULL};
+  const wchar_t nul_name[4] = {78, 85, 76, 0};
+  memset(&security, 0, sizeof(security));
+  security.nLength = (DWORD)sizeof(security);
+  security.bInheritHandle = TRUE;
+  memset(&startup, 0, sizeof(startup));
+  memset(&process, 0, sizeof(process));
+  memset(readers, 0, sizeof(readers));
+  memset(inherited_handles, 0, sizeof(inherited_handles));
+  if (!CreatePipe(&out_read, &out_write, &security, 0) ||
+      !SetHandleInformation(out_read, HANDLE_FLAG_INHERIT, 0)) {
+    goto windows_cleanup;
+  }
+  if (!CreatePipe(&err_read, &err_write, &security, 0) ||
+      !SetHandleInformation(err_read, HANDLE_FLAG_INHERIT, 0)) {
+    goto windows_cleanup;
+  }
+  {
+    HANDLE current_input = GetStdHandle(STD_INPUT_HANDLE);
+    if (current_input != NULL && current_input != INVALID_HANDLE_VALUE) {
+      if (!DuplicateHandle(GetCurrentProcess(), current_input, GetCurrentProcess(), &stdin_child, 0,
+                           TRUE, DUPLICATE_SAME_ACCESS))
+        stdin_child = NULL;
+    }
+    if (stdin_child == NULL) {
+      stdin_child = CreateFileW(nul_name, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                &security, OPEN_EXISTING, 0, NULL);
+      if (stdin_child == INVALID_HANDLE_VALUE)
+        stdin_child = NULL;
+      if (stdin_child == NULL)
+        goto windows_cleanup;
+    }
+    stdin_owned = 1;
+  }
+  if (!basalt_sys_utf8_to_wide(executable, &exe_wide)) {
+    *spawn_error = ERROR_NO_UNICODE_TRANSLATION;
+    goto windows_cleanup;
+  }
+  if (!basalt_sys_quote_len(exe_wide, &item_length) ||
+      !basalt_sys_size_add(&command_length, item_length)) {
+    *spawn_error = ERROR_NOT_ENOUGH_MEMORY;
+    goto windows_cleanup;
+  }
+  if (arg_count > 0) {
+    wide_args = (wchar_t **)calloc((size_t)arg_count, sizeof(*wide_args));
+    if (!wide_args)
+      basalt_panic(5);
+  }
+  for (i = 0; i < arg_count; i++) {
+    if (!args || !args[i] || !basalt_sys_utf8_to_wide(args[i], &wide_args[i])) {
+      *spawn_error = ERROR_NO_UNICODE_TRANSLATION;
+      goto windows_cleanup;
+    }
+    if (!basalt_sys_size_add(&command_length, 1) ||
+        !basalt_sys_quote_len(wide_args[i], &item_length) ||
+        !basalt_sys_size_add(&command_length, item_length)) {
+      *spawn_error = ERROR_NOT_ENOUGH_MEMORY;
+      goto windows_cleanup;
+    }
+  }
+  if (command_length > (size_t)-1 / sizeof(wchar_t) - 1) {
+    *spawn_error = ERROR_NOT_ENOUGH_MEMORY;
+    goto windows_cleanup;
+  }
+  command_line = (wchar_t *)malloc((command_length + 1) * sizeof(*command_line));
+  if (!command_line)
+    basalt_panic(5);
+  basalt_sys_quote_append(exe_wide, command_line, &pos);
+  for (i = 0; i < arg_count; i++) {
+    command_line[pos++] = L' ';
+    basalt_sys_quote_append(wide_args[i], command_line, &pos);
+  }
+  command_line[pos] = L'\0';
+  inherited_handles[0] = stdin_child;
+  inherited_handles[1] = out_write;
+  inherited_handles[2] = err_write;
+  if (InitializeProcThreadAttributeList(NULL, 1, 0, &attribute_size)) {
+    *spawn_error = 4;
+    goto windows_cleanup;
+  }
+  attribute_error = GetLastError();
+  if (attribute_error != ERROR_INSUFFICIENT_BUFFER || attribute_size == 0) {
+    *spawn_error = basalt_sys_windows_error(attribute_error);
+    goto windows_cleanup;
+  }
+  attribute_list = (LPPROC_THREAD_ATTRIBUTE_LIST)malloc(attribute_size);
+  if (!attribute_list)
+    basalt_panic(5);
+  if (!InitializeProcThreadAttributeList(attribute_list, 1, 0, &attribute_size)) {
+    *spawn_error = basalt_sys_windows_error(GetLastError());
+    goto windows_cleanup;
+  }
+  attribute_initialized = 1;
+  if (!UpdateProcThreadAttribute(attribute_list, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
+                                 inherited_handles, (SIZE_T)(3 * sizeof(inherited_handles[0])),
+                                 NULL, NULL)) {
+    *spawn_error = basalt_sys_windows_error(GetLastError());
+    goto windows_cleanup;
+  }
+  startup.StartupInfo.cb = (DWORD)sizeof(startup);
+  startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+  startup.StartupInfo.hStdInput = stdin_child;
+  startup.StartupInfo.hStdOutput = out_write;
+  startup.StartupInfo.hStdError = err_write;
+  startup.lpAttributeList = attribute_list;
+  if (!CreateProcessW(NULL, command_line, NULL, NULL, TRUE,
+                      CREATE_UNICODE_ENVIRONMENT | EXTENDED_STARTUPINFO_PRESENT, NULL, NULL,
+                      &startup.StartupInfo, &process)) {
+    *spawn_error = basalt_sys_windows_error(GetLastError());
+    goto windows_cleanup;
+  }
+  process_created = 1;
+  CloseHandle(out_write);
+  out_write = NULL;
+  CloseHandle(err_write);
+  err_write = NULL;
+  CloseHandle(stdin_child);
+  stdin_child = NULL;
+  readers[0].pipe = out_read;
+  readers[0].buffer = out;
+  readers[0].cap = cap;
+  readers[0].len = 0;
+  readers[0].truncated = 0;
+  readers[0].error = 0;
+  readers[1].pipe = err_read;
+  readers[1].buffer = err;
+  readers[1].cap = cap;
+  readers[1].len = 0;
+  readers[1].truncated = 0;
+  readers[1].error = 0;
+  threads[0] = CreateThread(NULL, 0, basalt_sys_windows_reader_thread, &readers[0], 0, NULL);
+  if (!threads[0]) {
+    thread_error = GetLastError();
+    CloseHandle(out_read);
+    out_read = NULL;
+    readers[0].pipe = NULL;
+  }
+  threads[1] = CreateThread(NULL, 0, basalt_sys_windows_reader_thread, &readers[1], 0, NULL);
+  if (!threads[1]) {
+    if (thread_error == 0)
+      thread_error = GetLastError();
+    CloseHandle(err_read);
+    err_read = NULL;
+    readers[1].pipe = NULL;
+  }
+  if (thread_error != 0) {
+    *spawn_error = basalt_sys_windows_error(thread_error);
+    TerminateProcess(process.hProcess, 1);
+  }
+  wait_result = WaitForSingleObject(process.hProcess, INFINITE);
+  if (wait_result != WAIT_OBJECT_0 && *spawn_error == 0)
+    *spawn_error = basalt_sys_windows_error(GetLastError());
+  if (threads[0]) {
+    WaitForSingleObject(threads[0], INFINITE);
+    CloseHandle(threads[0]);
+    threads[0] = NULL;
+    out_read = NULL;
+  }
+  if (threads[1]) {
+    WaitForSingleObject(threads[1], INFINITE);
+    CloseHandle(threads[1]);
+    threads[1] = NULL;
+    err_read = NULL;
+  }
+  if (readers[0].error != 0 && *spawn_error == 0)
+    *spawn_error = basalt_sys_windows_error(readers[0].error);
+  if (readers[1].error != 0 && *spawn_error == 0)
+    *spawn_error = basalt_sys_windows_error(readers[1].error);
+  *truncated = readers[0].truncated || readers[1].truncated;
+  out[readers[0].len] = 0;
+  err[readers[1].len] = 0;
+  if (*spawn_error == 0 && !GetExitCodeProcess(process.hProcess, &exit_code))
+    *spawn_error = basalt_sys_windows_error(GetLastError());
+  if (*spawn_error == 0) {
+    if (exit_code > (DWORD)INT_MAX)
+      result = INT_MAX;
+    else
+      result = (int)exit_code;
+  }
+  CloseHandle(process.hThread);
+  CloseHandle(process.hProcess);
+  process_created = 0;
+windows_cleanup:
+  basalt_sys_status_value = result;
+  basalt_sys_ok_value = (result == 0 && *spawn_error == 0);
+  if (process_created) {
+    TerminateProcess(process.hProcess, 1);
+    WaitForSingleObject(process.hProcess, INFINITE);
+    CloseHandle(process.hThread);
+    CloseHandle(process.hProcess);
+  }
+  if (attribute_initialized) {
+    DeleteProcThreadAttributeList(attribute_list);
+    attribute_initialized = 0;
+  }
+  if (attribute_list) {
+    free(attribute_list);
+    attribute_list = NULL;
+  }
+  if (threads[0])
+    CloseHandle(threads[0]);
+  if (threads[1])
+    CloseHandle(threads[1]);
+  if (out_read)
+    CloseHandle(out_read);
+  if (out_write)
+    CloseHandle(out_write);
+  if (err_read)
+    CloseHandle(err_read);
+  if (err_write)
+    CloseHandle(err_write);
+  if (stdin_owned && stdin_child)
+    CloseHandle(stdin_child);
+  if (command_line)
+    free(command_line);
+  if (exe_wide)
+    free(exe_wide);
+  if (wide_args) {
+    for (i = 0; i < arg_count; i++)
+      if (wide_args[i])
+        free(wide_args[i]);
+    free(wide_args);
+  }
+  return result;
+}
+#endif
 int basalt_sys_run(const char *executable, char **args, int arg_count, int max_output) {
   size_t cap;
+#if !defined(_WIN32)
   size_t out_len = 0, err_len = 0;
   int i;
+#endif
   basalt_sys_free_buffers();
   if (!basalt_sys_cleanup_registered) {
     atexit(basalt_sys_free_buffers);
@@ -750,28 +1134,8 @@ int basalt_sys_run(const char *executable, char **args, int arg_count, int max_o
   basalt_sys_out[0] = 0;
   basalt_sys_err[0] = 0;
 #if defined(_WIN32)
-  {
-    char **av = (char **)calloc((size_t)arg_count + 2, sizeof(char *));
-    int status;
-    if (!av)
-      basalt_panic(5);
-    av[0] = (char *)executable;
-    for (i = 0; i < arg_count; i++)
-      av[i + 1] = args[i];
-    av[arg_count + 1] = NULL;
-    status = _spawnvp(_P_WAIT, executable, (const char *const *)av);
-    free(av);
-    if (status < 0) {
-      basalt_sys_spawn_error_value = errno;
-      basalt_sys_status_value = -1;
-    } else {
-      basalt_sys_status_value = status;
-      basalt_sys_ok_value = status == 0;
-    }
-    basalt_sys_out[0] = 0;
-    basalt_sys_err[0] = 0;
-    return basalt_sys_status_value;
-  }
+  return basalt_sys_windows_run(executable, args, arg_count, cap, basalt_sys_out, basalt_sys_err,
+                                &basalt_sys_truncated_value, &basalt_sys_spawn_error_value);
 #else
   {
     int out_pipe[2], err_pipe[2], exec_pipe[2];
@@ -1269,6 +1633,7 @@ int tc_program(int root);
 int pipeline_main(char *path);
 void emit_symbol(int *out, int id);
 void emit_string(int *out, int id);
+void emit_identifier(int *out, int id);
 void emit_print_prefix(int *out);
 void emit_int_text(int *out, int value);
 void emit_source_filename(int *out, int file_id);
@@ -13846,6 +14211,34 @@ void emit_string(int *out, int id) {
   (void)(emit_symbol(out, id));
   (void)(write_char(out, 34));
 }
+void emit_identifier(int *out, int id) {
+  int is_stdout = 0;
+  int is_stderr = 0;
+  if (sym_len[id] == 6) {
+    if ((((((source[sym_start[id]] == 115) && (source[(sym_start[id] + 1)] == 116)) &&
+           (source[(sym_start[id] + 2)] == 100)) &&
+          (source[(sym_start[id] + 3)] == 111)) &&
+         (source[(sym_start[id] + 4)] == 117)) &&
+        (source[(sym_start[id] + 5)] == 116))
+      is_stdout = 1;
+    else {
+    }
+    if ((((((source[sym_start[id]] == 115) && (source[(sym_start[id] + 1)] == 116)) &&
+           (source[(sym_start[id] + 2)] == 100)) &&
+          (source[(sym_start[id] + 3)] == 101)) &&
+         (source[(sym_start[id] + 4)] == 114)) &&
+        (source[(sym_start[id] + 5)] == 114))
+      is_stderr = 1;
+    else {
+    }
+  } else {
+  }
+  (void)(emit_symbol(out, id));
+  if ((is_stdout == 1) || (is_stderr == 1))
+    (void)(write_char(out, 95));
+  else {
+  }
+}
 void emit_print_prefix(int *out) {
   (void)(write_string(out, "("));
   (void)(write_char(out, 34));
@@ -14034,7 +14427,7 @@ void emit_c_token(int *out, int kind, int value) {
     else if (value == (0 - 1021))
       (void)(write_string(out, "f"));
     else
-      (void)(emit_symbol(out, value));
+      (void)(emit_identifier(out, value));
   } else if (kind == C_INT)
     (void)(emit_int_text(out, value));
   else if (kind == C_RAW)
@@ -14547,23 +14940,158 @@ void emit_runtime(int *out) {
       "chunk,take);*len+=take;}if((size_t)n>take)*truncated=1;}if(n==0||(n<0&&errno!=EAGAIN&&errno!"
       "=EWOULDBLOCK)){close(fd);*open_flag=0;}}\n#endif\n"));
   (void)(write_string(
+      out, "#if defined(_WIN32)\ntypedef struct basalt_sys_windows_reader { HANDLE pipe; char "
+           "*buffer; size_t cap; size_t len; int truncated; DWORD error; } "
+           "basalt_sys_windows_reader;\nstatic BASALT_UNUSED int basalt_sys_windows_error(DWORD "
+           "value){if(value==0)return 4;if(value>(DWORD)INT_MAX)return "
+           "INT_MAX;return(int)value;}\nstatic BASALT_UNUSED int basalt_sys_utf8_to_wide(const "
+           "char*value,wchar_t**result){int needed;wchar_t*buffer;if(!value||!result)return "
+           "0;needed=MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,value,-1,NULL,0);if(needed<="
+           "0)return "
+           "0;buffer=(wchar_t*)malloc((size_t)needed*sizeof(*buffer));if(!buffer)basalt_panic(5);"
+           "if(MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,value,-1,buffer,needed)!=needed){"
+           "free(buffer);return 0;}*result=buffer;return 1;}\nstatic BASALT_UNUSED int "
+           "basalt_sys_size_add(size_t*value,size_t add){if(add>(size_t)-1-*value)return "
+           "0;*value+=add;return 1;}\nstatic BASALT_UNUSED int basalt_sys_quote_len(const "
+           "wchar_t*value,size_t*result){size_t total=2;size_t slashes=0;const "
+           "wchar_t*p;if(!value||!result)return "
+           "0;for(p=value;*p!=L'\\0';p++){if(*p==L'\\\\'){if(slashes==(size_t)-1)return "
+           "0;slashes++;}else{size_t add=slashes;if(*p==L'\"'){if(slashes>((size_t)-2)/2)return "
+           "0;add=slashes*2+1;}if(!basalt_sys_size_add(&total,add))return "
+           "0;slashes=0;}}if(slashes>((size_t)-1)/2)return "
+           "0;if(!basalt_sys_size_add(&total,slashes*2))return 0;*result=total;return 1;}\nstatic "
+           "BASALT_UNUSED void basalt_sys_quote_append(const "
+           "wchar_t*value,wchar_t*out,size_t*pos){size_t slashes=0;const "
+           "wchar_t*p;out[(*pos)++]=L'\"';for(p=value;*p!=L'\\0';p++){if(*p==L'\\\\'){slashes++;}"
+           "else{size_t "
+           "count=slashes;if(*p==L'\"')count=slashes*2+1;while(count>0){out[(*pos)++]=L'\\\\';"
+           "count--;}out[(*pos)++]=*p;slashes=0;}}while(slashes>0){out[(*pos)++]=L'\\\\';out[(*pos)"
+           "++]=L'\\\\';slashes--;}out[(*pos)++]=L'\"';}\nstatic DWORD WINAPI "
+           "basalt_sys_windows_reader_thread(LPVOID "
+           "raw){basalt_sys_windows_reader*reader=(basalt_sys_windows_reader*)raw;char "
+           "chunk[4096];DWORD count;BOOL "
+           "ok;for(;;){count=0;ok=ReadFile(reader->pipe,chunk,(DWORD)sizeof(chunk),&count,NULL);if("
+           "!ok){DWORD "
+           "error=GetLastError();if(error!=ERROR_BROKEN_PIPE)reader->error=error;break;}if(count=="
+           "0)break;{size_t "
+           "take=0;if(reader->len<reader->cap){take=(size_t)count;if(take>reader->cap-reader->len)"
+           "take=reader->cap-reader->len;if(take)memcpy(reader->buffer+reader->len,chunk,take);"
+           "reader->len+=take;}if((size_t)count>take)reader->truncated=1;}}CloseHandle(reader->"
+           "pipe);reader->pipe=NULL;return 0;}\n#endif\n"));
+  (void)(write_string(out, "#if defined(_WIN32)\n"));
+  (void)(write_string(
+      out,
+      "static BASALT_UNUSED int basalt_sys_windows_run(const char*executable,char**args,int "
+      "arg_count,size_t cap,char*out,char*err,int*truncated,int*spawn_error){HANDLE "
+      "out_read=NULL,out_write=NULL,err_read=NULL,err_write=NULL,stdin_child=NULL;int "
+      "stdin_owned=0;SECURITY_ATTRIBUTES security;STARTUPINFOEXW startup;PROCESS_INFORMATION "
+      "process;wchar_t*exe_wide=NULL;wchar_t**wide_args=NULL;wchar_t*command_line=NULL;size_t "
+      "command_length=0,item_length=0,pos=0;int i;int result=-1;int process_created=0;DWORD "
+      "wait_result=WAIT_FAILED;DWORD exit_code=1;DWORD attribute_error=0;DWORD "
+      "thread_error=0;SIZE_T attribute_size=0;LPPROC_THREAD_ATTRIBUTE_LIST attribute_list=NULL;int "
+      "attribute_initialized=0;basalt_sys_windows_reader readers[2];HANDLE "
+      "threads[2]={NULL,NULL};HANDLE inherited_handles[3]={NULL,NULL,NULL};const wchar_t "
+      "nul_name[4]={78,85,76,0};memset(&security,0,sizeof(security));security.nLength=(DWORD)"
+      "sizeof(security);security.bInheritHandle=TRUE;memset(&startup,0,sizeof(startup));memset(&"
+      "process,0,sizeof(process));memset(readers,0,sizeof(readers));memset(inherited_handles,0,"
+      "sizeof(inherited_handles));\n"));
+  (void)(write_string(
+      out, "if(!CreatePipe(&out_read,&out_write,&security,0)||!SetHandleInformation(out_read,"
+           "HANDLE_FLAG_INHERIT,0)){goto "
+           "windows_cleanup;}\nif(!CreatePipe(&err_read,&err_write,&security,0)||!"
+           "SetHandleInformation(err_read,HANDLE_FLAG_INHERIT,0)){goto windows_cleanup;}\n{HANDLE "
+           "current_input=GetStdHandle(STD_INPUT_HANDLE);if(current_input!=NULL&&current_input!="
+           "INVALID_HANDLE_VALUE){if(!DuplicateHandle(GetCurrentProcess(),current_input,"
+           "GetCurrentProcess(),&stdin_child,0,TRUE,DUPLICATE_SAME_ACCESS))stdin_child=NULL;}if("
+           "stdin_child==NULL){stdin_child=CreateFileW(nul_name,GENERIC_READ,FILE_SHARE_READ|FILE_"
+           "SHARE_WRITE,&security,OPEN_EXISTING,0,NULL);if(stdin_child==INVALID_HANDLE_VALUE)stdin_"
+           "child=NULL;if(stdin_child==NULL)goto windows_cleanup; }stdin_owned=1;}\n"));
+  (void)(write_string(
+      out,
+      "if(!basalt_sys_utf8_to_wide(executable,&exe_wide)){*spawn_error=ERROR_NO_UNICODE_"
+      "TRANSLATION;goto "
+      "windows_cleanup;}if(!basalt_sys_quote_len(exe_wide,&item_length)||!basalt_sys_size_add(&"
+      "command_length,item_length)){*spawn_error=ERROR_NOT_ENOUGH_MEMORY;goto "
+      "windows_cleanup;}if(arg_count>0){wide_args=(wchar_t**)calloc((size_t)arg_count,sizeof(*wide_"
+      "args));if(!wide_args)basalt_panic(5);}for(i=0;i<arg_count;i++){if(!args||!args[i]||!basalt_"
+      "sys_utf8_to_wide(args[i],&wide_args[i])){*spawn_error=ERROR_NO_UNICODE_TRANSLATION;goto "
+      "windows_cleanup;}if(!basalt_sys_size_add(&command_length,1)||!basalt_sys_quote_len(wide_"
+      "args[i],&item_length)||!basalt_sys_size_add(&command_length,item_length)){*spawn_error="
+      "ERROR_NOT_ENOUGH_MEMORY;goto windows_cleanup;}}\n"));
+  (void)(write_string(
+      out,
+      "if(command_length>(size_t)-1/sizeof(wchar_t)-1){*spawn_error=ERROR_NOT_ENOUGH_MEMORY;goto "
+      "windows_cleanup;}command_line=(wchar_t*)malloc((command_length+1)*sizeof(*command_line));if("
+      "!command_line)basalt_panic(5);basalt_sys_quote_append(exe_wide,command_line,&pos);for(i=0;i<"
+      "arg_count;i++){command_line[pos++]=L' "
+      "';basalt_sys_quote_append(wide_args[i],command_line,&pos);}command_line[pos]=L'\\0';"
+      "inherited_handles[0]=stdin_child;inherited_handles[1]=out_write;inherited_handles[2]=err_"
+      "write;if(InitializeProcThreadAttributeList(NULL,1,0,&attribute_size)){*spawn_error=4;goto "
+      "windows_cleanup;}attribute_error=GetLastError();if(attribute_error!=ERROR_INSUFFICIENT_"
+      "BUFFER||attribute_size==0){*spawn_error=basalt_sys_windows_error(attribute_error);goto "
+      "windows_cleanup;}attribute_list=(LPPROC_THREAD_ATTRIBUTE_LIST)malloc(attribute_size);if(!"
+      "attribute_list)basalt_panic(5);if(!InitializeProcThreadAttributeList(attribute_list,1,0,&"
+      "attribute_size)){*spawn_error=basalt_sys_windows_error(GetLastError());goto "
+      "windows_cleanup;}attribute_initialized=1;if(!UpdateProcThreadAttribute(attribute_list,0,"
+      "PROC_THREAD_ATTRIBUTE_HANDLE_LIST,inherited_handles,(SIZE_T)(3*sizeof(inherited_handles[0]))"
+      ",NULL,NULL)){*spawn_error=basalt_sys_windows_error(GetLastError());goto "
+      "windows_cleanup;}startup.StartupInfo.cb=(DWORD)sizeof(startup);startup.StartupInfo.dwFlags="
+      "STARTF_USESTDHANDLES;startup.StartupInfo.hStdInput=stdin_child;startup.StartupInfo."
+      "hStdOutput=out_write;startup.StartupInfo.hStdError=err_write;startup.lpAttributeList="
+      "attribute_list;if(!CreateProcessW(NULL,command_line,NULL,NULL,TRUE,CREATE_UNICODE_"
+      "ENVIRONMENT|EXTENDED_STARTUPINFO_PRESENT,NULL,NULL,&startup.StartupInfo,&process)){*spawn_"
+      "error=basalt_sys_windows_error(GetLastError());goto "
+      "windows_cleanup;}process_created=1;CloseHandle(out_write);out_write=NULL;CloseHandle(err_"
+      "write);err_write=NULL;CloseHandle(stdin_child);stdin_child=NULL;\n"));
+  (void)(write_string(
+      out,
+      "readers[0].pipe=out_read;readers[0].buffer=out;readers[0].cap=cap;readers[0].len=0;readers["
+      "0].truncated=0;readers[0].error=0;readers[1].pipe=err_read;readers[1].buffer=err;readers[1]."
+      "cap=cap;readers[1].len=0;readers[1].truncated=0;readers[1].error=0;threads[0]=CreateThread("
+      "NULL,0,basalt_sys_windows_reader_thread,&readers[0],0,NULL);if(!threads[0]){thread_error="
+      "GetLastError();CloseHandle(out_read);out_read=NULL;readers[0].pipe=NULL;}threads[1]="
+      "CreateThread(NULL,0,basalt_sys_windows_reader_thread,&readers[1],0,NULL);if(!threads[1]){if("
+      "thread_error==0)thread_error=GetLastError();CloseHandle(err_read);err_read=NULL;readers[1]."
+      "pipe=NULL;}if(thread_error!=0){*spawn_error=basalt_sys_windows_error(thread_error);"
+      "TerminateProcess(process.hProcess,1);}wait_result=WaitForSingleObject(process.hProcess,"
+      "INFINITE);if(wait_result!=WAIT_OBJECT_0&&*spawn_error==0)*spawn_error=basalt_sys_windows_"
+      "error(GetLastError());if(threads[0]){WaitForSingleObject(threads[0],INFINITE);CloseHandle("
+      "threads[0]);threads[0]=NULL;out_read=NULL;}if(threads[1]){WaitForSingleObject(threads[1],"
+      "INFINITE);CloseHandle(threads[1]);threads[1]=NULL;err_read=NULL;}if(readers[0].error!=0&&*"
+      "spawn_error==0)*spawn_error=basalt_sys_windows_error(readers[0].error);if(readers[1].error!="
+      "0&&*spawn_error==0)*spawn_error=basalt_sys_windows_error(readers[1].error);*truncated="
+      "readers[0].truncated||readers[1].truncated;out[readers[0].len]=0;err[readers[1].len]=0;if(*"
+      "spawn_error==0&&!GetExitCodeProcess(process.hProcess,&exit_code))*spawn_error=basalt_sys_"
+      "windows_error(GetLastError());if(*spawn_error==0){if(exit_code>(DWORD)INT_MAX)result=INT_"
+      "MAX;else "
+      "result=(int)exit_code;}CloseHandle(process.hThread);CloseHandle(process.hProcess);process_"
+      "created=0;\n"));
+  (void)(write_string(
+      out,
+      "windows_cleanup:basalt_sys_status_value=result;basalt_sys_ok_value=(result==0&&*spawn_error="
+      "=0);if(process_created){TerminateProcess(process.hProcess,1);WaitForSingleObject(process."
+      "hProcess,INFINITE);CloseHandle(process.hThread);CloseHandle(process.hProcess);}if(attribute_"
+      "initialized){DeleteProcThreadAttributeList(attribute_list);attribute_initialized=0;}if("
+      "attribute_list){free(attribute_list);attribute_list=NULL;}if(threads[0])CloseHandle(threads["
+      "0]);if(threads[1])CloseHandle(threads[1]);if(out_read)CloseHandle(out_read);if(out_write)"
+      "CloseHandle(out_write);if(err_read)CloseHandle(err_read);if(err_write)CloseHandle(err_write)"
+      ";if(stdin_owned&&stdin_child)CloseHandle(stdin_child);if(command_line)free(command_line);if("
+      "exe_wide)free(exe_wide);if(wide_args){for(i=0;i<arg_count;i++)if(wide_args[i])free(wide_"
+      "args[i]);free(wide_args);}return result;}\n#endif\n"));
+  (void)(write_string(
       out,
       "int basalt_sys_run(const char*executable,char**args,int arg_count,int max_output){size_t "
-      "cap;size_t out_len=0,err_len=0;int "
-      "i;basalt_sys_free_buffers();if(!basalt_sys_cleanup_registered){atexit(basalt_sys_free_"
-      "buffers);basalt_sys_cleanup_registered=1;}basalt_sys_status_value=-1;basalt_sys_ok_value=0;"
-      "basalt_sys_truncated_value=0;basalt_sys_spawn_error_value=0;if(!executable||arg_count<0||"
-      "max_output<0||max_output>16777216){basalt_sys_spawn_error_value=EINVAL;basalt_sys_out="
-      "basalt_sys_raw_empty();basalt_sys_err=basalt_sys_raw_empty();return "
+      "cap;\n#if !defined(_WIN32)\nsize_t out_len=0,err_len=0;int "
+      "i;\n#endif\nbasalt_sys_free_buffers();if(!basalt_sys_cleanup_registered){atexit(basalt_sys_"
+      "free_buffers);basalt_sys_cleanup_registered=1;}basalt_sys_status_value=-1;basalt_sys_ok_"
+      "value=0;basalt_sys_truncated_value=0;basalt_sys_spawn_error_value=0;if(!executable||arg_"
+      "count<0||max_output<0||max_output>16777216){basalt_sys_spawn_error_value=EINVAL;basalt_sys_"
+      "out=basalt_sys_raw_empty();basalt_sys_err=basalt_sys_raw_empty();return "
       "-1;}cap=(size_t)max_output;basalt_sys_out=(char*)malloc(cap+1);basalt_sys_err=(char*)malloc("
       "cap+1);if(!basalt_sys_out||!basalt_sys_err)basalt_panic(5);basalt_sys_out[0]=0;basalt_sys_"
-      "err[0]=0;\n#if "
-      "defined(_WIN32)\n{char**av=(char**)calloc((size_t)arg_count+2,sizeof(char*));int "
-      "status;if(!av)basalt_panic(5);av[0]=(char*)executable;for(i=0;i<arg_count;i++)av[i+1]=args["
-      "i];av[arg_count+1]=NULL;status=_spawnvp(_P_WAIT,executable,(const char* "
-      "const*)av);free(av);if(status<0){basalt_sys_spawn_error_value=errno;basalt_sys_status_value="
-      "-1;}else{basalt_sys_status_value=status;basalt_sys_ok_value=status==0;}basalt_sys_out[0]=0;"
-      "basalt_sys_err[0]=0;return basalt_sys_status_value;}\n#else\n{int "
+      "err[0]=0;\n#if defined(_WIN32)\nreturn "
+      "basalt_sys_windows_run(executable,args,arg_count,cap,basalt_sys_out,basalt_sys_err,&basalt_"
+      "sys_truncated_value,&basalt_sys_spawn_error_value);\n#else\n{int "
       "out_pipe[2],err_pipe[2],exec_pipe[2];pid_t child;int status;int out_open=1,err_open=1;int "
       "exec_error=0;ssize_t "
       "exec_read;if(pipe(out_pipe)!=0||pipe(err_pipe)!=0||pipe(exec_pipe)!=0){basalt_sys_spawn_"
