@@ -6397,23 +6397,31 @@ func tc_diag(): void {
   else if tc_error_code == 61 then runtime_write_string("type error: closure moved-capture used after move");
   else if tc_error_code == 44 then runtime_write_string("type error: distinct functions collide after C mangling");
   else runtime_write_string("type error: invalid expression");
-  runtime_write_string("; diagnostic.code=");
+  runtime_write_char('\n');
+  runtime_write_string("diagnostic.code=");
   runtime_write_int(tc_error_code);
-  runtime_write_string("; diagnostic.file=");
+  runtime_write_char('\n');
+  runtime_write_string("diagnostic.file=");
   tc_print_source_file(tc_diag_file(tc_error_pos));
-  runtime_write_string("; diagnostic.line=");
+  runtime_write_char('\n');
+  runtime_write_string("diagnostic.line=");
   runtime_write_int(tc_diag_line(tc_error_pos));
-  runtime_write_string("; diagnostic.column=");
+  runtime_write_char('\n');
+  runtime_write_string("diagnostic.column=");
   runtime_write_int(tc_diag_col(tc_error_pos));
-  runtime_write_string("; diagnostic.hint=");
+  runtime_write_char('\n');
+  runtime_write_string("diagnostic.hint=");
   tc_print_hint(tc_error_code);
+  runtime_write_char('\n');
   if tc_diag_has_types(tc_error_code) == 1 then {
-    runtime_write_string("; diagnostic.expected=");
+    runtime_write_string("diagnostic.expected=");
     tc_print_type_kind(tc_error_expected_kind);
-    runtime_write_string("; diagnostic.found=");
+    runtime_write_char('\n');
+    runtime_write_string("diagnostic.found=");
     tc_print_type_kind(tc_error_found_kind);
+    runtime_write_char('\n');
   }
-  runtime_write_string("; diagnostic.excerpt=");
+  runtime_write_string("diagnostic.excerpt=");
   tc_print_source_excerpt(tc_error_pos);
   runtime_write_char('\n');
 }
@@ -6524,18 +6532,19 @@ func pipeline_main(path: string): int {
   }
   if parsed == 0 then {
     if tc_error_code == 0 then {
-      runtime_write_string("parse error");
-      runtime_write_string("; diagnostic.code=");
-      runtime_write_int(0);
-      runtime_write_string("; diagnostic.file=");
+      runtime_write_string("parse error\n");
+      runtime_write_string("diagnostic.code=0\n");
+      runtime_write_string("diagnostic.file=");
       tc_print_source_file(tc_diag_file(source_pos));
-      runtime_write_string("; diagnostic.line=");
+      runtime_write_char('\n');
+      runtime_write_string("diagnostic.line=");
       runtime_write_int(tc_diag_line(source_pos));
-      runtime_write_string("; diagnostic.column=");
+      runtime_write_char('\n');
+      runtime_write_string("diagnostic.column=");
       runtime_write_int(tc_diag_col(source_pos));
-      runtime_write_string("; diagnostic.hint=");
-      runtime_write_string("check the syntax near the reported source location");
-      runtime_write_string("; diagnostic.excerpt=");
+      runtime_write_char('\n');
+      runtime_write_string("diagnostic.hint=check the syntax near the reported source location\n");
+      runtime_write_string("diagnostic.excerpt=");
       tc_print_source_excerpt(source_pos);
       runtime_write_char('\n');
     }

@@ -34,12 +34,9 @@ diag_value() {
   local log=$1
   local key=$2
   awk -v key="$key" 'BEGIN { prefix = key "=" } {
-    count = split($0, fields, "; ");
-    for (i = 1; i <= count; i++) {
-      if (substr(fields[i], 1, length(prefix)) == prefix) {
-        print substr(fields[i], length(prefix) + 1);
-        exit;
-      }
+    if (index($0, prefix) == 1) {
+      print substr($0, length(prefix) + 1);
+      exit;
     }
   }' "$log"
 }
@@ -65,22 +62,32 @@ check_diag_format() {
   local expected_expected
   local expected_found
   local expected_excerpt
+  local ok=0
   expected_code=$(sed -n 's#^// diagnostic.code: ##p' "$source" | head -1)
   expected_hint=$(sed -n 's#^// diagnostic.hint: ##p' "$source" | head -1)
   expected_expected=$(sed -n 's#^// diagnostic.expected: ##p' "$source" | head -1)
   expected_found=$(sed -n 's#^// diagnostic.found: ##p' "$source" | head -1)
   expected_excerpt=$(sed -n 's#^// diagnostic.excerpt: ##p' "$source" | head -1)
-  check_diag_field "$log" diagnostic.file "$source"
-  if [ -n "$expected_code" ]; then check_diag_field "$log" diagnostic.code "$expected_code"; fi
-  if [ -n "$expected_hint" ]; then check_diag_field "$log" diagnostic.hint "$expected_hint"; fi
-  if [ -n "$expected_expected" ]; then check_diag_field "$log" diagnostic.expected "$expected_expected"; fi
-  if [ -n "$expected_found" ]; then check_diag_field "$log" diagnostic.found "$expected_found"; fi
-  if [ -n "$expected_excerpt" ]; then
-    grep -F -q -- "$expected_excerpt" "$log" || {
-      printf 'diagnostic mismatch diagnostic.excerpt: expected <%s>\n' "$expected_excerpt" >&2
-      return 1
-    }
+  if ! check_diag_field "$log" diagnostic.file "$source"; then ok=1; fi
+  if [ -n "$expected_code" ]; then
+    if ! check_diag_field "$log" diagnostic.code "$expected_code"; then ok=1; fi
   fi
+  if [ -n "$expected_hint" ]; then
+    if ! check_diag_field "$log" diagnostic.hint "$expected_hint"; then ok=1; fi
+  fi
+  if [ -n "$expected_expected" ]; then
+    if ! check_diag_field "$log" diagnostic.expected "$expected_expected"; then ok=1; fi
+  fi
+  if [ -n "$expected_found" ]; then
+    if ! check_diag_field "$log" diagnostic.found "$expected_found"; then ok=1; fi
+  fi
+  if [ -n "$expected_excerpt" ]; then
+    if ! grep -F -q -- "$expected_excerpt" "$log"; then
+      printf 'diagnostic mismatch diagnostic.excerpt: expected <%s>\n' "$expected_excerpt" >&2
+      ok=1
+    fi
+  fi
+  return "$ok"
 }
 
 run_invalid() {

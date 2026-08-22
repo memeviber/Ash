@@ -116,7 +116,7 @@ A closure literal MUST be type-checked before C emission. Its parameters form an
 
 `print expression;` writes the value without appending a line terminator. `println expression;` writes the value followed by exactly one line-feed. Both statements accept the same scalar, string, character, floating-point, integer-width, and pointer categories supported by the C emitter. The left-to-right evaluation order of the expression is unchanged.
 
-Compiler diagnostics are emitted as one physical line. The human-readable message is followed by semicolon-delimited stable fields such as `diagnostic.code=`, `diagnostic.file=`, `diagnostic.line=`, `diagnostic.column=`, `diagnostic.hint=`, and `diagnostic.excerpt=`; type-mismatch diagnostics additionally include `diagnostic.expected=` and `diagnostic.found=`. The excerpt is the final field so source text containing delimiters remains intact.
+Compiler diagnostics are emitted as a readable multi-line record. The human-readable message is on the first line, and every stable field keeps its label and value on the same line, for example `diagnostic.code=`, `diagnostic.file=`, `diagnostic.line=`, `diagnostic.column=`, `diagnostic.hint=`, and `diagnostic.excerpt=`. Type-mismatch diagnostics additionally include `diagnostic.expected=` and `diagnostic.found=`. The excerpt is the final field so source text containing line breaks or delimiters remains intact.
 
 ## Option, Result, and standard-library stability
 
