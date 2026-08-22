@@ -112,6 +112,12 @@ Calling a closure uses the ordinary postfix-call syntax, for example `(increment
 
 A closure literal MUST be type-checked before C emission. Its parameters form an inner scope, captured names are available in the body, and the body MUST return a value compatible with the declared return type. Returning a closure that borrows a block-local binding is rejected with diagnostic code **60**. Using a binding after moving it into a closure is rejected with diagnostic code **61**. These checks apply to direct closure literals and closure values stored in local bindings.
 
+## Console output and diagnostics
+
+`print expression;` writes the value without appending a line terminator. `println expression;` writes the value followed by exactly one line-feed. Both statements accept the same scalar, string, character, floating-point, integer-width, and pointer categories supported by the C emitter. The left-to-right evaluation order of the expression is unchanged.
+
+Compiler diagnostics are emitted as one physical line. The human-readable message is followed by semicolon-delimited stable fields such as `diagnostic.code=`, `diagnostic.file=`, `diagnostic.line=`, `diagnostic.column=`, `diagnostic.hint=`, and `diagnostic.excerpt=`; type-mismatch diagnostics additionally include `diagnostic.expected=` and `diagnostic.found=`. The excerpt is the final field so source text containing delimiters remains intact.
+
 ## Option, Result, and standard-library stability
 
 `option::Option<T>` is the canonical absence type. It is a fully materialized tagged value with a `present` flag and an initialized `value` field. `option::some(value)` constructs a present value, while `option::none(zero)` constructs an absent value whose payload is initialized to the caller-provided generic zero. The zero argument is required because the generated C representation does not use implicit uninitialized payloads.
@@ -120,7 +126,7 @@ The canonical Option API is total and MUST NOT panic or read an absent payload. 
 
 `result::Result<T, E>` is the canonical structured-error type. `result::ok(value, error_zero)` constructs success and initializes the error payload; `result::err(value_zero, error)` constructs failure and initializes the value payload. The total API includes `is_ok`, `is_err`, `unwrap_or`, `value_or`, `error_or`, `map`, `map_or`, `map_error`, `map_error_or`, `contains`, `and_result`, and `or_result`. Result combinators MUST preserve the inactive payload and its initialized zero value while transforming only the active branch.
 
-The historical `result::Option<T>` names (`some`, `none`, `is_some`, `is_none`, `unwrap_or_option`, and `map_option`) remain source-compatible for existing programs. New code SHOULD include `option.basalt` and use the qualified `option::Option<T>` API. The compatibility surface is not a second semantic model; it follows the same total-value rules.
+The historical `result::Option<T>` names (`some`, `none`, `is_some`, `is_none`, `unwrap_or_option`, and `map_option`) remain source-compatible for existing programs and are **deprecated**. New code SHOULD include `option.basalt` and use the qualified `option::Option<T>` API. The compatibility surface is intentionally retained because generic type aliases are not yet part of the Bootstrap language; it follows the same total-value rules and must not be extended with new APIs.
 
 Standard-library containers use generic, typed storage and return updated owning values from mutating operations. `array`, `slice`, `map`, and `string_builder` preserve their existing `length` spellings and additionally provide stable `len` aliases. Container accessors with a fallback (`get_or`, `last_or`, and the map `get` value-zero form) are total. `map` also exposes `is_empty` and load-state `is_full`; `slice` provides generic `map` and `filter`; `str` provides `len` and `equals` aliases while retaining the explicit byte-oriented and UTF-8-aware names. Cleanup functions return a zeroed container value after releasing backing storage.
 

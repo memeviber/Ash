@@ -1,0 +1,10 @@
+func main(): int {
+  print "Basalt";
+  print "-";
+  print 2026;
+  println "";
+  println "line-two";
+  println 42;
+  return 0;
+}
+

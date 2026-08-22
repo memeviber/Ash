@@ -76,8 +76,9 @@ namespace result {
     return next;
   }
 
-  // Legacy compatibility surface. New code should include option.basalt and
-  // use option::Option; these names remain available for existing programs.
+  // Deprecated source-compatibility surface. New code MUST include
+  // option.basalt and use option::Option; these names remain available for
+  // existing programs and follow the same total-value semantics.
   struct Option<T> {
     present: int;
     value: T;

@@ -56,6 +56,7 @@ let N_TUPLE_BIND: int = 44;
 let N_MOVE: int = 46;
 let N_CLOSURE: int = 47;
 let N_CLOSURE_CALL: int = 48;
+let N_PRINTLN: int = 49;
 
 let OP_ADD: int = 1;
 let OP_SUB: int = 2;
@@ -903,7 +904,7 @@ func gen_collect_stmt(id: int): void {
   if k == N_LET || k == N_CONST then { gen_collect_type(node_b[id]); gen_collect_expr(node_c[id]); return; }
   if k == N_GLOBAL then { gen_collect_type(node_b[id]); gen_collect_expr(node_c[id]); return; }
   if k == N_ASSIGN || k == N_COMPOUND_ASSIGN then { gen_collect_expr(node_a[id]); gen_collect_expr(node_b[id]); return; }
-  if k == N_PRINT || k == N_EXPR || k == N_RETURN then { gen_collect_expr(node_a[id]); return; }
+  if k == N_PRINT || k == N_PRINTLN || k == N_EXPR || k == N_RETURN then { gen_collect_expr(node_a[id]); return; }
   if k == N_BLOCK then { let x: int = node_a[id]; while x != 0 { gen_collect_stmt(x); x = node_next[x]; } return; }
   if k == N_IF then { gen_collect_expr(node_a[id]); gen_collect_stmt(node_b[id]); gen_collect_stmt(node_c[id]); return; }
   if k == N_WHILE then { gen_collect_expr(node_a[id]); gen_collect_stmt(node_b[id]); return; }
@@ -1575,22 +1576,24 @@ func gen_stmt(id: int): void {
     gen_compound_assignment(node_a[id], node_value[id], node_b[id]);
     code_emit(C_PUNCT, 12);
     code_emit(C_NEWLINE, 0);
-  } else if k == N_PRINT then {
+  } else if k == N_PRINT || k == N_PRINTLN then {
     code_emit(C_IDENT, -1001);
     let pk: int = gen_expr_kind(node_a[id]);
-    if pk == TY_STRING then code_emit(C_PUNCT, 16);
-    else if pk == TY_CHAR then code_emit(C_PUNCT, 20);
-    else if pk == TY_FLOAT || pk == TY_DOUBLE then code_emit(C_PUNCT, 21);
-    else if pk == TY_LONG then code_emit(C_PUNCT, 28);
-    else if pk == TY_LLONG then code_emit(C_PUNCT, 29);
+    let add_newline: int = 0;
+    if k == N_PRINTLN then add_newline = 1;
+    if pk == TY_STRING then { if add_newline == 1 then code_emit(C_PUNCT, 16); else code_emit(C_PUNCT, 32); }
+    else if pk == TY_CHAR then { if add_newline == 1 then code_emit(C_PUNCT, 20); else code_emit(C_PUNCT, 33); }
+    else if pk == TY_FLOAT || pk == TY_DOUBLE then { if add_newline == 1 then code_emit(C_PUNCT, 21); else code_emit(C_PUNCT, 34); }
+    else if pk == TY_LONG then { if add_newline == 1 then code_emit(C_PUNCT, 28); else code_emit(C_PUNCT, 35); }
+    else if pk == TY_LLONG then { if add_newline == 1 then code_emit(C_PUNCT, 29); else code_emit(C_PUNCT, 36); }
     else if pk == TY_PTR then {
-      code_emit(C_PUNCT, 26);
+      if add_newline == 1 then code_emit(C_PUNCT, 26); else code_emit(C_PUNCT, 37);
       code_emit(C_PUNCT, 4);
       code_emit(C_KW, 4);
       code_emit(C_PUNCT, 1);
       code_emit(C_PUNCT, 5);
     }
-    else code_emit(C_PUNCT, 15);
+    else { if add_newline == 1 then code_emit(C_PUNCT, 15); else code_emit(C_PUNCT, 38); }
     gen_expr(node_a[id]);
     code_emit(C_PUNCT, 8);
     code_emit(C_PUNCT, 12);
@@ -2352,7 +2355,7 @@ func generator_regression_main(): void {
     if code_value[i] != snapshot_value[i] then same = 0;
     i = i + 1;
   }
-  if same == 1 then print "generator_regression: PASS"; else print "generator_regression: FAIL";
+  if same == 1 then { runtime_write_string("generator_regression: PASS"); runtime_write_char('\n'); } else { runtime_write_string("generator_regression: FAIL"); runtime_write_char('\n'); }
 }
 
 
@@ -2450,6 +2453,7 @@ let T_MOVE: int = 90;
 let T_BORROW: int = 91;
 let T_BORROW_MUT: int = 92;
 let T_CLOSURE: int = 93;
+let T_PRINTLN: int = 94;
 
 let input_kind: int* = 0;
 let input_value: int* = 0;
@@ -3056,6 +3060,12 @@ func ast_stmt(): int {
     if input_take(T_SEMI) == 0 then return (0 - 1);
     return ast_node(N_PRINT, value, 0, 0, 0, 0);
   }
+  if input_take(T_PRINTLN) == 1 then {
+    let value: int = ast_expr();
+    if value < 0 then return (0 - 1);
+    if input_take(T_SEMI) == 0 then return (0 - 1);
+    return ast_node(N_PRINTLN, value, 0, 0, 0, 0);
+  }
   if input_take(T_IF) == 1 then {
     let cond: int = ast_expr();
     if cond < 0 then return (0 - 1);
@@ -3421,6 +3431,7 @@ let L_INT: int = 2;
 let L_FUNC: int = 3;
 let L_LET: int = 4;
 let L_PRINT: int = 5;
+let L_PRINTLN: int = 96;
 let L_RETURN: int = 6;
 let L_IF: int = 7;
 let L_ELSE: int = 8;
@@ -3991,6 +4002,9 @@ func word_code(start: int, length: int): int {
     if source[start] == 100 && source[start + 1] == 101 && source[start + 2] == 102 && source[start + 3] == 101 && source[start + 4] == 114 then return L_DEFER;
     if source[start] == 109 && source[start + 1] == 97 && source[start + 2] == 116 && source[start + 3] == 99 && source[start + 4] == 104 then return L_MATCH;
   }
+  if length == 7 then {
+    if source[start] == 112 && source[start + 1] == 114 && source[start + 2] == 105 && source[start + 3] == 110 && source[start + 4] == 116 && source[start + 5] == 108 && source[start + 6] == 110 then return L_PRINTLN;
+  }
   if length == 8 then {
     if source[start] == 99 then {
       if source[start + 1] == 111 then {
@@ -4287,6 +4301,7 @@ func map_token(k: int): int {
   if k == L_EXTERN then return T_EXTERN;
   if k == L_LET then return T_LET;
   if k == L_PRINT then return T_PRINT;
+  if k == L_PRINTLN then return T_PRINTLN;
   if k == L_RETURN then return T_RETURN;
   if k == L_DEFER then return T_DEFER;
   if k == L_MATCH then return T_MATCH;
@@ -4399,14 +4414,18 @@ func load_tokens_from_file(path: string): void {
   let k: int = lexer_next();
   while k != L_EOF {
     if debug_tokens == 1 then {
-      print "token.kind";
-      print map_token(k);
-      print "token.start";
-      print tok_start;
-      print "token.length";
-      print tok_length;
-      print "token.value";
-      print tok_value;
+      runtime_write_string("token.kind=");
+      runtime_write_int(map_token(k));
+      runtime_write_char('\n');
+      runtime_write_string("token.start=");
+      runtime_write_int(tok_start);
+      runtime_write_char('\n');
+      runtime_write_string("token.length=");
+      runtime_write_int(tok_length);
+      runtime_write_char('\n');
+      runtime_write_string("token.value=");
+      runtime_write_int(tok_value);
+      runtime_write_char('\n');
     }
     input_put(map_token(k), tok_value, tok_text, tok_start);
     k = lexer_next();
@@ -6206,7 +6225,8 @@ func tc_stmt(id: int, expected_kind: int, expected_name: int): void {
         variant = node_next[variant];
       }
     }
-  } else if k == N_PRINT then tc_expr(node_a[id]);
+        } else if k == N_PRINT || k == N_PRINTLN then tc_expr(node_a[id]);
+
   else if k == N_EXPR then { tc_expr(node_a[id]); if node_kind[node_a[id]] == N_CALL then tc_consume_call(node_a[id]); }
   else if k == N_RETURN then {
     if node_a[id] == 0 then { if expected_kind != TY_VOID then tc_fail(22); }
@@ -6258,8 +6278,8 @@ func tc_print_source_byte(value: int): void {
   } else runtime_write_char('?');
 }
 func tc_print_source_file(file_id: int): void {
-  if file_id < 1 then print "<unknown>";
-  else if file_id > source_file_count - 1 then print "<unknown>";
+  if file_id < 1 then runtime_write_string("<unknown>");
+  else if file_id > source_file_count - 1 then runtime_write_string("<unknown>");
   else {
     let i: int = 0;
     while i < source_file_name_len[file_id] {
@@ -6280,37 +6300,36 @@ func tc_print_source_excerpt(pos: int): void {
     tc_print_source_byte(source[i]);
     i = i + 1;
   }
-  runtime_write_char('\n');
 }
 func tc_print_type_kind(kind: int): void {
-  if kind == TY_INT then print "int";
-  else if kind == TY_BOOL then print "bool";
-  else if kind == TY_STRING then print "string";
-  else if kind == TY_VOID then print "void";
-  else if kind == TY_PTR then print "pointer";
-  else if kind == TY_ARRAY then print "array";
-  else if kind == TY_DYN_ARRAY then print "Array<T>";
-  else if kind == TY_NAMED then print "named type";
-  else if kind == TY_CHAR then print "char";
-  else if kind == TY_FLOAT then print "f32";
-  else if kind == TY_DOUBLE then print "f64";
-  else if kind == TY_FUN then print "function";
-  else if kind == TY_PARAM then print "type parameter";
-  else if kind == TY_GENERIC then print "generic type";
-  else if kind == TY_LONG then print "long";
-  else if kind == TY_LLONG then print "long long";
-  else if kind == TY_VARIANT then print "enum variant";
-  else if kind == TY_U8 then print "u8";
-  else if kind == TY_U16 then print "u16";
-  else if kind == TY_U32 then print "u32";
-  else if kind == TY_U64 then print "u64";
-  else if kind == TY_I8 then print "i8";
-  else if kind == TY_I16 then print "i16";
-  else if kind == TY_I32 then print "i32";
-  else if kind == TY_I64 then print "i64";
-  else if kind == TY_USIZE then print "usize";
-  else if kind == TY_TUPLE then print "tuple";
-  else print "unknown type";
+  if kind == TY_INT then runtime_write_string("int");
+  else if kind == TY_BOOL then runtime_write_string("bool");
+  else if kind == TY_STRING then runtime_write_string("string");
+  else if kind == TY_VOID then runtime_write_string("void");
+  else if kind == TY_PTR then runtime_write_string("pointer");
+  else if kind == TY_ARRAY then runtime_write_string("array");
+  else if kind == TY_DYN_ARRAY then runtime_write_string("Array<T>");
+  else if kind == TY_NAMED then runtime_write_string("named type");
+  else if kind == TY_CHAR then runtime_write_string("char");
+  else if kind == TY_FLOAT then runtime_write_string("f32");
+  else if kind == TY_DOUBLE then runtime_write_string("f64");
+  else if kind == TY_FUN then runtime_write_string("function");
+  else if kind == TY_PARAM then runtime_write_string("type parameter");
+  else if kind == TY_GENERIC then runtime_write_string("generic type");
+  else if kind == TY_LONG then runtime_write_string("long");
+  else if kind == TY_LLONG then runtime_write_string("long long");
+  else if kind == TY_VARIANT then runtime_write_string("enum variant");
+  else if kind == TY_U8 then runtime_write_string("u8");
+  else if kind == TY_U16 then runtime_write_string("u16");
+  else if kind == TY_U32 then runtime_write_string("u32");
+  else if kind == TY_U64 then runtime_write_string("u64");
+  else if kind == TY_I8 then runtime_write_string("i8");
+  else if kind == TY_I16 then runtime_write_string("i16");
+  else if kind == TY_I32 then runtime_write_string("i32");
+  else if kind == TY_I64 then runtime_write_string("i64");
+  else if kind == TY_USIZE then runtime_write_string("usize");
+  else if kind == TY_TUPLE then runtime_write_string("tuple");
+  else runtime_write_string("unknown type");
 }
 func tc_diag_has_types(code: int): int {
   if code == 12 then return 1;
@@ -6321,82 +6340,82 @@ func tc_diag_has_types(code: int): int {
   return 0;
 }
 func tc_print_hint(code: int): void {
-  if code == 12 then print "check each argument against its parameter type";
-  else if code == 20 then print "make the initializer expression match the declared type";
-  else if code == 21 then print "make the right-hand side match the left-hand side type";
-  else if code == 23 then print "return a value matching the function return type";
-  else if code == 36 then print "use an element type matching the existing array";
-  else if code == 55 then print "use only scalar, pointer, fixed-array, or named struct types in extern parameters";
-  else if code == 56 then print "use only scalar, pointer, fixed-array, or named struct types in extern return type";
-  else if code == 57 then print "header path must contain only alphanumeric characters, '.', '/', '_', '-'";
-  else if code == 58 then print "move only an owned binding or an owned container result";
-  else if code == 59 then print "pass a tracked variable or address expression to a borrow parameter";
-  else if code == 60 then print "keep a borrowed capture within the source binding's lexical lifetime";
-  else if code == 61 then print "closure moved-capture used after move";
-  else if code == 31 then print "assign only to a mutable binding";
-  else print "inspect the expression at the reported source location";
+  if code == 12 then runtime_write_string("check each argument against its parameter type");
+  else if code == 20 then runtime_write_string("make the initializer expression match the declared type");
+  else if code == 21 then runtime_write_string("make the right-hand side match the left-hand side type");
+  else if code == 23 then runtime_write_string("return a value matching the function return type");
+  else if code == 36 then runtime_write_string("use an element type matching the existing array");
+  else if code == 55 then runtime_write_string("use only scalar, pointer, fixed-array, or named struct types in extern parameters");
+  else if code == 56 then runtime_write_string("use only scalar, pointer, fixed-array, or named struct types in extern return type");
+  else if code == 57 then runtime_write_string("header path must contain only alphanumeric characters, '.', '/', '_', '-'");
+  else if code == 58 then runtime_write_string("move only an owned binding or an owned container result");
+  else if code == 59 then runtime_write_string("pass a tracked variable or address expression to a borrow parameter");
+  else if code == 60 then runtime_write_string("keep a borrowed capture within the source binding's lexical lifetime");
+  else if code == 61 then runtime_write_string("closure moved-capture used after move");
+  else if code == 31 then runtime_write_string("assign only to a mutable binding");
+  else runtime_write_string("inspect the expression at the reported source location");
 }
 func tc_diag(): void {
-  if tc_error_code == 3 then print "type error: duplicate declaration";
-  else if tc_error_code == 5 then print "type error: unknown name";
-  else if tc_error_code == 12 then print "type error: invalid function arguments";
-  else if tc_error_code == 13 then print "type error: invalid argument count";
-  else if tc_error_code == 14 then print "type error: string concatenation requires strings";
-  else if tc_error_code == 17 then print "type error: invalid built-in argument type";
-  else if tc_error_code == 18 then print "type error: invalid arithmetic operands";
-  else if tc_error_code == 20 then print "type error: initializer type mismatch";
-  else if tc_error_code == 21 then print "type error: assignment type mismatch";
-  else if tc_error_code == 23 then print "type error: return type mismatch";
-  else if tc_error_code == 28 then print "type error: recursive struct definition";
-  else if tc_error_code == 31 then print "type error: assignment to const";
-  else if tc_error_code == 33 then print "type error: use after ownership move";
-  else if tc_error_code == 34 then print "type error: use after ownership move";
-  else if tc_error_code == 35 then print "type error: release requires an owned value";
-  else if tc_error_code == 36 then print "type error: array element type mismatch";
-  else if tc_error_code == 37 then print "type error: cannot mutate or move while borrowed";
-  else if tc_error_code == 38 then print "type error: borrowed reference escapes its owner";
-  else if tc_error_code == 40 then print "type error: owned value copy requires an explicit move";
-  else if tc_error_code == 41 then print "type error: unknown function";
-  else if tc_error_code == 42 then print "type error: cannot call non-function value";
-  else if tc_error_code == 43 then print "type error: function name is reserved by the C runtime";
-  else if tc_error_code == 45 then print "type error: array index out of bounds";
-  else if tc_error_code == 46 then print "type error: defer expression must return void";
-  else if tc_error_code == 47 then print "type error: match subject must be an enum";
-  else if tc_error_code == 48 then print "type error: unknown variant in match arm";
-  else if tc_error_code == 49 then print "type error: duplicate variant in match";
-  else if tc_error_code == 50 then print "type error: match arm payload arity mismatch";
-  else if tc_error_code == 51 then print "type error: match is not exhaustive";
-  else if tc_error_code == 52 then print "type error: tuple destructuring requires tuple type";
-  else if tc_error_code == 53 then print "type error: tuple binding count mismatch";
-  else if tc_error_code == 54 then print "type error: integer literal is out of range for its target type";
-  else if tc_error_code == 55 then print "type error: extern parameter type is not FFI-safe";
-  else if tc_error_code == 56 then print "type error: extern return type is not FFI-safe";
-  else if tc_error_code == 57 then print "type error: extern header path contains invalid characters";
-  else if tc_error_code == 58 then print "type error: explicit move requires an owned value";
-  else if tc_error_code == 59 then print "type error: borrow parameter requires a tracked source";
-  else if tc_error_code == 60 then print "type error: closure capture escapes its source lifetime";
-  else if tc_error_code == 61 then print "type error: closure moved-capture used after move";
-  else if tc_error_code == 44 then print "type error: distinct functions collide after C mangling";
-  else print "type error: invalid expression";
-  print "diagnostic.code";
-  print tc_error_code;
-  print "diagnostic.file";
+  if tc_error_code == 3 then runtime_write_string("type error: duplicate declaration");
+  else if tc_error_code == 5 then runtime_write_string("type error: unknown name");
+  else if tc_error_code == 12 then runtime_write_string("type error: invalid function arguments");
+  else if tc_error_code == 13 then runtime_write_string("type error: invalid argument count");
+  else if tc_error_code == 14 then runtime_write_string("type error: string concatenation requires strings");
+  else if tc_error_code == 17 then runtime_write_string("type error: invalid built-in argument type");
+  else if tc_error_code == 18 then runtime_write_string("type error: invalid arithmetic operands");
+  else if tc_error_code == 20 then runtime_write_string("type error: initializer type mismatch");
+  else if tc_error_code == 21 then runtime_write_string("type error: assignment type mismatch");
+  else if tc_error_code == 23 then runtime_write_string("type error: return type mismatch");
+  else if tc_error_code == 28 then runtime_write_string("type error: recursive struct definition");
+  else if tc_error_code == 31 then runtime_write_string("type error: assignment to const");
+  else if tc_error_code == 33 then runtime_write_string("type error: use after ownership move");
+  else if tc_error_code == 34 then runtime_write_string("type error: use after ownership move");
+  else if tc_error_code == 35 then runtime_write_string("type error: release requires an owned value");
+  else if tc_error_code == 36 then runtime_write_string("type error: array element type mismatch");
+  else if tc_error_code == 37 then runtime_write_string("type error: cannot mutate or move while borrowed");
+  else if tc_error_code == 38 then runtime_write_string("type error: borrowed reference escapes its owner");
+  else if tc_error_code == 40 then runtime_write_string("type error: owned value copy requires an explicit move");
+  else if tc_error_code == 41 then runtime_write_string("type error: unknown function");
+  else if tc_error_code == 42 then runtime_write_string("type error: cannot call non-function value");
+  else if tc_error_code == 43 then runtime_write_string("type error: function name is reserved by the C runtime");
+  else if tc_error_code == 45 then runtime_write_string("type error: array index out of bounds");
+  else if tc_error_code == 46 then runtime_write_string("type error: defer expression must return void");
+  else if tc_error_code == 47 then runtime_write_string("type error: match subject must be an enum");
+  else if tc_error_code == 48 then runtime_write_string("type error: unknown variant in match arm");
+  else if tc_error_code == 49 then runtime_write_string("type error: duplicate variant in match");
+  else if tc_error_code == 50 then runtime_write_string("type error: match arm payload arity mismatch");
+  else if tc_error_code == 51 then runtime_write_string("type error: match is not exhaustive");
+  else if tc_error_code == 52 then runtime_write_string("type error: tuple destructuring requires tuple type");
+  else if tc_error_code == 53 then runtime_write_string("type error: tuple binding count mismatch");
+  else if tc_error_code == 54 then runtime_write_string("type error: integer literal is out of range for its target type");
+  else if tc_error_code == 55 then runtime_write_string("type error: extern parameter type is not FFI-safe");
+  else if tc_error_code == 56 then runtime_write_string("type error: extern return type is not FFI-safe");
+  else if tc_error_code == 57 then runtime_write_string("type error: extern header path contains invalid characters");
+  else if tc_error_code == 58 then runtime_write_string("type error: explicit move requires an owned value");
+  else if tc_error_code == 59 then runtime_write_string("type error: borrow parameter requires a tracked source");
+  else if tc_error_code == 60 then runtime_write_string("type error: closure capture escapes its source lifetime");
+  else if tc_error_code == 61 then runtime_write_string("type error: closure moved-capture used after move");
+  else if tc_error_code == 44 then runtime_write_string("type error: distinct functions collide after C mangling");
+  else runtime_write_string("type error: invalid expression");
+  runtime_write_string("; diagnostic.code=");
+  runtime_write_int(tc_error_code);
+  runtime_write_string("; diagnostic.file=");
   tc_print_source_file(tc_diag_file(tc_error_pos));
-  runtime_write_char('\n');
-  print "diagnostic.line";
-  print tc_diag_line(tc_error_pos);
-  print "diagnostic.column";
-  print tc_diag_col(tc_error_pos);
-  print "diagnostic.excerpt";
-  tc_print_source_excerpt(tc_error_pos);
-  print "diagnostic.hint";
+  runtime_write_string("; diagnostic.line=");
+  runtime_write_int(tc_diag_line(tc_error_pos));
+  runtime_write_string("; diagnostic.column=");
+  runtime_write_int(tc_diag_col(tc_error_pos));
+  runtime_write_string("; diagnostic.hint=");
   tc_print_hint(tc_error_code);
   if tc_diag_has_types(tc_error_code) == 1 then {
-    print "diagnostic.expected";
+    runtime_write_string("; diagnostic.expected=");
     tc_print_type_kind(tc_error_expected_kind);
-    print "diagnostic.found";
+    runtime_write_string("; diagnostic.found=");
     tc_print_type_kind(tc_error_found_kind);
   }
+  runtime_write_string("; diagnostic.excerpt=");
+  tc_print_source_excerpt(tc_error_pos);
+  runtime_write_char('\n');
 }
 func tc_check_function_symbols(root: int): int {
   let a: int = node_a[root];
@@ -6505,20 +6524,20 @@ func pipeline_main(path: string): int {
   }
   if parsed == 0 then {
     if tc_error_code == 0 then {
-      print "parse error";
-      print "diagnostic.code";
-      print 0;
-      print "diagnostic.file";
+      runtime_write_string("parse error");
+      runtime_write_string("; diagnostic.code=");
+      runtime_write_int(0);
+      runtime_write_string("; diagnostic.file=");
       tc_print_source_file(tc_diag_file(source_pos));
-      runtime_write_char('\n');
-      print "diagnostic.line";
-      print tc_diag_line(source_pos);
-      print "diagnostic.column";
-      print tc_diag_col(source_pos);
-      print "diagnostic.excerpt";
+      runtime_write_string("; diagnostic.line=");
+      runtime_write_int(tc_diag_line(source_pos));
+      runtime_write_string("; diagnostic.column=");
+      runtime_write_int(tc_diag_col(source_pos));
+      runtime_write_string("; diagnostic.hint=");
+      runtime_write_string("check the syntax near the reported source location");
+      runtime_write_string("; diagnostic.excerpt=");
       tc_print_source_excerpt(source_pos);
-      print "diagnostic.hint";
-      print "check the syntax near the reported source location";
+      runtime_write_char('\n');
     }
   }
   if parsed == 1 then { return 0; }
@@ -6710,6 +6729,13 @@ func emit_c_token(out: int*, kind: int, value: int): void {
     else if value == 27 then write_string(out, "->");
     else if value == 28 then { write_char(out, 40); write_char(out, 34); write_string(out, "%ld"); write_char(out, 92); write_char(out, 110); write_char(out, 34); write_string(out, ", "); }
     else if value == 29 then { write_char(out, 40); write_char(out, 34); write_string(out, "%lld"); write_char(out, 92); write_char(out, 110); write_char(out, 34); write_string(out, ", "); }
+    else if value == 32 then { write_char(out, 40); write_char(out, 34); write_string(out, "%s"); write_char(out, 34); write_string(out, ", "); }
+    else if value == 33 then { write_char(out, 40); write_char(out, 34); write_string(out, "%c"); write_char(out, 34); write_string(out, ", "); }
+    else if value == 34 then { write_char(out, 40); write_char(out, 34); write_string(out, "%g"); write_char(out, 34); write_string(out, ", "); }
+    else if value == 35 then { write_char(out, 40); write_char(out, 34); write_string(out, "%ld"); write_char(out, 34); write_string(out, ", "); }
+    else if value == 36 then { write_char(out, 40); write_char(out, 34); write_string(out, "%lld"); write_char(out, 34); write_string(out, ", "); }
+    else if value == 37 then { write_char(out, 40); write_char(out, 34); write_string(out, "%p"); write_char(out, 34); write_string(out, ", "); }
+    else if value == 38 then { write_char(out, 40); write_char(out, 34); write_string(out, "%d"); write_char(out, 34); write_string(out, ", "); }
   } else if kind == C_NEWLINE then write_char(out, 10);
 }
 

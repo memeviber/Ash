@@ -71,6 +71,23 @@ compile_run() {
   printf 'PASS %s\n' "$label"
 }
 
+compile_run_with_output() {
+  local source=$1 label=$2 expected=$3
+  track_source "$source"
+  local boot_c="$OUT/${label}.boot.c"
+  local boot_bin="$OUT/${label}.boot.bin"
+  local stdout_file="$OUT/${label}.stdout"
+  rm -f "$boot_c" "$boot_bin" "$stdout_file" "$ROOT"/$(basename "$source").c
+  "$BOOT_BIN" "$source" "$boot_c" >/dev/null
+  gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror "$boot_c" -o "$boot_bin"
+  "$boot_bin" >"$stdout_file"
+  if ! diff -u <(printf '%s' "$expected") "$stdout_file"; then
+    echo "FAIL $label: stdout mismatch" >&2
+    return 1
+  fi
+  printf 'PASS %s (stdout)\n' "$label"
+}
+
 compile_run_with_input() {
   local source=$1 label=$2 input=$3 expected=$4
   track_source "$source"
@@ -133,6 +150,7 @@ compile_run "$ROOT/tests/regression/stdlib_stabilization_edge_test.basalt" stdli
 compile_run "$ROOT/tests/super/stdlib_matrix_valid.basalt" stdlib_matrix_valid
 compile_run "$ROOT/tests/super/integer_pointer_boundary_valid.basalt" integer_pointer_boundary_valid
 compile_run "$ROOT/tests/super/closure_generic_nested_valid.basalt" closure_generic_nested_valid
+compile_run_with_output "$ROOT/tests/super/print_stream_valid.basalt" print_stream_valid $'Basalt-2026\nline-two\n42\n'
 compile_run "$ROOT/tests/regression/string_builder_iter_test.basalt" string_builder_iter_test
 compile_run "$ROOT/tests/regression/numeric_compound_test.basalt" numeric_compound_test
 compile_run "$ROOT/tests/regression/f32_f64_test.basalt" f32_f64_test

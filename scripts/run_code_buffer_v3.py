@@ -38,7 +38,7 @@ def main() -> int:
     source = OUT / "code_buffer_growth.basalt"
     lines = ["func main(): int {", "  let total: int = 0;"]
     lines.extend("  total = total + 1;" for _ in range(ASSIGNMENTS))
-    lines.extend(["  print total;", "  return 0;", "}", ""])
+    lines.extend(["  println total;", "  return 0;", "}", ""])
     source.write_text("\n".join(lines), encoding="utf-8")
 
     seed_bin = OUT / "bootstrap.seed.bin"

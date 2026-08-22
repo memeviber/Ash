@@ -33,7 +33,15 @@ run_valid() {
 diag_value() {
   local log=$1
   local key=$2
-  awk -v key="$key" '$0 == key { if (getline next_line > 0) print next_line; exit }' "$log"
+  awk -v key="$key" 'BEGIN { prefix = key "=" } {
+    count = split($0, fields, "; ");
+    for (i = 1; i <= count; i++) {
+      if (substr(fields[i], 1, length(prefix)) == prefix) {
+        print substr(fields[i], length(prefix) + 1);
+        exit;
+      }
+    }
+  }' "$log"
 }
 
 check_diag_field() {
