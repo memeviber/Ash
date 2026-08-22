@@ -119,17 +119,15 @@ The script:
 
 A passing fixed point proves the self-hosting compiler is stable: the compiler built by itself produces the same compiler artifact.
 
-**After changing `basaltc.basalt`, you must** run the Bootstrap-only fixed-point chain, synchronize the stable n3 artifact, and rerun the chain:
+**After changing `basaltc.basalt`, you must** run the Bootstrap-only fixed-point chain, promote the stable candidate through the repository script, and rerun the chain:
 
 ```sh
 bash scripts/fixed_point.sh
-cp .tmp/fixed-point/n3.c src/bootstrap/basaltc.seed.c
-sha256sum src/bootstrap/basaltc.seed.c | awk '{print $1}' > \\
-  src/bootstrap/fixed_point_production.sha256
+bash scripts/promote_seed.sh
 bash scripts/fixed_point.sh
 ```
 
-Only after the synchronized fixed point passes may the full ownership-stress suite be run and the change committed. All generated binaries and intermediate C files remain under `.tmp/`.
+`promote_seed.sh` verifies that the default `.tmp/fixed-point/n3.c` and `n4.c` are identical, copies the stable candidate into `src/bootstrap/basaltc.seed.c`, runs `scripts/format_seed_c.sh`, and refreshes `src/bootstrap/fixed_point_production.sha256`. To format an existing generated C file without promotion, run `scripts/format_seed_c.sh [path]`; use `--check` for a non-mutating verification. Only after the synchronized fixed point passes may the full ownership-stress suite be run and the change committed. All generated binaries and intermediate C files remain under `.tmp/.`
 
 ### 3.3 The full suite
 

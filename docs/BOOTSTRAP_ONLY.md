@@ -40,6 +40,12 @@ New language features must be implemented in `src/bootstrap/basaltc.basalt`, and
 
 The stored C compiler is never regenerated or replaced by any runner. It is the deliberate compiler boundary between the previous generation and modern source development; generated current-generation compilers remain temporary unless explicitly promoted as a future seed.
 
+## Seed formatting and promotion
+
+Generated Bootstrap C is formatted with the repository `.clang-format` policy. `scripts/format_seed_c.sh [path]` formats a generated C file in place, while `scripts/format_seed_c.sh --check [path]` verifies that it is already formatted without modifying it. The fixed-point runner performs the raw byte-level `n3.c == n4.c` check first, then formats both stable artifacts and checks that the formatted pair remains identical. This keeps formatting separate from self-hosting correctness.
+
+After reviewing a stable fixed-point candidate, `scripts/promote_seed.sh [candidate.c]` copies it to `src/bootstrap/basaltc.seed.c`, runs the formatter, refreshes `src/bootstrap/fixed_point_production.sha256`, and refuses the default promotion if `.tmp/fixed-point/n3.c` and `n4.c` are not identical. The formatter is a presentation tool only; it does not participate in Basalt compilation or alter the frozen Host policy. A working environment that runs the formatting or promotion workflow must provide `clang-format` 18 or newer.
+
 ## CLI and process safety
 
 The compatibility CLI is `basaltc [--line|--no-line] <input.basalt> [output.c]`. Source mapping is enabled by default for ordinary C generation; `--no-line` suppresses generated `#line` records without changing emitted program semantics. The explicit build form is `basaltc --compile <input.basalt> [-o <binary>] [--cc <compiler>] [-- <compiler-arguments...>]`. Auto-compile also keeps source mapping enabled by default; `--no-line` is the explicit opt-out and `--line` explicitly keeps it enabled. Only the repository's Bootstrap and fixed-point scripts pass `--no-line` while translating `src/bootstrap/basaltc.basalt`, so the frozen seed/current compiler artifacts do not carry mapping directives. This build policy is separate from the CLI behavior of the compiler when compiling user programs. The compiler arguments after `--` remain individual argv elements and are passed in order before the generated C path. Auto-compile MUST NOT concatenate user-provided options into a shell command.

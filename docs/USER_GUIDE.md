@@ -53,6 +53,8 @@ gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror \\
 
 For a stable self-hosted compiler, run `bash scripts/fixed_point.sh`; it verifies the frozen seed through successive Bootstrap generations. The OCaml files under `src/compiler/` are intentionally outside this workflow.
 
+When a stable fixed-point candidate is ready for seed promotion, use `scripts/promote_seed.sh` instead of copying it manually. The script checks the default `.tmp/fixed-point/n3.c`/`n4.c` pair, copies the candidate into `src/bootstrap/basaltc.seed.c`, formats it with the repository `.clang-format` policy, and refreshes the production SHA-256 file. To format or check another generated C file without promotion, use `scripts/format_seed_c.sh [path]` or `scripts/format_seed_c.sh --check [path]`. These scripts require `clang-format` 18 or newer and never modify the frozen OCaml Host compiler.
+
 The compiler accepts `--line` and `--no-line` before the input path. Mapping is enabled by default and emits C `#line` records that point diagnostics and debugger locations back to `.basalt` files. Use `--no-line` when a consumer requires generated C without source directives:
 
 ```sh

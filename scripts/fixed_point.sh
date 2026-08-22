@@ -20,6 +20,11 @@ gcc "${STRICT_FLAGS[@]}" "$OUT/n2.c" -o "$OUT/n2.bin"
 "$OUT/n2.bin" --no-line "$SRC" "$OUT/n3.c"
 gcc "${STRICT_FLAGS[@]}" "$OUT/n3.c" -o "$OUT/n3.bin"
 "$OUT/n3.bin" --no-line "$SRC" "$OUT/n4.c"
+# Verify the compiler's raw output before applying presentation-only formatting.
+cmp -s "$OUT/n3.c" "$OUT/n4.c"
+"$ROOT/scripts/format_seed_c.sh" "$OUT/n3.c"
+"$ROOT/scripts/format_seed_c.sh" "$OUT/n4.c"
+# Formatting must itself be deterministic and preserve the fixed-point pair.
 cmp -s "$OUT/n3.c" "$OUT/n4.c"
 
 SEED_ACTUAL=$(sha256sum "$SEED_C" | cut -d' ' -f1)
