@@ -697,14 +697,16 @@ Each array item is passed as one argv item. An argument such as `two words` or `
 
 The `max_output` limit applies independently to stdout and stderr. When a child writes more than the limit, the captured value is the prefix and `truncated` is set, while the runner continues draining and waits for the child so a full pipe cannot deadlock. Negative or excessively large limits are rejected. The current Windows fallback provides status and empty stream fields rather than pretending that capture is portable; code needing captured streams must check the result fields and target capability. There is deliberately no implicit shell API. Shell syntax, if required, must be an explicit and audited `includec`/FFI boundary.
 
-Strings support character indexing and comparison:
+Direct string indexing is byte indexing. For ASCII text this has the expected character-like result, but it must not be used to traverse a multi-byte UTF-8 encoding:
 
 ```basalt
 let s: string = "hello";
 print s[0] == 'h';        // 1
-let code: int = s[1];     // char widens to int: 101
-print code;               // 101
+let byte_value: int = s[1]; // byte value: 101
+print byte_value;            // 101
 ```
+
+For non-ASCII text, use `utf8_validate`, `codepoint_at`, `codepoint_byte_offset`, or `Utf8Iterator` as described in Section 6.2.
 
 ---
 
