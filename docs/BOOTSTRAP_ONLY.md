@@ -26,7 +26,7 @@ bash scripts/run_ownership_stress.sh
 python3 scripts/run_memory_sanitizer.py
 ```
 
-New language features must be implemented in `src/bootstrap/basaltc.basalt`, and new tests must be compiled and run through the Bootstrap compiler produced from `basaltc.seed.c`. Generated C files and binaries belong only in `.tmp/` and must not be committed.
+New language features must be implemented in `src/bootstrap/basaltc.basalt`, and new tests must be compiled and run through the Bootstrap compiler produced from `basaltc.seed.c`. Generated C files and binaries belong only in `.tmp/` and must not be committed. The compiler's `--compile` mode follows the same rule for its intermediate C file and executable during development.
 
 ## Fixed point
 
@@ -40,9 +40,15 @@ New language features must be implemented in `src/bootstrap/basaltc.basalt`, and
 
 The stored C compiler is never regenerated or replaced by any runner. It is the deliberate compiler boundary between the previous generation and modern source development; generated current-generation compilers remain temporary unless explicitly promoted as a future seed.
 
+## CLI and process safety
+
+The compatibility CLI is `basaltc [--line|--no-line] <input.basalt> [output.c]`. Source mapping is enabled by default; `--no-line` suppresses generated `#line` records without changing emitted program semantics. The explicit build form is `basaltc --compile <input.basalt> [-o <binary>] [--cc <compiler>] [-- <compiler-arguments...>]`. The compiler arguments after `--` remain individual argv elements and are passed in order before the generated C path. Auto-compile MUST NOT concatenate user-provided options into a shell command.
+
+The `sys::run` standard-library API applies the same rule to child processes. It receives an executable and `array::Array<string>` arguments, so spaces, quotes, and shell metacharacters remain data. It returns normalized status, success, bounded stdout/stderr, a truncation flag, and a spawn-error code. POSIX implementations use fork/exec, pipes, polling, and wait; the current Windows fallback provides status while leaving captured streams empty. There is no implicit shell mode.
+
 ## Validation policy
 
-The Bootstrap-only suites cover strict GCC compilation, valid and invalid regression fixtures, long-term conformance generation, ownership and move/borrow checks, pointer and function-pointer stress, adversarial sanitizer workloads, code-buffer growth, and fixed-point stability. The memory sanitizer harness compares Bootstrap-generated C with a hand-written C baseline; it does not invoke the frozen Host compiler.
+The Bootstrap-only suites cover strict GCC compilation, valid and invalid regression fixtures, long-term conformance generation, ownership and move/borrow checks, pointer and function-pointer stress, adversarial sanitizer workloads, code-buffer growth, and fixed-point stability. Changes to CLI/source mapping/process execution additionally require tests for legacy positional output, both line modes, ordered compiler arguments, nonzero compiler status, whitespace/quote-preserving argv, empty arguments, nonzero child exit, missing executable, bounded output, and no shell injection through structured arguments. The memory sanitizer harness compares Bootstrap-generated C with a hand-written C baseline; it does not invoke the frozen Host compiler.
 
 The compatibility script `scripts/check_parser_conflicts.sh` is retained only as a legacy entry point. It intentionally performs no OCaml, Dune, Menhir, or Host-parser operation.
 

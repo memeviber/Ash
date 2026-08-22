@@ -1,0 +1,30 @@
+include "array.basalt"
+
+// Structured process execution without shell interpolation.
+// `args` contains only the child arguments; argv boundaries are preserved.
+// The returned strings are owned by the runtime and remain valid until exit.
+namespace sys {
+  struct Output {
+    status: int;
+    succeeded: int;
+    stdout: string;
+    stderr: string;
+    truncated: int;
+    spawn_error: int;
+  }
+
+  // status is 0 for success, a positive exit code for normal failure, and
+  // negative on signal termination. spawn_error is 0 after a successful spawn.
+  // max_output bounds each stream independently; truncated is 1 when either
+  // stream exceeded the bound. A null args pointer is valid when arg_count=0.
+  func run(executable: string, args: array::Array<string>, max_output: int): Output {
+    let out: Output = 0;
+    out.status = basalt_sys_run(executable, args.data, args.len, max_output);
+    out.succeeded = basalt_sys_run_status();
+    out.stdout = basalt_sys_stdout();
+    out.stderr = basalt_sys_stderr();
+    out.truncated = basalt_sys_truncated();
+    out.spawn_error = basalt_sys_spawn_error();
+    return out;
+  }
+}

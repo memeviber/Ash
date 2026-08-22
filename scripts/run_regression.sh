@@ -27,7 +27,7 @@ BOOT_BIN="$ROOT/.tmp/bootstrap.bin"
 assert_single_runtime_prologue() {
   local c_file=$1 label=$2
   local prefix needle count
-  prefix=$(awk '/^static void\* basalt_track\(void\*\);/{print; exit} {print}' "$c_file")
+  prefix=$(awk '/^#line /{exit} {print}' "$c_file")
   for needle in '#include <stdio.h>' '#include <stdlib.h>' '#include <string.h>' '_POSIX_C_SOURCE 200809L' '_XOPEN_SOURCE 700'; do
     count=$(printf '%s\n' "$prefix" | grep -F -c "$needle" || true)
     if [[ "$count" -ne 1 ]]; then
@@ -86,6 +86,42 @@ compile_run_with_output() {
     return 1
   fi
   printf 'PASS %s (stdout)\n' "$label"
+}
+
+check_cli_modes() {
+  local source="$ROOT/tests/regression/source_mapping_test.basalt"
+  local line_c="$OUT/source_mapping_cli_line.c"
+  local no_line_c="$OUT/source_mapping_cli_no_line.c"
+  "$BOOT_BIN" --line "$source" "$line_c" >/dev/null
+  assert_source_mapping "$line_c" "$source" 3 "source mapping CLI --line"
+  "$BOOT_BIN" --no-line "$source" "$no_line_c" >/dev/null
+  if grep -q '^#line ' "$no_line_c"; then
+    echo "FAIL source mapping CLI --no-line: generated C still contains #line" >&2
+    return 1
+  fi
+  printf 'PASS source mapping CLI modes\n'
+}
+
+auto_compile_cli() {
+  local source="$OUT/auto_compile_input.basalt"
+  local binary="$OUT/auto_compile_input.bin"
+  local generated="${source}.c"
+  cp "$ROOT/tests/super/print_stream_valid.basalt" "$source"
+  "$BOOT_BIN" --compile "$source" -o "$binary" --cc gcc -- -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror >/dev/null
+  if [[ ! -x "$binary" ]]; then
+    echo "FAIL auto-compile: compiler did not produce executable" >&2
+    return 1
+  fi
+  if ! diff -u <(printf '%s' $'Basalt-2026\nline-two\n42\n') <("$binary"); then
+    echo "FAIL auto-compile: executable output mismatch" >&2
+    return 1
+  fi
+  if "$BOOT_BIN" --compile "$source" -o "$OUT/auto_compile_should_fail.bin" --cc false -- >/dev/null 2>&1; then
+    echo "FAIL auto-compile: nonzero compiler status was accepted" >&2
+    return 1
+  fi
+  test -f "$generated"
+  printf 'PASS auto-compile CLI\n'
 }
 
 compile_run_with_input() {
@@ -158,6 +194,9 @@ compile_run "$ROOT/tests/regression/generic_float_bound_nested_test.basalt" gene
 compile_run "$ROOT/tests/regression/generic_callback_borrow_lifecycle_test.basalt" generic_callback_borrow_lifecycle_test
 compile_run "$ROOT/tests/regression/compound_assignment_side_effect_test.basalt" compound_assignment_side_effect_test
 compile_run "$ROOT/tests/regression/source_mapping_test.basalt" source_mapping_test
+check_cli_modes
+compile_run_with_output "$ROOT/tests/regression/sys_process_test.basalt" sys_process_test $'0\n1\nhello world|quote"value\n\n0\n0\n'
+auto_compile_cli
 compile_run "$ROOT/tests/regression/tagged_union_test.basalt" tagged_union_test
 compile_run "$ROOT/tests/regression/defer_test.basalt" defer_test
 compile_run "$ROOT/tests/regression/match_test.basalt" match_test

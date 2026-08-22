@@ -234,6 +234,27 @@ A synchronized seed is valid only when the generated generations converge byte-f
 
 The Bootstrap compatibility corpus is stored under `tests/spec/`. Valid cases MUST compile, pass strict GCC, and produce the expected runtime result. Invalid cases MUST be rejected before a generated C artifact is created. The corpus is executed by `scripts/run_spec_compat.sh` and is also part of `scripts/run_ownership_stress.sh`.
 
+## Compiler CLI and source mapping
+
+The compatibility form of the Bootstrap compiler is `basaltc [--line|--no-line] <input.basalt> [output.c]`. Source mapping is enabled by default; `--line` explicitly enables it and `--no-line` disables it. When enabled, the C emitter MUST place `#line <source-line> "<escaped-source-file>"` at source-location transitions. The source file name MUST escape quotes, backslashes, and control characters. Disabling mapping MUST remove generated `#line` directives without changing program semantics or token emission.
+
+The compiler also supports `basaltc --compile <input.basalt> [-o <binary>] [--cc <compiler>] [-- <compiler-arguments...>]`. The generated C path defaults to `<input.basalt>.c` in this mode, and the executable path defaults to `<input.basalt>.out`. The legacy second positional argument remains a C output path and MUST NOT be interpreted as an executable path. Compiler arguments after `--` are preserved as individual argv elements, are emitted before the generated input C path, and are followed by `-o` and the selected binary path. The implementation MUST NOT construct a shell command by concatenating quoted strings. A nonzero compiler exit status is returned to the caller and compiler stderr is forwarded for diagnosis.
+
+## Structured process API
+
+The standard library module `sys` exposes argv-oriented process execution without shell interpolation:
+
+```basalt
+include "../../src/stdlib/sys.basalt"
+
+let args: array::Array<string> = array::new(0, "");
+let result: sys::Output = sys::run("program", args, 65536);
+```
+
+`sys::Output` contains `status`, `succeeded`, `stdout`, `stderr`, `truncated`, and `spawn_error`. `args` contains only child arguments; each array element remains a distinct argv boundary, so whitespace and quotes are data rather than shell syntax. `status` is zero on success, a nonnegative normal exit code on ordinary failure, and negative on signal termination. A spawn or setup failure sets `spawn_error` to a positive platform error number and uses a negative status. `succeeded` is one only when status is zero and spawn_error is zero.
+
+The `max_output` argument bounds stdout and stderr independently in bytes. Capturing more than the bound retains the prefix, sets `truncated` to one, and still waits for the child to finish. Negative values and values above the implementation limit are rejected as invalid process requests. The API does not provide a shell mode; programs that intentionally need shell behavior MUST cross an explicit `includec`/FFI boundary and accept the platform and injection risks themselves. Windows uses the platform process API available to the generated C target; POSIX targets use fork/exec, pipes, polling, and wait semantics. The Windows fallback currently returns status without stream capture, and callers MUST consult `truncated` and the output fields rather than assuming capture is available on every target.
+
 ## References
 
 [1]: ../src/bootstrap/basaltc.basalt "Bootstrap Basalt compiler source"

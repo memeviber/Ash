@@ -147,6 +147,8 @@ let tc_diag_ascii: string = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQ
 let gen_source_pos: int = 0;
 let gen_source_epoch: int = 0;
 let emit_pending_space: int = 0;
+// Source mapping is enabled by default; the CLI can disable it with --no-line.
+let emit_line_directives: int = 1;
 let ffi_header_ids: int* = 0;
 let ffi_header_count: int = 0;
 let ffi_header_cap: int = 0;
@@ -3711,6 +3713,10 @@ let BI_TC_PTR_INT: int = 4;
 let BI_TC_PTR_VOID: int = 5;
 let BI_TC_MEM_ALLOC: int = 6;
 let BI_TC_MEM_ALLOC_ALIGNED: int = 30;
+let BI_TC_SYS_RUN: int = 31;
+let BI_TC_SYS_COMPILE: int = 34;
+let BI_TC_SYS_STRING: int = 32;
+let BI_TC_SYS_INT: int = 33;
 let BI_TC_MEM_RESIZE: int = 7;
 let BI_TC_MEM_FREE: int = 8;
 let BI_TC_READ_LINE: int = 9;
@@ -3893,6 +3899,13 @@ func bi_init(): void {
   bi_register("runtime_write_int", BI_TC_WRITE_INT, BI_FLAG_RESERVED);
   bi_register("runtime_write_char", BI_TC_WRITE_CHAR, BI_FLAG_RESERVED);
   bi_register("runtime_io_status", BI_TC_IO_STATUS, BI_FLAG_RESERVED);
+  bi_register("basalt_sys_run", BI_TC_SYS_RUN, BI_FLAG_RESERVED);
+  bi_register("basalt_compile_argv", BI_TC_SYS_COMPILE, BI_FLAG_RESERVED);
+  bi_register("basalt_sys_stdout", BI_TC_SYS_STRING, BI_FLAG_RESERVED);
+  bi_register("basalt_sys_stderr", BI_TC_SYS_STRING, BI_FLAG_RESERVED);
+  bi_register("basalt_sys_truncated", BI_TC_SYS_INT, BI_FLAG_RESERVED);
+  bi_register("basalt_sys_spawn_error", BI_TC_SYS_INT, BI_FLAG_RESERVED);
+  bi_register("basalt_sys_run_status", BI_TC_SYS_INT, BI_FLAG_RESERVED);
   bi_register("memory_alloc", BI_TC_MEM_ALLOC, BI_FLAG_RESERVED + BI_FLAG_OWNED);
   bi_register("memory_alloc_aligned", BI_TC_MEM_ALLOC_ALIGNED, BI_FLAG_RESERVED + BI_FLAG_OWNED);
   bi_register("memory_resize", BI_TC_MEM_RESIZE, BI_FLAG_RESERVED + BI_FLAG_OWNED);
@@ -5624,6 +5637,35 @@ func tc_expr(id: int): void {
       if tc_kind != TY_PTR then { tc_fail(8); return; }
       tc_kind = TY_VOID; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0; tc_result_type = 0; return;
     }
+    if btag == BI_TC_SYS_COMPILE then {
+      let aa: int = node_a[id];
+      if aa == 0 || node_next[aa] == 0 || node_next[node_next[aa]] == 0 || node_next[node_next[node_next[aa]]] == 0 || node_next[node_next[node_next[node_next[aa]]]] == 0 || node_next[node_next[node_next[node_next[node_next[aa]]]]] == 0 || node_next[node_next[node_next[node_next[node_next[node_next[aa]]]]]] != 0 then { tc_fail(13); return; }
+      tc_expr(aa); if tc_kind != TY_STRING then { tc_fail(17); return; }
+      aa = node_next[aa]; tc_expr(aa); if tc_kind != TY_STRING then { tc_fail(17); return; }
+      aa = node_next[aa]; tc_expr(aa); if tc_kind != TY_STRING then { tc_fail(17); return; }
+      aa = node_next[aa]; tc_expr(aa); if tc_kind != TY_PTR then { tc_fail(8); return; }
+      aa = node_next[aa]; tc_expr(aa); if tc_kind != TY_INT then { tc_fail(17); return; }
+      aa = node_next[aa]; tc_expr(aa); if tc_kind != TY_INT then { tc_fail(17); return; }
+      tc_kind = TY_INT; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0; tc_result_type = ast_node(TY_INT, 0, 0, 0, 0, 0); return;
+    }
+    if btag == BI_TC_SYS_RUN then {
+      let aa: int = node_a[id];
+      if aa == 0 || node_next[aa] == 0 || node_next[node_next[aa]] == 0 || node_next[node_next[node_next[aa]]] == 0 || node_next[node_next[node_next[node_next[aa]]]] != 0 then { tc_fail(13); return; }
+      tc_expr(aa); if tc_kind != TY_STRING then { tc_fail(17); return; }
+      aa = node_next[aa]; tc_expr(aa); if tc_kind != TY_PTR then { tc_fail(8); return; }
+      aa = node_next[aa]; tc_expr(aa); if tc_kind != TY_INT then { tc_fail(17); return; }
+      aa = node_next[aa]; tc_expr(aa); if tc_kind != TY_INT then { tc_fail(17); return; }
+      tc_kind = TY_INT; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0; tc_result_type = ast_node(TY_INT, 0, 0, 0, 0, 0); return;
+    }
+    if btag == BI_TC_SYS_STRING || btag == BI_TC_SYS_INT then {
+      if node_a[id] != 0 then { tc_fail(13); return; }
+      if btag == BI_TC_SYS_STRING then tc_kind = TY_STRING;
+      else tc_kind = TY_INT;
+      tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0;
+      if btag == BI_TC_SYS_STRING then tc_result_type = ast_node(TY_STRING, 0, 0, 0, 0, 0);
+      else tc_result_type = ast_node(TY_INT, 0, 0, 0, 0, 0);
+      return;
+    }
     if btag == BI_TC_READ_LINE then {
       let aa: int = node_a[id];
       if aa == 0 || node_next[aa] != 0 then { tc_fail(13); return; }
@@ -6749,7 +6791,7 @@ func emit_c_token(out: int*, kind: int, value: int): void {
 }
 
 func emit_runtime(out: int*): void {
-  write_string(out, "#if defined(_WIN32)\n#include <direct.h>\n#else\n#define _POSIX_C_SOURCE 200809L\n#define _XOPEN_SOURCE 700\n#endif\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n#include <stdint.h>\n#include <stddef.h>\n#include <limits.h>\n#include <errno.h>\n#include <stdatomic.h>\n#if defined(_WIN32) && defined(__MINGW32__) && !defined(BASALT_USE_NATIVE_C11_THREADS)\n#include <pthread.h>\n#include <sched.h>\ntypedef pthread_t thrd_t;\ntypedef int (*basalt_thrd_start_t)(void*);\ntypedef struct basalt_thrd_start_context { basalt_thrd_start_t entry; void* argument; int result; } basalt_thrd_start_context;\nstatic void* basalt_thrd_start(void* raw){basalt_thrd_start_context* context=(basalt_thrd_start_context*)raw;context->result=context->entry(context->argument);return raw;}\nstatic int basalt_thrd_create(thrd_t* thread,basalt_thrd_start_t entry,void* argument){basalt_thrd_start_context* context;int status;context=(basalt_thrd_start_context*)malloc(sizeof(*context));if(!context)return 1;context->entry=entry;context->argument=argument;context->result=0;status=pthread_create(thread,NULL,basalt_thrd_start,context);if(status!=0)free(context);return status;}\nstatic int basalt_thrd_join(thrd_t thread,int* result){void* raw=NULL;int status=pthread_join(thread,&raw);if(status==0){basalt_thrd_start_context* context=(basalt_thrd_start_context*)raw;if(result)*result=context->result;free(context);}return status;}\n#define thrd_success 0\n#define thrd_create(thread,entry,argument) basalt_thrd_create((thread),(entry),(argument))\n#define thrd_join(thread,result) basalt_thrd_join((thread),(result))\n#define thrd_yield() sched_yield()\n#else\n#include <threads.h>\n#endif\n#if defined(_WIN32) && defined(__MINGW32__)\n#ifndef BASALT_ALIGNED_ALLOC_DECLARED\n#define BASALT_ALIGNED_ALLOC_DECLARED 1\nvoid *aligned_alloc(size_t alignment,size_t size);\n#endif\n#endif\n#if defined(__GNUC__) || defined(__clang__)\n#define BASALT_UNUSED __attribute__((unused))\n#else\n#define BASALT_UNUSED\n#endif\nstatic void basalt_panic(int code){(void)code;exit(2);}\nstatic size_t basalt_checked_bytes(int count,size_t elem_size){if(count<0)basalt_panic(1);if(elem_size!=0&&(size_t)count>(size_t)-1/elem_size)basalt_panic(1);return(size_t)count*elem_size;}\nstatic void* basalt_track(void*);static void basalt_release(void*);\n");
+  write_string(out, "#if defined(_WIN32)\n#include <direct.h>\n#else\n#define _POSIX_C_SOURCE 200809L\n#define _XOPEN_SOURCE 700\n#endif\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n#include <stdint.h>\n#include <stddef.h>\n#include <limits.h>\n#include <errno.h>\n#include <stdatomic.h>\n#if defined(_WIN32)\n#include <windows.h>\n#include <process.h>\n#else\n#include <unistd.h>\n#include <fcntl.h>\n#include <poll.h>\n#include <sys/types.h>\n#include <sys/wait.h>\n#endif\n#if defined(_WIN32) && defined(__MINGW32__) && !defined(BASALT_USE_NATIVE_C11_THREADS)\n#include <pthread.h>\n#include <sched.h>\ntypedef pthread_t thrd_t;\ntypedef int (*basalt_thrd_start_t)(void*);\ntypedef struct basalt_thrd_start_context { basalt_thrd_start_t entry; void* argument; int result; } basalt_thrd_start_context;\nstatic void* basalt_thrd_start(void* raw){basalt_thrd_start_context* context=(basalt_thrd_start_context*)raw;context->result=context->entry(context->argument);return raw;}\nstatic int basalt_thrd_create(thrd_t* thread,basalt_thrd_start_t entry,void* argument){basalt_thrd_start_context* context;int status;context=(basalt_thrd_start_context*)malloc(sizeof(*context));if(!context)return 1;context->entry=entry;context->argument=argument;context->result=0;status=pthread_create(thread,NULL,basalt_thrd_start,context);if(status!=0)free(context);return status;}\nstatic int basalt_thrd_join(thrd_t thread,int* result){void* raw=NULL;int status=pthread_join(thread,&raw);if(status==0){basalt_thrd_start_context* context=(basalt_thrd_start_context*)raw;if(result)*result=context->result;free(context);}return status;}\n#define thrd_success 0\n#define thrd_create(thread,entry,argument) basalt_thrd_create((thread),(entry),(argument))\n#define thrd_join(thread,result) basalt_thrd_join((thread),(result))\n#define thrd_yield() sched_yield()\n#else\n#include <threads.h>\n#endif\n#if defined(_WIN32) && defined(__MINGW32__)\n#ifndef BASALT_ALIGNED_ALLOC_DECLARED\n#define BASALT_ALIGNED_ALLOC_DECLARED 1\nvoid *aligned_alloc(size_t alignment,size_t size);\n#endif\n#endif\n#if defined(__GNUC__) || defined(__clang__)\n#define BASALT_UNUSED __attribute__((unused))\n#else\n#define BASALT_UNUSED\n#endif\nstatic void basalt_panic(int code){(void)code;exit(2);}\nstatic size_t basalt_checked_bytes(int count,size_t elem_size){if(count<0)basalt_panic(1);if(elem_size!=0&&(size_t)count>(size_t)-1/elem_size)basalt_panic(1);return(size_t)count*elem_size;}\nstatic void* basalt_track(void*);static void basalt_release(void*);\n");
   write_string(out, "typedef struct basalt_atomic_int { atomic_int value; } basalt_atomic_int;\nstatic BASALT_UNUSED void* basalt_atomic_make(int initial){basalt_atomic_int*a=(basalt_atomic_int*)calloc(1,sizeof(*a));if(!a)basalt_panic(5);atomic_init(&a->value,initial);return basalt_track(a);}\nstatic BASALT_UNUSED int basalt_atomic_load(void*p){basalt_atomic_int*a=(basalt_atomic_int*)p;if(!a)basalt_panic(4);return atomic_load_explicit(&a->value,memory_order_acquire);}\nstatic BASALT_UNUSED void basalt_atomic_store(void*p,int value){basalt_atomic_int*a=(basalt_atomic_int*)p;if(!a)basalt_panic(4);atomic_store_explicit(&a->value,value,memory_order_release);}\nstatic BASALT_UNUSED int basalt_atomic_fetch_add(void*p,int delta){basalt_atomic_int*a=(basalt_atomic_int*)p;if(!a)basalt_panic(4);return atomic_fetch_add_explicit(&a->value,delta,memory_order_acq_rel);}\nstatic BASALT_UNUSED int basalt_atomic_compare_exchange(void*p,int expected,int desired){basalt_atomic_int*a=(basalt_atomic_int*)p;int old;if(!a)basalt_panic(4);old=expected;return atomic_compare_exchange_strong_explicit(&a->value,&old,desired,memory_order_acq_rel,memory_order_acquire);}\nstatic BASALT_UNUSED void basalt_atomic_free(void*p){basalt_release(p);}\ntypedef struct basalt_channel { _Atomic size_t head; _Atomic size_t tail; atomic_int closed; size_t capacity; int data[]; } basalt_channel;\nstatic BASALT_UNUSED void* basalt_channel_make(int requested){size_t cap=2;size_t bytes;basalt_channel*c;if(requested<1||requested>1073741824)basalt_panic(7);while(cap<(size_t)requested){if(cap>(size_t)-1/2)basalt_panic(1);cap*=2;}if(cap>(size_t)-1/sizeof(int))basalt_panic(1);bytes=sizeof(*c)+cap*sizeof(int);if(bytes<sizeof(*c))basalt_panic(1);c=(basalt_channel*)calloc(1,bytes);if(!c)basalt_panic(5);c->capacity=cap;atomic_init(&c->head,0);atomic_init(&c->tail,0);atomic_init(&c->closed,0);return basalt_track(c);}\nstatic BASALT_UNUSED int basalt_channel_send(void*p,int value){basalt_channel*c=(basalt_channel*)p;size_t head,tail;if(!c)basalt_panic(4);if(atomic_load_explicit(&c->closed,memory_order_acquire)!=0)return -1;head=atomic_load_explicit(&c->head,memory_order_relaxed);tail=atomic_load_explicit(&c->tail,memory_order_acquire);if(head-tail>=c->capacity)return 0;c->data[head&(c->capacity-1)]=value;atomic_store_explicit(&c->head,head+1,memory_order_release);return 1;}\nstatic BASALT_UNUSED int basalt_channel_recv(void*p,int*out){basalt_channel*c=(basalt_channel*)p;size_t head,tail;if(!c||!out)basalt_panic(4);tail=atomic_load_explicit(&c->tail,memory_order_relaxed);head=atomic_load_explicit(&c->head,memory_order_acquire);if(tail==head){if(atomic_load_explicit(&c->closed,memory_order_acquire)!=0)return -1;return 0;}*out=c->data[tail&(c->capacity-1)];atomic_store_explicit(&c->tail,tail+1,memory_order_release);return 1;}\nstatic BASALT_UNUSED void basalt_channel_close(void*p){basalt_channel*c=(basalt_channel*)p;if(!c)basalt_panic(4);atomic_store_explicit(&c->closed,1,memory_order_release);}\nstatic BASALT_UNUSED void basalt_channel_free(void*p){basalt_release(p);}\ntypedef struct basalt_thread_handle { thrd_t thread; } basalt_thread_handle;\nstatic BASALT_UNUSED void* basalt_thread_spawn(int(*entry)(void*),void*arg){basalt_thread_handle*h=(basalt_thread_handle*)calloc(1,sizeof(*h));if(!h)basalt_panic(5);if(thrd_create(&h->thread,entry,arg)!=thrd_success){free(h);return NULL;}return basalt_track(h);}\nstatic BASALT_UNUSED int basalt_thread_join(void*p){basalt_thread_handle*h=(basalt_thread_handle*)p;int result;if(!h)basalt_panic(4);if(thrd_join(h->thread,&result)!=thrd_success)basalt_panic(8);basalt_release(h);return result;}\nstatic BASALT_UNUSED void basalt_thread_yield(void){thrd_yield();}\n");
   write_string(out, "static char** basalt_inc_active=NULL;static size_t basalt_inc_active_n=0,basalt_inc_active_cap=0;static char** basalt_inc_loaded=NULL;static size_t basalt_inc_loaded_n=0,basalt_inc_loaded_cap=0;static int basalt_inc_status=0;\n");
   write_string(out, "static BASALT_UNUSED int basalt_inc_eq(const char*a,const char*b){return strcmp(a,b)==0;}\n");
@@ -6789,6 +6831,14 @@ func emit_runtime(out: int*): void {
   write_string(out, "static BASALT_UNUSED void* basalt_memory_resize(void* old,int old_count,int new_count,size_t elem_size){size_t slot=(size_t)-1;size_t old_bytes;size_t new_bytes;void*p;if(old_count<0||new_count<0||new_count<old_count)basalt_panic(1);if(old){slot=basalt_find(old);if(slot==(size_t)-1)basalt_panic(2);}old_bytes=basalt_checked_bytes(old_count,elem_size);new_bytes=basalt_checked_bytes(new_count,elem_size);p=realloc(old,new_bytes?new_bytes:1);if(!p)basalt_panic(6);if(slot==(size_t)-1)basalt_track(p);else basalt_live[slot]=p;if(new_bytes>old_bytes)memset((char*)p+old_bytes,0,new_bytes-old_bytes);return p;}\n");
   write_string(out, "static BASALT_UNUSED void basalt_memory_free(void*p){basalt_release(p);}\n");
   write_string(out, "static BASALT_UNUSED char* runtime_string_concat(const char* a,const char* b){size_t na,nb,total;char* p;if(!a||!b)basalt_panic(4);na=strlen(a);nb=strlen(b);if(na>(size_t)-1-nb-1)basalt_panic(1);total=na+nb+1;p=(char*)malloc(total);if(!p)basalt_panic(5);memcpy(p,a,na);memcpy(p+na,b,nb);p[na+nb]=0;return(char*)basalt_track(p);}\n");
+  write_string(out, "static char* basalt_sys_out=NULL;static char* basalt_sys_err=NULL;static int basalt_sys_status_value=0;static int basalt_sys_ok_value=0;static int basalt_sys_truncated_value=0;static int basalt_sys_spawn_error_value=0;static int basalt_sys_cleanup_registered=0;static void basalt_sys_free_buffers(void){if(basalt_sys_out){free(basalt_sys_out);basalt_sys_out=NULL;}if(basalt_sys_err){free(basalt_sys_err);basalt_sys_err=NULL;}}\n");
+  write_string(out, "static BASALT_UNUSED char* basalt_sys_empty(void){char*p=(char*)malloc(1);if(!p)basalt_panic(5);p[0]=0;return(char*)basalt_track(p);}\n");
+  write_string(out, "static BASALT_UNUSED char* basalt_sys_raw_empty(void){char*p=(char*)malloc(1);if(!p)basalt_panic(5);p[0]=0;return p;}\n");
+  write_string(out, "static BASALT_UNUSED char* basalt_sys_copy_n(const char*s,size_t n){char*p=(char*)malloc(n+1);if(!p)basalt_panic(5);if(n)memcpy(p,s,n);p[n]=0;return(char*)basalt_track(p);}\n");
+  write_string(out, "#if defined(_WIN32)\nstatic BASALT_UNUSED void basalt_sys_drain(int fd,char*buf,size_t cap,size_t*len,int*truncated,int*open_flag){(void)fd;(void)buf;(void)cap;(void)len;(void)truncated;(void)open_flag;}\n#else\nstatic BASALT_UNUSED void basalt_sys_drain(int fd,char*buf,size_t cap,size_t*len,int*truncated,int*open_flag){char chunk[4096];ssize_t n;while((n=read(fd,chunk,sizeof(chunk)))>0){size_t take=0;if(*len<cap){take=(size_t)n;if(take>cap-*len)take=cap-*len;if(take)memcpy(buf+*len,chunk,take);*len+=take;}if((size_t)n>take)*truncated=1;}if(n==0||(n<0&&errno!=EAGAIN&&errno!=EWOULDBLOCK)){close(fd);*open_flag=0;}}\n#endif\n");
+  write_string(out, "int basalt_sys_run(const char*executable,char**args,int arg_count,int max_output){size_t cap;size_t out_len=0,err_len=0;int i;basalt_sys_free_buffers();if(!basalt_sys_cleanup_registered){atexit(basalt_sys_free_buffers);basalt_sys_cleanup_registered=1;}basalt_sys_status_value=-1;basalt_sys_ok_value=0;basalt_sys_truncated_value=0;basalt_sys_spawn_error_value=0;if(!executable||arg_count<0||max_output<0||max_output>16777216){basalt_sys_spawn_error_value=EINVAL;basalt_sys_out=basalt_sys_raw_empty();basalt_sys_err=basalt_sys_raw_empty();return -1;}cap=(size_t)max_output;basalt_sys_out=(char*)malloc(cap+1);basalt_sys_err=(char*)malloc(cap+1);if(!basalt_sys_out||!basalt_sys_err)basalt_panic(5);basalt_sys_out[0]=0;basalt_sys_err[0]=0;\n#if defined(_WIN32)\n{char**av=(char**)calloc((size_t)arg_count+2,sizeof(char*));int status;if(!av)basalt_panic(5);av[0]=(char*)executable;for(i=0;i<arg_count;i++)av[i+1]=args[i];av[arg_count+1]=NULL;status=_spawnvp(_P_WAIT,executable,(const char* const*)av);free(av);if(status<0){basalt_sys_spawn_error_value=errno;basalt_sys_status_value=-1;}else{basalt_sys_status_value=status;basalt_sys_ok_value=status==0;}basalt_sys_out[0]=0;basalt_sys_err[0]=0;return basalt_sys_status_value;}\n#else\n{int out_pipe[2],err_pipe[2],exec_pipe[2];pid_t child;int status;int out_open=1,err_open=1;int exec_error=0;ssize_t exec_read;if(pipe(out_pipe)!=0||pipe(err_pipe)!=0||pipe(exec_pipe)!=0){basalt_sys_spawn_error_value=errno;return -1;}if(fcntl(exec_pipe[1],F_SETFD,FD_CLOEXEC)<0){basalt_sys_spawn_error_value=errno;close(out_pipe[0]);close(out_pipe[1]);close(err_pipe[0]);close(err_pipe[1]);close(exec_pipe[0]);close(exec_pipe[1]);return -1;}child=fork();if(child<0){basalt_sys_spawn_error_value=errno;close(out_pipe[0]);close(out_pipe[1]);close(err_pipe[0]);close(err_pipe[1]);close(exec_pipe[0]);close(exec_pipe[1]);basalt_sys_out=basalt_sys_raw_empty();basalt_sys_err=basalt_sys_raw_empty();return -1;}if(child==0){char**av=(char**)calloc((size_t)arg_count+2,sizeof(char*));if(!av)_exit(127);av[0]=(char*)executable;for(i=0;i<arg_count;i++)av[i+1]=args[i];av[arg_count+1]=NULL;close(out_pipe[0]);close(err_pipe[0]);close(exec_pipe[0]);if(dup2(out_pipe[1],STDOUT_FILENO)<0||dup2(err_pipe[1],STDERR_FILENO)<0){int e=errno;if(write(exec_pipe[1],&e,sizeof(e))<0){}_exit(127);}close(out_pipe[1]);close(err_pipe[1]);execvp(executable,av);{int e=errno;if(write(exec_pipe[1],&e,sizeof(e))<0){}}_exit(127);}close(out_pipe[1]);close(err_pipe[1]);close(exec_pipe[1]);if(fcntl(out_pipe[0],F_SETFL,O_NONBLOCK)<0||fcntl(err_pipe[0],F_SETFL,O_NONBLOCK)<0){basalt_sys_spawn_error_value=errno;}while(out_open||err_open){struct pollfd pf[2];int polled;pf[0].fd=out_open?out_pipe[0]:-1;pf[0].events=POLLIN;pf[1].fd=err_open?err_pipe[0]:-1;pf[1].events=POLLIN;polled=poll(pf,2,-1);if(polled<0){if(errno==EINTR)continue;break;}if(out_open)basalt_sys_drain(out_pipe[0],basalt_sys_out,cap,&out_len,&basalt_sys_truncated_value,&out_open);if(err_open)basalt_sys_drain(err_pipe[0],basalt_sys_err,cap,&err_len,&basalt_sys_truncated_value,&err_open);}if(out_open){close(out_pipe[0]);out_open=0;}if(err_open){close(err_pipe[0]);err_open=0;}waitpid(child,&status,0);exec_read=read(exec_pipe[0],&exec_error,sizeof(exec_error));close(exec_pipe[0]);basalt_sys_out[out_len]=0;basalt_sys_err[err_len]=0;if(exec_read>0){basalt_sys_spawn_error_value=exec_error;basalt_sys_status_value=-1;}else if(WIFEXITED(status))basalt_sys_status_value=WEXITSTATUS(status);else if(WIFSIGNALED(status))basalt_sys_status_value=0-WTERMSIG(status);else basalt_sys_status_value=-1;basalt_sys_ok_value=(basalt_sys_status_value==0&&basalt_sys_spawn_error_value==0);return basalt_sys_status_value;}\n#endif\n}\n");
+  write_string(out, "int basalt_sys_run_status(void){return basalt_sys_ok_value;}\nchar* basalt_sys_stdout(void){return basalt_sys_out?basalt_sys_out:basalt_sys_empty();}\nchar* basalt_sys_stderr(void){return basalt_sys_err?basalt_sys_err:basalt_sys_empty();}\nint basalt_sys_truncated(void){return basalt_sys_truncated_value;}\nint basalt_sys_spawn_error(void){return basalt_sys_spawn_error_value;}\n");
+  write_string(out, "int basalt_compile_argv(const char*cc,const char*input_c,const char*output_bin,char**all,int start,int extra_count){char**av;int i,status;if(!cc||!input_c||!output_bin||!all||start<0||extra_count<0)return -1;av=(char**)calloc((size_t)extra_count+4,sizeof(char*));if(!av)basalt_panic(5);for(i=0;i<extra_count;i++)av[i]=all[start+i];av[extra_count]=(char*)input_c;av[extra_count+1]=(char*)\"-o\";av[extra_count+2]=(char*)output_bin;av[extra_count+3]=NULL;status=basalt_sys_run(cc,av,extra_count+3,65536);if(status!=0&&basalt_sys_stderr()[0]!=0)fputs(basalt_sys_stderr(),stderr);free(av);return status;}\n");
   write_string(out, "static BASALT_UNUSED int* alloc_ints(int n){int* p;if(n<0)basalt_panic(1);if(n<1)n=1;basalt_checked_bytes(n,sizeof(int));p=(int*)calloc((size_t)n,sizeof(int));if(!p)basalt_panic(5);return(int*)basalt_track(p);}\n");
   write_string(out, "static BASALT_UNUSED void free_ints(int* p){basalt_release(p);}\n");
   write_string(out, "static BASALT_UNUSED int* grow_ints(int* p,int old,int n){size_t slot=(size_t)-1;int* q;if(old<0||n<0)basalt_panic(1);if(n<=old)return p;if(p){slot=basalt_find(p);if(slot==(size_t)-1)basalt_panic(2);}basalt_checked_bytes(n,sizeof(int));q=(int*)realloc(p,(size_t)n*sizeof(int));if(!q)basalt_panic(6);if(p)basalt_live[slot]=q;else basalt_track(q);memset(q+old,0,(size_t)(n-old)*sizeof(int));return q;}\n");
@@ -6815,7 +6865,7 @@ func emit_c_file(path: string): void {
   while i < code_count {
     if code_epoch[i] != last_epoch then {
       emit_pending_space = 0;
-      emit_source_line(out, code_pos[i]);
+      if emit_line_directives == 1 then emit_source_line(out, code_pos[i]);
       last_epoch = code_epoch[i];
     }
     emit_c_token(out, code_kind[i], code_value[i]);
@@ -6824,16 +6874,84 @@ func emit_c_file(path: string): void {
   close_file(out);
 }
 
-func main(argc: int, argv: string*): void {
-  if argc < 2 then {
-    return 1;
+extern func basalt_sys_run(executable: string, args: string*, arg_count: int, max_output: int): int;
+extern func basalt_sys_run_status(): int;
+extern func basalt_sys_stdout(): string;
+extern func basalt_sys_stderr(): string;
+extern func basalt_sys_truncated(): int;
+extern func basalt_sys_spawn_error(): int;
+extern func basalt_compile_argv(compiler: string, input_c: string, output_bin: string, all_args: string*, start: int, extra_count: int): int;
+
+func cli_arg_eq(a: string, b: string): int {
+  let i: int = 0;
+  while a[i] != '\0' {
+    if b[i] == '\0' then return 0;
+    if a[i] != b[i] then return 0;
+    i = i + 1;
   }
-  let ok: int = pipeline_main(argv[1]);
-  if argc > 2 && ok == 0 then {
+  if b[i] != '\0' then return 0;
+  return 1;
+}
+
+func main(argc: int, argv: string*): void {
+  let input_index: int = 0 - 1;
+  let output_index: int = 0 - 1;
+  let auto_compile: int = 0;
+  let compiler: string = "cc";
+  let binary_path: string = "";
+  let has_binary_path: int = 0;
+  let extra_start: int = 0;
+  let extra_count: int = 0;
+  let i: int = 1;
+  while i < argc {
+    if cli_arg_eq(argv[i], "--") == 1 then {
+      extra_start = i + 1;
+      extra_count = argc - i - 1;
+      i = argc;
+    } else if cli_arg_eq(argv[i], "--line") == 1 then {
+      emit_line_directives = 1;
+      i = i + 1;
+    } else if cli_arg_eq(argv[i], "--no-line") == 1 then {
+      emit_line_directives = 0;
+      i = i + 1;
+    } else if cli_arg_eq(argv[i], "--compile") == 1 then {
+      auto_compile = 1;
+      i = i + 1;
+    } else if cli_arg_eq(argv[i], "--cc") == 1 then {
+      if i + 1 >= argc then return 1;
+      compiler = argv[i + 1];
+      i = i + 2;
+    } else if cli_arg_eq(argv[i], "-o") == 1 then {
+      if i + 1 >= argc then return 1;
+      binary_path = argv[i + 1];
+      has_binary_path = 1;
+      i = i + 2;
+    } else if input_index < 0 then {
+      input_index = i;
+      i = i + 1;
+    } else if output_index < 0 then {
+      output_index = i;
+      i = i + 1;
+    } else {
+      return 1;
+    }
+  }
+  if input_index < 0 then return 1;
+  let ok: int = pipeline_main(argv[input_index]);
+  if ok != 0 then return ok;
+  let c_path: string = "";
+  let has_c_path: int = 0;
+  if output_index >= 0 then { c_path = argv[output_index]; has_c_path = 1; }
+  else if auto_compile == 1 then { c_path = argv[input_index] ++ ".c"; has_c_path = 1; }
+  if has_c_path == 1 then {
     if pipeline_root > 0 then {
       gen_program(pipeline_root);
-      emit_c_file(argv[2]);
+      emit_c_file(c_path);
     }
+  }
+  if auto_compile == 1 then {
+    if has_binary_path == 0 then binary_path = argv[input_index] ++ ".out";
+    return basalt_compile_argv(compiler, c_path, binary_path, argv, extra_start, extra_count);
   }
   return ok;
 }

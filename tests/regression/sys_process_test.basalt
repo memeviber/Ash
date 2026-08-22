@@ -1,0 +1,38 @@
+include "../../src/stdlib/sys.basalt"
+
+func main(): int {
+  let args: array::Array<string> = array::new(0, "");
+  args = array::push(args, "%s|%s", "");
+  args = array::push(args, "hello world", "");
+  args = array::push(args, "quote\"value", "");
+  let captured: sys::Output = sys::run("/usr/bin/printf", args, 1024);
+  println captured.status;
+  println captured.succeeded;
+  println captured.stdout;
+  println captured.stderr;
+  println captured.truncated;
+  println captured.spawn_error;
+
+  let empty: array::Array<string> = array::new(0, "");
+  let failed: sys::Output = sys::run("/usr/bin/false", empty, 1024);
+  if failed.status != 1 then return 1;
+  if failed.succeeded != 0 then return 2;
+  if failed.spawn_error != 0 then return 3;
+
+  let bounded: sys::Output = sys::run("/usr/bin/printf", captured_args(), 0);
+  if bounded.status != 0 then return 4;
+  if bounded.stdout[0] != '\0' then return 5;
+  if bounded.truncated != 1 then return 6;
+
+  let missing: sys::Output = sys::run("/definitely/missing/basalt-command", empty, 1024);
+  if missing.status >= 0 then return 7;
+  if missing.succeeded != 0 then return 8;
+  if missing.spawn_error <= 0 then return 9;
+  return 0;
+}
+
+func captured_args(): array::Array<string> {
+  let args: array::Array<string> = array::new(0, "");
+  args = array::push(args, "bounded-output", "");
+  return args;
+}

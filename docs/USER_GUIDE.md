@@ -53,6 +53,23 @@ gcc -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror \\
 
 For a stable self-hosted compiler, run `bash scripts/fixed_point.sh`; it verifies the frozen seed through successive Bootstrap generations. The OCaml files under `src/compiler/` are intentionally outside this workflow.
 
+The compiler accepts `--line` and `--no-line` before the input path. Mapping is enabled by default and emits C `#line` records that point diagnostics and debugger locations back to `.basalt` files. Use `--no-line` when a consumer requires generated C without source directives:
+
+```sh
+"$current_bin" --line hello.basalt .tmp/hello.c
+"$current_bin" --no-line hello.basalt .tmp/hello-no-line.c
+```
+
+For a one-command build, use auto-compile mode. It keeps compiler arguments as separate argv elements and never builds a shell command by string concatenation:
+
+```sh
+"$current_bin" --compile hello.basalt -o .tmp/hello.bin \
+  --cc gcc -- -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror
+.tmp/hello.bin
+```
+
+`--compile` writes the intermediate C beside the requested input using the `.c` suffix unless an explicit output convention is selected by the implementation, and defaults the executable name to `.out` when `-o` is omitted. The legacy form `<input.basalt> [output.c]` remains a C-generation operation; it does not silently compile or execute the result. Arguments after `--` are passed in order before the generated C input and before the final `-o <binary>` pair. A failed compiler returns its nonzero status and forwards compiler stderr.
+
 ---
 
 ## 3. Your first program
@@ -403,6 +420,7 @@ A small set of runtime functions is reserved and callable directly:
 | `write_char(f, c)` / `write_string(f, s)` | file I/O | Write to an open file |
 | `basalt_inc_realpath(s)` / `basalt_inc_join(a, b)` | `string -> string` | Path helpers (used by `include`) |
 | `basalt_include_*` | include machinery | Internal include-engine hooks |
+| `basalt_sys_run` and accessors | `(executable, argv, argc, max_output)` | Internal argv-oriented process runner used by `sys` |
 
 More than 50 names (`printf`, `malloc`, `free`, `strlen`, `exit`, ...) are **reserved**: defining a function with one of those names is rejected, because the name would collide with the C runtime.
 
@@ -511,6 +529,7 @@ func main(): int {
 | `option` | `src/stdlib/option.basalt` | `Option<T>`: `some`, `none`, `is_some`, `is_none`, `unwrap_or` |
 | `result` | `src/stdlib/result.basalt` | `Result<T, E>`: `ok`, `err`, `is_ok`, `is_err`, `unwrap_or`, `error_or` |
 | `string` | `src/stdlib/string.basalt` | `byte_len`, `byte_at`, `eq`, and string helpers |
+| `sys` | `src/stdlib/sys.basalt` | Structured argv-oriented process execution and bounded stdout/stderr capture |
 
 All modules are **generic** and namespace-qualified:
 
@@ -527,6 +546,30 @@ func main(): int {
   return 0;
 }
 ```
+
+### Process execution with `sys`
+
+The `sys` module provides a structured process API for tools and build helpers. Include it together with `array`:
+
+```basalt
+include "../../src/stdlib/array.basalt"
+include "../../src/stdlib/sys.basalt"
+
+func main(): int {
+  let args: array::Array<string> = array::new(0, "");
+  let result: sys::Output = sys::run("printf", args, 4096);
+  print result.status;
+  print result.stdout;
+  print result.stderr;
+  print result.truncated;
+  print result.spawn_error;
+  return 0;
+}
+```
+
+Each array item is passed as one argv item. An argument such as `two words` or `a"b` is not reparsed by a shell, so structured execution is the safe default for user-controlled data. `status` is zero on success, nonnegative for a normal child exit, and negative for signal termination. `spawn_error` is positive only when process setup or executable lookup fails, and `succeeded` is true only when both status and spawn_error indicate success.
+
+The `max_output` limit applies independently to stdout and stderr. When a child writes more than the limit, the captured value is the prefix and `truncated` is set, while the runner continues draining and waits for the child so a full pipe cannot deadlock. Negative or excessively large limits are rejected. The current Windows fallback provides status and empty stream fields rather than pretending that capture is portable; code needing captured streams must check the result fields and target capability. There is deliberately no implicit shell API. Shell syntax, if required, must be an explicit and audited `includec`/FFI boundary.
 
 Strings support character indexing and comparison:
 
@@ -575,6 +618,9 @@ They are additionally exercised under AddressSanitizer and UndefinedBehaviorSani
 2. If you need raw pointers, follow the ownership rules and test with sanitizers.
 3. Never define functions whose names collide with the runtime (reserved names are rejected anyway).
 4. Fixed arrays: use constant indexes, or keep them in bounds — the compiler checks constants for you.
+5. For process execution, use `sys::run` with an argv array; do not interpolate untrusted text into a shell command.
+6. Bound captured output with `max_output`, inspect `spawn_error`, and treat `truncated` as meaningful data rather than an I/O success indicator.
+7. Keep generated C, binaries, and auto-compile intermediates under `.tmp/` during Bootstrap development.
 
 ---
 
