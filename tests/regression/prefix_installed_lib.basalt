@@ -1,0 +1,5 @@
+namespace demo {
+  func answer(): int {
+    return 42;
+  }
+}

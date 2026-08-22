@@ -1,0 +1,5 @@
+include "@lib/../outside.basalt"
+
+func main(): int {
+  return 0;
+}

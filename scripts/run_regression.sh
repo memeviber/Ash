@@ -226,6 +226,25 @@ expect_collision_reject() {
   grep -Fq 'distinct functions collide after C mangling' "$OUT/${label}.boot.log"
 }
 
+prefix_import_checks() {
+  local prefix_root="$ROOT/.tmp/prefix-regression"
+  local vendor_source="$prefix_root/.basalt/vendor/demo/0.1.0/src/prefix_installed_lib.basalt"
+  local stdlib_c="$OUT/import_prefix_stdlib.boot.c"
+  local stdlib_bin="$OUT/import_prefix_stdlib.boot.bin"
+  local lib_c="$OUT/import_prefix_lib.boot.c"
+  local lib_bin="$OUT/import_prefix_lib.boot.bin"
+  rm -rf "$prefix_root"
+  mkdir -p "$(dirname "$vendor_source")"
+  cp "$ROOT/tests/regression/prefix_installed_lib.basalt" "$vendor_source"
+  (cd "$ROOT" && "$BOOT_BIN" --no-line "$ROOT/tests/regression/import_prefix_stdlib_valid.basalt" "$stdlib_c" >/dev/null)
+  gcc "${STRICT_FLAGS[@]}" "$stdlib_c" -o "$stdlib_bin"
+  "$stdlib_bin"
+  (cd "$prefix_root" && "$BOOT_BIN" --no-line "$ROOT/tests/regression/import_prefix_lib_valid.basalt" "$lib_c" >/dev/null)
+  gcc "${STRICT_FLAGS[@]}" "$lib_c" -o "$lib_bin"
+  "$lib_bin"
+  printf 'PASS import prefix resolution (@stdlib and @lib)\n'
+}
+
 compile_run "$ROOT/tests/stress/modulo_stress.basalt" modulo_stress
 compile_run "$ROOT/tests/regression/stdlib_growth_test.basalt" stdlib_growth_test
 compile_run "$ROOT/tests/regression/stdlib_containers_test.basalt" stdlib_containers_test
@@ -297,6 +316,9 @@ compile_run "$ROOT/tests/regression/include_test_main.basalt" include_test_main
 expect_import_reject "$ROOT/tests/regression/include_cycle_a.basalt" include_cycle 62 "$ROOT/tests/regression/include_cycle_b.basalt" "$ROOT/tests/regression/include_cycle_a.basalt"
 expect_import_reject "$ROOT/tests/regression/include_alias_cycle_a.basalt" include_alias_cycle 62 "$ROOT/tests/regression/include_alias_cycle_b.basalt" "$ROOT/tests/regression/include_alias_cycle_a.basalt"
 expect_import_reject "$ROOT/tests/regression/include_missing_module.basalt" include_missing_module 63 "$ROOT/tests/regression/include_missing_module.basalt" "$ROOT/tests/regression/include_missing_target.basalt"
+expect_reject "$ROOT/tests/regression/import_prefix_traversal_invalid.basalt" import_prefix_traversal_invalid
+grep -Fq 'diagnostic.code=64' "$OUT/import_prefix_traversal_invalid.boot.log"
+prefix_import_checks
 compile_run "$ROOT/tests/regression/extern_ffi_test.basalt" extern_ffi_test
 compile_run "$ROOT/tests/regression/stress_ffi_loop.basalt" stress_ffi_loop
 compile_run "$ROOT/tests/spec/valid/controlled_ffi_valid.basalt" controlled_ffi_valid
