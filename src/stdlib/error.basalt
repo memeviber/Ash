@@ -1,0 +1,15 @@
+// Stable error categories for standard-library Result<T, int> APIs.
+// Success is always represented by error::success (0). Failure is always a
+// nonzero category; individual modules may add documented module-specific
+// categories above this common boundary.
+namespace error {
+  const success: int = 0;
+  const invalid_argument: int = 1;
+  const not_found: int = 2;
+  const permission_denied: int = 3;
+  const io: int = 4;
+  const resource_exhausted: int = 5;
+  const lifecycle: int = 6;
+  const range: int = 7;
+  const unsupported: int = 8;
+}

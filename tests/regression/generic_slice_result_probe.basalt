@@ -1,4 +1,5 @@
 include "../../src/stdlib/slice.basalt"
+include "../../src/stdlib/option.basalt"
 include "../../src/stdlib/result.basalt"
 
 func main(): int {
@@ -21,15 +22,15 @@ func main(): int {
 
   let good: result::Result<int, string> = result::ok(42, "zero");
   let bad: result::Result<int, string> = result::err(0, "failed");
-  let present: result::Option<string> = result::some("yes");
-  let absent: result::Option<string> = result::none("");
+  let present: option::Option<string> = option::some("yes");
+  let absent: option::Option<string> = option::none("");
   print result::is_ok(good);
   print result::is_err(bad);
   print result::unwrap_or(good, 7);
   print result::error_or(bad, "fallback");
-  print result::is_some(present);
-  print result::is_none(absent);
-  print result::unwrap_or_option(present, "no");
-  print result::unwrap_or_option(absent, "no");
+  print option::is_some(present);
+  print option::is_none(absent);
+  print option::unwrap_or(present, "no");
+  print option::unwrap_or(absent, "no");
   return 0;
 }

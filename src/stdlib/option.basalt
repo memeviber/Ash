@@ -1,6 +1,8 @@
 namespace option {
-  // Option<T> is a fully materialized tagged value. The payload is always
-  // initialized, including for none(), so every operation remains total.
+  // Option<T> is the canonical absence type. It is a fully materialized
+  // tagged value whose payload is always initialized, including for none(), so
+  // every operation remains total. Fallible operations use result::Result;
+  // absence is not encoded as an error code.
   struct Option<T> {
     present: int;
     value: T;

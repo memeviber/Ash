@@ -1,7 +1,9 @@
 namespace result {
   // Result<T, E> is a fully materialized tagged value. Both payloads are
   // initialized by ok() and err() so inspection never reads an uninitialized
-  // field and all public operations are total.
+  // field and all public operations are total. For standard-library APIs,
+  // E=int follows one convention: error::success (0) means success and every
+  // failure carries a nonzero, module-documented error category.
   struct Result<T, E> {
     ok: int;
     value: T;
@@ -76,38 +78,4 @@ namespace result {
     return next;
   }
 
-  // Deprecated source-compatibility surface. New code MUST include
-  // option.basalt and use option::Option; these names remain available for
-  // existing programs and follow the same total-value semantics.
-  struct Option<T> {
-    present: int;
-    value: T;
-  }
-
-  func some<T>(value: T): Option<T> {
-    let o: Option<T> = 0;
-    o.present = 1;
-    o.value = value;
-    return o;
-  }
-
-  func none<T>(zero: T): Option<T> {
-    let o: Option<T> = 0;
-    o.present = 0;
-    o.value = zero;
-    return o;
-  }
-
-  func is_some<T>(o: Option<T>): int { return o.present; }
-  func is_none<T>(o: Option<T>): int { return o.present == 0; }
-
-  func unwrap_or_option<T>(o: Option<T>, fallback: T): T {
-    if o.present == 1 then { return o.value; }
-    return fallback;
-  }
-
-  func map_option<T, U>(o: Option<T>, transform: fn(T): U, zero_u: U): Option<U> {
-    if o.present == 1 then return result::some(transform(o.value));
-    return result::none(zero_u);
-  }
 }

@@ -1,0 +1,8 @@
+include "../../src/stdlib/result.basalt"
+
+func main(): int {
+  let legacy: result::Option<int> = 0;
+  return legacy.present;
+}
+// diagnostic: invalid
+// end

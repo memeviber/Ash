@@ -4,15 +4,21 @@ This document defines the next standard-library surface for Basalt. The APIs are
 
 ## Design rules
 
-Every owning container has an explicit `free` operation and returns its updated value after growth or mutation. Functions that may fail return `result::Result<T, int>` where `error` is a stable nonzero platform-independent category; `0` means success. Borrowed views are non-owning and must not outlive their source binding. C shims are limited to operating-system boundaries, preserve argument boundaries, and never interpret user strings as shell commands or format strings.
+Every owning container has an explicit `free` operation and returns its updated value after growth or mutation. Functions that may fail return `result::Result<T, int>` where `error::success` (`0`) means success and every failure carries a nonzero, module-documented category. The common categories are declared in `src/stdlib/error.basalt` under namespace `error`; module-internal statuses remain scoped to their owning module, such as `filesystem::directory_end`. Numeric values other than success are not interchangeable across unrelated non-Result status APIs. Borrowed views are non-owning and must not outlive their source binding. C shims are limited to operating-system boundaries, preserve argument boundaries, and never interpret user strings as shell commands or format strings.
 
 The first implementation targets strict C11 on POSIX and Windows UCRT/MinGW. Platform-specific code is isolated behind `#if defined(_WIN32)` in the generated C helper material. APIs that cannot have identical behavior on all platforms document their capability and error policy rather than silently emulating unsafe behavior.
+
+## Option and Result
+
+`option::Option<T>` is the only absence type. Include `option.basalt` and use `option::some`, `option::none`, `option::is_some`, `option::is_none`, `option::unwrap_or`, `option::value_or`, `option::map`, `option::map_or`, `option::filter`, `option::contains`, `option::or_else`, and `option::and_option`. The payload of `none` is initialized with the caller-provided zero value, and all operations are total.
+
+`result::Result<T, E>` is the structured success/failure type. `result::ok` and `result::err` initialize both payloads, so inactive fields are safe to inspect but have no semantic meaning. For standard-library `Result<T, int>` APIs, `error::success` is the only success code; all failures are nonzero. Use `Option` for expected absence, `Result` for operational failure, and a documented fallback only for total lookup/accessor functions. The deprecated `result::Option<T>` type and helpers were removed; references to them are compile-time errors.
 
 ## Filesystem
 
 Module: `src/stdlib/filesystem.basalt`, namespace `filesystem`.
 
-`open(path, mode)`, `read(file, max_bytes)`, `write(file, data)`, `close(file)`, and `metadata(path)` return `Result` values. A file handle is an opaque owned pointer and must be closed exactly once. `metadata` reports byte size, modification time in Unix seconds, and a kind tag (`1` regular file, `2` directory, `3` other). `directory(path)` returns an owning `array::Array<string>` containing entries without `.` and `..`. Directory and file names are returned as runtime-owned strings. `error_message(code)` provides a stable human-readable description for the common error categories. Directory exhaustion is reported internally as category `5`, and the wrapper consumes it rather than exposing it as a failure.
+`open(path, mode)`, `read(file, max_bytes)`, `write(file, data)`, `close(file)`, and `metadata(path)` return `Result` values. A file handle is an opaque owned pointer and must be closed exactly once. `metadata` reports byte size, modification time in Unix seconds, and a kind tag (`1` regular file, `2` directory, `3` other). `directory(path)` returns an owning `array::Array<string>` containing entries without `.` and `..`. Directory and file names are returned as runtime-owned strings. `error_message(code)` provides a stable human-readable description for the common error categories. Directory exhaustion is reported internally as `filesystem::directory_end`, and the wrapper consumes it rather than exposing it as a failure.
 
 The module never follows a caller-controlled shell command. `read` is a text-oriented API: it reads at most `max_bytes`, appends a NUL terminator, and therefore is not a binary-buffer interface for embedded NUL bytes. It rejects invalid sizes and treats short writes as errors rather than claiming completion.
 

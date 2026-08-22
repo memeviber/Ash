@@ -223,6 +223,8 @@ compile_run "$ROOT/tests/regression/option_test.basalt" option_test
 compile_run "$ROOT/tests/regression/option_result_combinators_test.basalt" option_result_combinators_test
 compile_run "$ROOT/tests/regression/stdlib_stabilization_test.basalt" stdlib_stabilization_test
 compile_run "$ROOT/tests/regression/stdlib_stabilization_edge_test.basalt" stdlib_stabilization_edge_test
+compile_run "$ROOT/tests/regression/result_error_convention_test.basalt" result_error_convention_test
+expect_reject "$ROOT/tests/regression/deprecated_result_option_invalid.basalt" deprecated_result_option_invalid
 compile_run "$ROOT/tests/super/stdlib_matrix_valid.basalt" stdlib_matrix_valid
 compile_run "$ROOT/tests/super/integer_pointer_boundary_valid.basalt" integer_pointer_boundary_valid
 compile_run "$ROOT/tests/super/closure_generic_nested_valid.basalt" closure_generic_nested_valid

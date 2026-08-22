@@ -1,0 +1,20 @@
+include "../../src/stdlib/error.basalt"
+include "../../src/stdlib/result.basalt"
+
+func main(): int {
+  let status: int = 0;
+  let success: result::Result<int, int> = result::ok(42, error::success);
+  let failure: result::Result<int, int> = result::err(0, error::invalid_argument);
+
+  if error::success != 0 then status = 1;
+  if error::invalid_argument == 0 then status = 2;
+  if result::is_ok(success) == 0 || success.error != error::success then status = 3;
+  if result::is_err(failure) == 0 || failure.error == error::success then status = 4;
+  if result::error_or(success, error::io) != error::io then status = 5;
+  if result::error_or(failure, error::io) != error::invalid_argument then status = 6;
+  if result::unwrap_or(success, 0) != 42 then status = 7;
+  if result::unwrap_or(failure, 99) != 99 then status = 8;
+  return status;
+}
+// diagnostic: valid
+// end

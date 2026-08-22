@@ -1,5 +1,6 @@
 includec "random_runtime.c"
 include "result.basalt"
+include "error.basalt"
 
 extern func basalt_random_status(): int;
 extern func basalt_random_seed(seed: u64): void*;
@@ -25,7 +26,7 @@ namespace random {
     let rng: Rng = random::seed(value);
     let code: int = basalt_random_status();
     if code != 0 then return result::err(rng, code);
-    return result::ok(rng, 0);
+    return result::ok(rng, error::success);
   }
 
   func next_u64(rng: Rng): u64 {
@@ -40,7 +41,7 @@ namespace random {
     let value: u64 = basalt_random_next_bounded(rng.handle, bound);
     let code: int = basalt_random_status();
     if code != 0 then return result::err(value, code);
-    return result::ok(value, 0);
+    return result::ok(value, error::success);
   }
 
   func next_float(rng: Rng): f64 {
@@ -51,7 +52,7 @@ namespace random {
     let value: u64 = 0;
     let status: int = basalt_random_entropy(&value);
     if status != 0 then return result::err(value, status);
-    return result::ok(value, 0);
+    return result::ok(value, error::success);
   }
 
   func free(rng: Rng): Rng {

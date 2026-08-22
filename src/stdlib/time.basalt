@@ -1,5 +1,6 @@
 includec "time_runtime.c"
 include "result.basalt"
+include "error.basalt"
 
 extern func basalt_time_status(): int;
 extern func basalt_time_monotonic_ns(): i64;
@@ -15,36 +16,36 @@ namespace time {
     let value: i64 = basalt_time_monotonic_ns();
     let code: int = basalt_time_status();
     if code != 0 then return result::err(value, code);
-    return result::ok(value, 0);
+    return result::ok(value, error::success);
   }
 
   func wall_seconds(): result::Result<i64, int> {
     let value: i64 = basalt_time_wall_seconds();
     let code: int = basalt_time_status();
     if code != 0 then return result::err(value, code);
-    return result::ok(value, 0);
+    return result::ok(value, error::success);
   }
 
   func duration_ms(milliseconds: i64): result::Result<Duration, int> {
     let duration: Duration = 0;
-    if milliseconds < 0 then return result::err(duration, 1);
+    if milliseconds < 0 then return result::err(duration, error::invalid_argument);
     duration.milliseconds = milliseconds;
-    return result::ok(duration, 0);
+    return result::ok(duration, error::success);
   }
 
   func elapsed(start_ns: i64, duration: Duration): result::Result<bool, int> {
     let now: i64 = basalt_time_monotonic_ns();
     let code: int = basalt_time_status();
     if code != 0 then return result::err(false, code);
-    if start_ns < 0 then return result::err(false, 1);
-    if duration.milliseconds < 0 then return result::err(false, 1);
-    if now < start_ns then return result::ok(false, 0);
-    return result::ok(now - start_ns >= duration.milliseconds * 1000000, 0);
+    if start_ns < 0 then return result::err(false, error::invalid_argument);
+    if duration.milliseconds < 0 then return result::err(false, error::invalid_argument);
+    if now < start_ns then return result::ok(false, error::success);
+    return result::ok(now - start_ns >= duration.milliseconds * 1000000, error::success);
   }
 
   func sleep_ms(milliseconds: i64): result::Result<bool, int> {
     let status: int = basalt_time_sleep_ms(milliseconds);
     if status != 0 then return result::err(false, status);
-    return result::ok(true, 0);
+    return result::ok(true, error::success);
   }
 }

@@ -1,5 +1,6 @@
 include "array.basalt"
 include "result.basalt"
+include "error.basalt"
 include "string.basalt"
 includec "filesystem_runtime.c"
 
@@ -14,6 +15,7 @@ extern func filesystem_dir_next(directory: void*): string;
 extern func filesystem_dir_close(directory: void*): int;
 
 namespace filesystem {
+  const directory_end: int = 5;
   struct Metadata {
     size: i64;
     modified: i64;
@@ -21,11 +23,11 @@ namespace filesystem {
   }
 
   func error_message(code: int): string {
-    if code == 0 then return "success";
-    if code == 1 then return "invalid argument or handle";
-    if code == 2 then return "path does not exist";
-    if code == 3 then return "permission denied";
-    if code == 5 then return "end of directory";
+    if code == error::success then return "success";
+    if code == error::invalid_argument then return "invalid argument or handle";
+    if code == error::not_found then return "path does not exist";
+    if code == error::permission_denied then return "permission denied";
+    if code == filesystem::directory_end then return "end of directory";
     return "filesystem error";
   }
 
@@ -36,7 +38,7 @@ namespace filesystem {
       let empty_handle: void* = 0;
       return result::err(empty_handle, code);
     }
-    return result::ok(handle, 0);
+    return result::ok(handle, error::success);
   }
 
   func read(handle: void*, max_bytes: int): result::Result<string, int> {
@@ -46,27 +48,27 @@ namespace filesystem {
       str::free(value);
       return result::err("", code);
     }
-    return result::ok(value, 0);
+    return result::ok(value, error::success);
   }
 
   func write(handle: void*, data: string): result::Result<int, int> {
     let count: int = filesystem_write(handle, data);
     let code: int = filesystem_error();
     if code != 0 then return result::err(count, code);
-    return result::ok(count, 0);
+    return result::ok(count, error::success);
   }
 
   func close(handle: void*): result::Result<int, int> {
     let code: int = filesystem_close(handle);
     if code != 0 then return result::err(0, code);
-    return result::ok(0, 0);
+    return result::ok(0, error::success);
   }
 
   func metadata(path: string): result::Result<Metadata, int> {
     let info: Metadata = 0;
     let code: int = filesystem_metadata(path, &info.size, &info.modified, &info.kind);
     if code != 0 then return result::err(info, code);
-    return result::ok(info, 0);
+    return result::ok(info, error::success);
   }
 
   func free_entries(entries: array::Array<string>): array::Array<string> {
@@ -109,6 +111,6 @@ namespace filesystem {
       let freed_entries_on_close: array::Array<string> = filesystem::free_entries(entries);
       return result::err(freed_entries_on_close, code);
     }
-    return result::ok(entries, 0);
+    return result::ok(entries, error::success);
   }
 }

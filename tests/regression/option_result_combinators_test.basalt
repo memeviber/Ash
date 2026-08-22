@@ -1,5 +1,6 @@
 include "../../src/stdlib/option.basalt"
 include "../../src/stdlib/result.basalt"
+include "../../src/stdlib/error.basalt"
 
 func inc(value: int): int {
   return value + 1;
@@ -30,8 +31,8 @@ func main(): int {
   if option::contains(filtered, 5) == false then status = 4;
   if option::contains(filtered, 4) then status = 5;
 
-  let ok_value: result::Result<int, int> = result::ok(6, 0);
-  let err_value: result::Result<int, int> = result::err(0, 7);
+  let ok_value: result::Result<int, int> = result::ok(6, error::success);
+  let err_value: result::Result<int, int> = result::err(0, error::range);
   let mapped_ok: result::Result<int, int> = result::map(ok_value, &double_value, 0);
   let mapped_err: result::Result<int, int> = result::map(err_value, &double_value, 0);
   let mapped_error: result::Result<int, int> = result::map_error(mapped_err, &error_plus_one, 0);

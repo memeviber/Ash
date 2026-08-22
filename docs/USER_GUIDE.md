@@ -315,9 +315,9 @@ print option::value_or(present, 0);   // 42
 print option::value_or(absent, 99);   // 99
 ```
 
-The canonical Option helpers are `is_some`, `is_none`, `unwrap_or`, `value_or`, `map`, `map_or`, `filter`, `contains`, `or_else`, and `and_option`. They are total: an absent value never causes a panic and callbacks are not invoked for an absent branch. Existing programs may continue to use the historical `result::Option<T>` compatibility names, but new code SHOULD use the `option` namespace.
+The canonical Option helpers are `is_some`, `is_none`, `unwrap_or`, `value_or`, `map`, `map_or`, `filter`, `contains`, `or_else`, and `and_option`. They are total: an absent value never causes a panic and callbacks are not invoked for an absent branch. The former `result::Option<T>` compatibility names have been removed, so old references must be migrated to the `option` namespace and will otherwise fail at compile time.
 
-`result::Result<T, E>` represents success or failure. Both constructors initialize the inactive payload explicitly:
+`result::Result<T, E>` represents success or failure. Both constructors initialize the inactive payload explicitly. For standard-library functions using `Result<T, int>`, `error::success` (`0`) means success and every failure has a nonzero, module-documented category. Use `Option` for expected absence and `Result` for operational failure:
 
 ```basalt
 include "../../src/stdlib/result.basalt"
