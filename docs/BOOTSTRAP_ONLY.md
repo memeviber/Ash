@@ -8,7 +8,7 @@ The repository keeps two C artifacts with distinct roles:
 
 | Artifact | Role | Policy |
 |---|---|---|
-| `src/bootstrap/basaltc.basalt.c` | Historical C artifact preserved from the previous development generation | Never overwrite it during modern development |
+| `src/bootstrap/basaltc.bsl.c` | Historical C artifact preserved from the previous development generation | Never overwrite it during modern development |
 | `src/bootstrap/basaltc.seed.c` | Immutable C compiler seed used as the previous-generation boundary | Compile it only to translate the current Bootstrap source |
 | `.tmp/*/basaltc.current.c` | Current-generation C compiler generated from `basaltc.basalt` | Temporary; compile it to produce the compiler used by modern tests |
 

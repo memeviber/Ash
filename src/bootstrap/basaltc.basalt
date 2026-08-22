@@ -918,7 +918,7 @@ func gen_alignment(alignment: int): void {
   }
 }
 
-func gen_type(kind: int, child: int, size: int): void {
+func gen_primitive_type(kind: int): void {
   if kind == TY_INT then code_emit(C_KW, 1);
   else if kind == TY_BOOL then code_emit(C_KW, 2);
   else if kind == TY_STRING then code_emit(C_KW, 3);
@@ -937,7 +937,10 @@ func gen_type(kind: int, child: int, size: int): void {
   else if kind == TY_I64 then code_emit(C_KW, 28);
   else if kind == TY_USIZE then code_emit(C_KW, 29);
   else if kind == TY_VOID then code_emit(C_KW, 4);
-  else if kind == TY_PTR then {
+}
+
+func gen_type(kind: int, child: int, size: int): void {
+  if kind == TY_PTR then {
     gen_type(node_kind[node_a[child]], node_a[child], 0);
     code_emit(C_PUNCT, 1);
   } else if kind == TY_ARRAY then {
@@ -967,7 +970,7 @@ func gen_type(kind: int, child: int, size: int): void {
     if b != 0 then gen_type(node_kind[b], b, node_value[b]);
     else code_emit(C_IDENT, sym_c_symbol(node_value[child]));
     code_emit(C_PUNCT, 18);
-  }
+  } else gen_primitive_type(kind);
 }
 
 func gen_scalar_kind(arg: int): int {
@@ -1049,26 +1052,11 @@ func gen_array_elem_name(arg: int): int {
 }
 
 func gen_array_elem_type(kind: int, name: int): void {
-  if kind == TY_INT then code_emit(C_KW, 1);
-  else if kind == TY_BOOL then code_emit(C_KW, 2);
-  else if kind == TY_CHAR then code_emit(C_KW, 17);
-  else if kind == TY_FLOAT then code_emit(C_KW, 18);
-  else if kind == TY_DOUBLE then code_emit(C_KW, 15);
-  else if kind == TY_LONG then code_emit(C_KW, 19);
-  else if kind == TY_LLONG then code_emit(C_KW, 20);
-  else if kind == TY_U8 then code_emit(C_KW, 21);
-  else if kind == TY_U16 then code_emit(C_KW, 22);
-  else if kind == TY_U32 then code_emit(C_KW, 23);
-  else if kind == TY_U64 then code_emit(C_KW, 24);
-  else if kind == TY_I8 then code_emit(C_KW, 25);
-  else if kind == TY_I16 then code_emit(C_KW, 26);
-  else if kind == TY_I32 then code_emit(C_KW, 27);
-  else if kind == TY_I64 then code_emit(C_KW, 28);
-  else if kind == TY_USIZE then code_emit(C_KW, 29);
-  else if kind == TY_STRING then { code_emit(C_KW, 17); code_emit(C_PUNCT, 1); }
+  if kind == TY_STRING then { code_emit(C_KW, 17); code_emit(C_PUNCT, 1); }
   else if kind == TY_NAMED then code_emit(C_IDENT, sym_c_symbol(name));
   else if kind == TY_PTR then { code_emit(C_KW, 1); code_emit(C_PUNCT, 1); }
-  else code_emit(C_KW, 1);
+  else if kind == TY_PARAM then code_emit(C_KW, 1);
+  else gen_primitive_type(kind);
 }
 
 func gen_array_sizeof(kind: int, name: int): void {
