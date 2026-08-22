@@ -1,0 +1,3 @@
+func long_include_value(): int {
+  return 42;
+}

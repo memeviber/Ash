@@ -1,0 +1,19 @@
+include "../../src/stdlib/string.basalt"
+
+func identity<T>(value: T): T {
+  return value;
+}
+
+func create<T>(): int {
+  return 42;
+}
+
+func main(): int {
+  let number: int = identity<int>(7);
+  let text: string = identity<string>("ok");
+  let created: int = create<int>();
+  if number != 7 then return 1;
+  if str::len(text) != 2 then return 2;
+  if created != 42 then return 3;
+  return 0;
+}

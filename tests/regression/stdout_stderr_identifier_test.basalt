@@ -1,0 +1,7 @@
+func main(): int {
+  let stdout: int = 7;
+  let stderr: int = 8;
+  if stdout != 7 then return 1;
+  if stderr != 8 then return 2;
+  return stdout + stderr - 15;
+}

@@ -1535,13 +1535,20 @@ void gen_assignment(int lhs, int rhs);
 int compound_c_operator(int op);
 void gen_compound_assignment(int lhs, int op, int rhs);
 void gen_for_clause(int id);
+void ensure_gen_fun_chain(int need);
 void gen_fun_decl(int ty, int name);
+void gen_const_decl(int ty, int name);
+void gen_array_base_type(int ty);
+void gen_array_suffixes(int ty);
 void gen_decl(int ty, int name);
 void gen_stmt(int id);
 int gen_generic_base_equal(int formal, int actual);
 void gen_unify_formal(int formal, int actual);
 void gen_bind_decl(int decl, int inst);
 void gen_struct_decl_specialized(int decl, int inst, int cname);
+void gen_function_params(int params, int is_extern);
+void gen_function_type_params(int types);
+void gen_function_signature_parts(int ret_ty, int name, int params, int is_extern);
 void gen_function_specialized(int decl, int inst, int cname);
 int gen_match_temp_symbol(void);
 void gen_match_binding(int temp, int variant, int binding, int field);
@@ -1575,6 +1582,15 @@ int input_text_payload(void);
 int input_take(int kind);
 int ast_generic_param(int name);
 int ast_generic_params(void);
+int ast_append_array_dimension(int ty, int size);
+void ensure_ast_consts(int need);
+void ast_const_add(int name, int value);
+int ast_const_find(int name);
+int ast_const_add_checked(int left, int right);
+int ast_const_sub_checked(int left, int right);
+int ast_const_mul_checked(int left, int right);
+int ast_const_eval(int id);
+int ast_array_dimension_value(void);
 int ast_type(void);
 int ast_call_args(void);
 int ast_primary(void);
@@ -1612,6 +1628,9 @@ void source_reset(void);
 void source_put(int c);
 int is_space(int c);
 int is_digit(int c);
+int hex_digit_value(int c);
+int is_hex_digit(int c);
+int is_binary_digit(int c);
 int is_alpha(int c);
 int is_alnum(int c);
 int source_peek(void);
@@ -1623,6 +1642,7 @@ int sym_tag_id(void);
 int sym_qualified(int ns, int name);
 int ast_decl_name(int name);
 int ast_type_name(int name);
+int ast_is_match_default(int name);
 int sym_intern(int start, int length, int kind, int scope);
 void ensure_bi(int need);
 void bi_register(char *text, int tc_tag, int flags);
@@ -1631,6 +1651,8 @@ int bi_tag(int name);
 int bi_has_flag(int name, int flag);
 void bi_init(void);
 int word_code(int start, int length);
+void ensure_lexer_literal_digits(int need);
+int lexer_make_integer(int start, int length, int base);
 void lexer_skip(void);
 int lexer_next(void);
 void include_process_line(int *line, int length);
@@ -1643,6 +1665,9 @@ void ensure_tc_fun_meta(int need);
 void ensure_tc_flow_frames(int need);
 void ensure_tc_flow_log(int need);
 void tc_flow_append_current(int count);
+void tc_flow_append_fields(void);
+int tc_flow_field_log_find(int start, int count, int root, int name);
+void tc_flow_restore_fields(int frame);
 void tc_flow_save_base(void);
 void tc_flow_save_yes(void);
 void tc_flow_restore_base(void);
@@ -1656,14 +1681,20 @@ void tc_fail(int code);
 void tc_fail_types(int code, int expected_kind, int found_kind);
 void ensure_tc_bindings(int need);
 void tc_bind_clear(void);
+void tc_bind_push(void);
+void tc_bind_pop(void);
 int tc_bind_find(int name);
 int tc_bind_add(int name, int ty);
+int tc_bind_explicit_args(int fun_node, int args);
 int tc_is_integer_kind(int kind);
 int tc_is_numeric_kind(int kind);
 int tc_is_fixed_integer_kind(int kind);
 int tc_is_legacy_integer_kind(int kind);
 int tc_decimal_le(int raw, char *limit);
 int tc_literal_fits(int id, int target_kind);
+int tc_negative_integer_literal_conversion(int id, int target_kind, int actual_kind);
+int tc_integer_literal_conversion(int id, int target_kind, int actual_kind);
+int tc_type_is_structural(int kind);
 int tc_type_equal(int a, int b);
 int tc_signature_type(int entry);
 int tc_type_node_from_summary(int kind, int name, int elem_kind, int elem_name);
@@ -1674,6 +1705,7 @@ void tc_match_generic(int formal, int actual);
 int tc_substitute_type(int ty);
 int tc_same(int a_kind, int a_name, int b_kind, int b_name);
 int tc_array_elem_same(int a_kind, int a_name, int b_kind, int b_name);
+int tc_param_type_same(int a_name, int b_name);
 int tc_same_full(int a_kind, int a_name, int a_elem_kind, int a_elem_name, int b_kind, int b_name,
                  int b_elem_kind, int b_elem_name);
 int tc_ptr_diff_ok(int a_kind, int a_elem_kind, int a_elem_name, int b_kind, int b_elem_kind,
@@ -1694,6 +1726,7 @@ int tc_owned_initializer(int id);
 int tc_is_owner_kind(int kind);
 int tc_is_owner_type(int ty);
 int tc_is_place(int id);
+int tc_place_is_const(int id);
 int tc_place_root(int id);
 int tc_place_borrow_param(int id);
 int tc_nth_arg(int head, int wanted);
@@ -1703,6 +1736,11 @@ int tc_is_loan_ancestor(int ancestor, int origin);
 int tc_borrow_conflict_from(int root, int origin, int requested_mut);
 int tc_provenance_param(int id);
 int tc_provenance_mut(int id);
+void ensure_tc_field_targets(int need);
+int tc_field_target_get(int root, int name);
+void tc_field_target_set(int root, int name, int target);
+int tc_field_target_root_for_place(int id);
+int tc_fun_type_has_sensitive_param(int ty);
 int tc_contract_param_position(int fun, int name);
 void tc_contract_record(int fun, int candidate, int mutable);
 int tc_contract_expr_param(int fun, int id);
@@ -1899,6 +1937,10 @@ int *node_type = 0;
 int ast_parse_mode = 0;
 int node_count = 1;
 int ast_namespace_scope = 0;
+int *ast_const_name = 0;
+int *ast_const_value = 0;
+int ast_const_count = 0;
+int ast_const_cap = 0;
 int sym_tag_name = 0;
 int node_cap = 0;
 int payload_cap = 0;
@@ -1998,6 +2040,9 @@ int gen_spec_count = 0;
 int gen_spec_cap = 0;
 int gen_name_override = 0;
 int gen_debug = 0;
+int *gen_fun_chain_type = 0;
+int gen_fun_chain_count = 0;
+int gen_fun_chain_cap = 0;
 int *gen_struct_state = 0;
 int gen_struct_state_cap = 0;
 int *gen_spec_state = 0;
@@ -2210,7 +2255,7 @@ int source_pos = 0;
 int *c_source = 0;
 int c_source_len = 0;
 int include_ok = 1;
-int include_line_cap = 4096;
+int include_line_initial_cap = 256;
 int *sym_start = 0;
 int *sym_len = 0;
 int *sym_hash = 0;
@@ -2272,6 +2317,9 @@ int tok_value = 0;
 int tok_text = 0;
 int tok_start = 0;
 int tok_length = 0;
+int lexer_error = 0;
+int *lexer_literal_digits = 0;
+int lexer_literal_digits_cap = 0;
 int tc_root = 0;
 int tc_ok = 1;
 int tc_error_code = 0;
@@ -2291,6 +2339,7 @@ int *tc_var_named = 0;
 int *tc_var_elem_kind = 0;
 int *tc_var_elem_name = 0;
 int *tc_var_type = 0;
+int *tc_var_fun_target = 0;
 int *tc_var_owned = 0;
 int *tc_var_moved = 0;
 int *tc_var_borrow_count = 0;
@@ -2302,10 +2351,12 @@ int *tc_var_borrow_param = 0;
 int *tc_var_param = 0;
 int *tc_var_param_pos = 0;
 int *tc_var_mode = 0;
+int *tc_var_const = 0;
 int *tc_var_closure_caps = 0;
 int *tc_var_closure_moved = 0;
 int *tc_var_ffi_borrowed = 0;
 int tc_last_var_type = 0;
+int tc_last_var_fun_target = 0;
 int tc_last_var_owned = 0;
 int tc_last_var_ffi_borrowed = 0;
 int tc_expr_ffi_borrowed = 0;
@@ -2317,6 +2368,7 @@ int tc_expr_borrow_mut = 0;
 int tc_expr_borrow_param = 0;
 int tc_expr_owner_source = (0 - 1);
 int tc_expr_is_owned = 0;
+int tc_expr_fun_target = 0;
 int tc_var_count = 0;
 int tc_global_count = 0;
 int tc_var_cap = 0;
@@ -2334,9 +2386,22 @@ int *tc_bind_name = 0;
 int *tc_bind_type = 0;
 int tc_bind_count = 0;
 int tc_bind_cap = 0;
+int *tc_bind_stack_name = 0;
+int *tc_bind_stack_type = 0;
+int tc_bind_stack_count = 0;
+int tc_bind_stack_cap = 0;
+int *tc_bind_frame_base = 0;
+int *tc_bind_frame_size = 0;
+int tc_bind_frame_depth = 0;
+int tc_bind_frame_cap = 0;
 int *tc_fun_return_param = 0;
 int *tc_fun_return_mut = 0;
 int tc_fun_meta_cap = 0;
+int *tc_field_target_root = 0;
+int *tc_field_target_name = 0;
+int *tc_field_target_fun = 0;
+int tc_field_target_count = 0;
+int tc_field_target_cap = 0;
 int *tc_flow_log_owned = 0;
 int *tc_flow_log_moved = 0;
 int *tc_flow_log_borrow_count = 0;
@@ -2347,6 +2412,15 @@ int *tc_flow_log_parent = 0;
 int *tc_flow_log_borrow_param = 0;
 int *tc_flow_log_ffi = 0;
 int *tc_flow_log_closure_moved = 0;
+int *tc_flow_log_fun_target = 0;
+int *tc_flow_log_field_root = 0;
+int *tc_flow_log_field_name = 0;
+int *tc_flow_log_field_fun = 0;
+int tc_flow_field_log_count = 0;
+int *tc_flow_frame_field_base = 0;
+int *tc_flow_frame_field_yes = 0;
+int *tc_flow_frame_field_count = 0;
+int *tc_flow_frame_field_yes_count = 0;
 int *tc_flow_frame_base = 0;
 int *tc_flow_frame_yes = 0;
 int *tc_flow_frame_count = 0;
@@ -2359,6 +2433,7 @@ int tc_current_function = 0;
 int tc_current_return_param = 0;
 int tc_current_return_mut = 0;
 int tc_current_return_seen = 0;
+int tc_allow_outer_shadow = 0;
 int next_capacity(int old, int need) {
   int n = old;
   if (n < 16)
@@ -3462,28 +3537,36 @@ void gen_collect_expr(int id) {
     int f = tc_find_function_ctx(node_value[id], node_scope[id]);
     if ((f != 0) && (node_kind[f] == N_GENERIC_FUNC)) {
       int aa = node_a[id];
-      int actual = 0;
-      while (aa != 0) {
-        int q = tc_emit_arg_type(aa);
-        if (q == 0) {
-          (void)(tc_expr(aa));
-          q = tc_result_type;
-          if (q == 0)
-            q = tc_type_node_from_summary(tc_kind, tc_name, tc_elem_kind, tc_elem_name);
+      int actual = node_b[id];
+      if (actual != 0) {
+        int explicit = actual;
+        while (explicit != 0) {
+          (void)(gen_collect_type(explicit));
+          explicit = node_next[explicit];
+        }
+      } else {
+        while (aa != 0) {
+          int q = tc_emit_arg_type(aa);
+          if (q == 0) {
+            (void)(tc_expr(aa));
+            q = tc_result_type;
+            if (q == 0)
+              q = tc_type_node_from_summary(tc_kind, tc_name, tc_elem_kind, tc_elem_name);
+            else {
+            }
+          } else {
+          }
+          if (q != 0)
+            q = gen_substitute_type(q);
           else {
           }
-        } else {
+          if (actual == 0)
+            actual = q;
+          else
+            actual = ast_link(actual, q);
+          (void)(gen_collect_type(q));
+          aa = node_next[aa];
         }
-        if (q != 0)
-          q = gen_substitute_type(q);
-        else {
-        }
-        if (actual == 0)
-          actual = q;
-        else
-          actual = ast_link(actual, q);
-        (void)(gen_collect_type(q));
-        aa = node_next[aa];
       }
       int unresolved = 0;
       int check_actual = actual;
@@ -3895,6 +3978,8 @@ void gen_array_sizeof_node(int ty) {
   (void)(code_emit(C_PUNCT, 4));
   if ((ty != 0) && (node_kind[ty] == TY_GENERIC))
     (void)(code_emit(C_IDENT, gen_mangled_type_symbol(ty)));
+  else if ((ty != 0) && (node_kind[ty] == TY_PTR))
+    (void)(gen_type(node_kind[ty], ty, 0));
   else if (ty != 0)
     (void)(gen_array_elem_type(node_kind[ty], node_value[ty]));
   else
@@ -3930,10 +4015,17 @@ void gen_memory_builtin(int id) {
     int elem_kind = gen_scalar_kind(witness);
     int elem_name = gen_scalar_name(witness);
     int gen_witness_ty = 0;
+    int complex_witness_ty = 0;
     if (elem_kind == TY_GENERIC) {
       int wty = tc_emit_arg_type(witness);
       if (wty != 0)
         gen_witness_ty = gen_substitute_type(wty);
+      else {
+      }
+    } else if (elem_kind == TY_PTR) {
+      int pointer_witness_ty = tc_emit_arg_type(witness);
+      if (pointer_witness_ty != 0)
+        complex_witness_ty = gen_substitute_type(pointer_witness_ty);
       else {
       }
     } else {
@@ -3949,6 +4041,8 @@ void gen_memory_builtin(int id) {
     (void)(code_emit(C_PUNCT, 6));
     if (gen_witness_ty != 0)
       (void)(code_emit(C_IDENT, gen_mangled_type_symbol(gen_witness_ty)));
+    else if (complex_witness_ty != 0)
+      (void)(gen_type(node_kind[complex_witness_ty], complex_witness_ty, 0));
     else
       (void)(gen_array_elem_type(elem_kind, elem_name));
     (void)(code_emit(C_PUNCT, 1));
@@ -3969,6 +4063,11 @@ void gen_memory_builtin(int id) {
       (void)(code_emit(C_IDENT, (0 - 1011)));
       (void)(code_emit(C_PUNCT, 4));
       (void)(code_emit(C_IDENT, gen_mangled_type_symbol(gen_witness_ty)));
+      (void)(code_emit(C_PUNCT, 5));
+    } else if (complex_witness_ty != 0) {
+      (void)(code_emit(C_IDENT, (0 - 1011)));
+      (void)(code_emit(C_PUNCT, 4));
+      (void)(gen_type(node_kind[complex_witness_ty], complex_witness_ty, 0));
       (void)(code_emit(C_PUNCT, 5));
     } else
       (void)(gen_array_sizeof(elem_kind, elem_name));
@@ -4047,29 +4146,32 @@ int gen_call_name(int id) {
     return sym_c_symbol(node_value[f]);
   else {
   }
-  int actual = 0;
+  int actual = node_b[id];
   int a = node_a[id];
-  while (a != 0) {
-    int q = 0;
-    q = tc_emit_arg_type(a);
-    if (q == 0) {
-      (void)(tc_expr(a));
-      q = tc_result_type;
-      if (q == 0)
-        q = tc_type_node_from_summary(tc_kind, tc_name, tc_elem_kind, tc_elem_name);
+  if (actual == 0) {
+    while (a != 0) {
+      int q = 0;
+      q = tc_emit_arg_type(a);
+      if (q == 0) {
+        (void)(tc_expr(a));
+        q = tc_result_type;
+        if (q == 0)
+          q = tc_type_node_from_summary(tc_kind, tc_name, tc_elem_kind, tc_elem_name);
+        else {
+        }
+      } else {
+      }
+      if (q != 0)
+        q = gen_substitute_type(q);
       else {
       }
-    } else {
+      if (actual == 0)
+        actual = q;
+      else
+        actual = ast_link(actual, q);
+      a = node_next[a];
     }
-    if (q != 0)
-      q = gen_substitute_type(q);
-    else {
-    }
-    if (actual == 0)
-      actual = q;
-    else
-      actual = ast_link(actual, q);
-    a = node_next[a];
+  } else {
   }
   int saved_count = gen_bind_count;
   (void)(ensure_gen_bind((saved_count + saved_count)));
@@ -4492,6 +4594,11 @@ int gen_expr_kind(int id) {
   else {
   }
   if (k == N_VAR) {
+    int stable_type = node_type[id];
+    if ((stable_type != 0) && (node_kind[stable_type] != TY_PARAM))
+      return node_kind[stable_type];
+    else {
+    }
     int formal_type = gen_active_param_type(node_value[id]);
     if (formal_type != 0) {
       int resolved_type = gen_substitute_type(formal_type);
@@ -4517,6 +4624,17 @@ int gen_expr_kind(int id) {
       return TY_CHAR;
     else {
     }
+    int index_type = tc_emit_arg_type(node_a[id]);
+    if ((index_type != 0) &&
+        (((node_kind[index_type] == TY_PTR) || (node_kind[index_type] == TY_ARRAY)) ||
+         (node_kind[index_type] == TY_DYN_ARRAY))) {
+      int index_elem = node_a[index_type];
+      if (index_elem != 0)
+        return node_kind[index_elem];
+      else {
+      }
+    } else {
+    }
     if (bt == TY_PTR)
       return TY_INT;
     else {
@@ -4524,9 +4642,14 @@ int gen_expr_kind(int id) {
     return TY_INT;
   } else {
   }
-  if (k == N_DEREF)
+  if (k == N_DEREF) {
+    int deref_type = tc_emit_arg_type(node_a[id]);
+    if (((deref_type != 0) && (node_kind[deref_type] == TY_PTR)) && (node_a[deref_type] != 0))
+      return node_kind[node_a[deref_type]];
+    else {
+    }
     return TY_INT;
-  else {
+  } else {
   }
   if (k == N_ADDRESS)
     return TY_PTR;
@@ -4713,36 +4836,92 @@ void gen_for_clause(int id) {
   else {
   }
 }
-void gen_fun_decl(int ty, int name) {
-  int ret = gen_substitute_type(node_b[ty]);
-  (void)(gen_type(node_kind[ret], ret, node_value[ret]));
-  (void)(code_emit(C_PUNCT, 4));
-  (void)(code_emit(C_PUNCT, 9));
-  (void)(code_emit(C_IDENT, sym_c_symbol(name)));
-  (void)(code_emit(C_PUNCT, 5));
-  (void)(code_emit(C_PUNCT, 6));
-  int p = node_a[ty];
-  while (p != 0) {
-    int parameter_type = gen_substitute_type(p);
-    (void)(gen_type(node_kind[parameter_type], parameter_type, node_value[parameter_type]));
-    if (node_next[p] != 0)
-      (void)(code_emit(C_PUNCT, 7));
-    else {
-    }
-    p = node_next[p];
+void ensure_gen_fun_chain(int need) {
+  if (need < gen_fun_chain_cap)
+    return;
+  else {
   }
-  (void)(code_emit(C_PUNCT, 8));
+  int n = next_capacity(gen_fun_chain_cap, need);
+  gen_fun_chain_type = grow_ints(gen_fun_chain_type, gen_fun_chain_cap, n);
+  gen_fun_chain_cap = n;
+}
+void gen_fun_decl(int ty, int name) {
+  gen_fun_chain_count = 0;
+  int current = gen_substitute_type(ty);
+  while ((current != 0) && (node_kind[current] == TY_FUN)) {
+    (void)(ensure_gen_fun_chain(gen_fun_chain_count));
+    gen_fun_chain_type[gen_fun_chain_count] = current;
+    gen_fun_chain_count = (gen_fun_chain_count + 1);
+    current = gen_substitute_type(node_b[current]);
+  }
+  (void)(gen_type(node_kind[current], current, node_value[current]));
+  int prefix = 0;
+  while (prefix < gen_fun_chain_count) {
+    (void)(code_emit(C_PUNCT, 4));
+    (void)(code_emit(C_PUNCT, 9));
+    prefix = (prefix + 1);
+  }
+  (void)(code_emit(C_IDENT, sym_c_symbol(name)));
+  int suffix = 0;
+  while (suffix < gen_fun_chain_count) {
+    (void)(code_emit(C_PUNCT, 5));
+    (void)(code_emit(C_PUNCT, 6));
+    (void)(gen_function_type_params(node_a[gen_fun_chain_type[suffix]]));
+    (void)(code_emit(C_PUNCT, 8));
+    suffix = (suffix + 1);
+  }
+}
+void gen_const_decl(int ty, int name) {
+  if (node_kind[ty] == TY_PTR) {
+    int pointee = node_a[ty];
+    (void)(gen_type(node_kind[pointee], pointee, node_value[pointee]));
+    (void)(code_emit(C_PUNCT, 1));
+    (void)(code_emit(C_KW, 16));
+    (void)(code_emit(C_IDENT, sym_c_symbol(name)));
+  } else {
+    (void)(code_emit(C_KW, 16));
+    (void)(gen_decl(ty, name));
+  }
+}
+void gen_array_base_type(int ty) {
+  if (node_kind[ty] == TY_ARRAY)
+    (void)(gen_array_base_type(node_a[ty]));
+  else
+    (void)(gen_type(node_kind[ty], ty, node_value[ty]));
+}
+void gen_array_suffixes(int ty) {
+  if (node_kind[ty] == TY_ARRAY) {
+    (void)(code_emit(C_PUNCT, 2));
+    (void)(code_emit(C_INT, node_value[ty]));
+    (void)(code_emit(C_PUNCT, 3));
+    (void)(gen_array_suffixes(node_a[ty]));
+  } else {
+  }
 }
 void gen_decl(int ty, int name) {
   if (node_kind[ty] == TY_FUN)
     (void)(gen_fun_decl(ty, name));
   else if (node_kind[ty] == TY_ARRAY) {
-    int inner = node_a[ty];
-    (void)(gen_type(node_kind[inner], inner, node_value[inner]));
-    (void)(code_emit(C_IDENT, sym_c_symbol(name)));
-    (void)(code_emit(C_PUNCT, 2));
-    (void)(code_emit(C_INT, node_value[ty]));
-    (void)(code_emit(C_PUNCT, 3));
+    int array_base = ty;
+    while (node_kind[array_base] == TY_ARRAY) {
+      array_base = node_a[array_base];
+    }
+    if (node_kind[array_base] == TY_FUN) {
+      int function_return = gen_substitute_type(node_b[array_base]);
+      (void)(gen_type(node_kind[function_return], function_return, node_value[function_return]));
+      (void)(code_emit(C_PUNCT, 4));
+      (void)(code_emit(C_PUNCT, 9));
+      (void)(code_emit(C_IDENT, sym_c_symbol(name)));
+      (void)(gen_array_suffixes(ty));
+      (void)(code_emit(C_PUNCT, 5));
+      (void)(code_emit(C_PUNCT, 6));
+      (void)(gen_function_type_params(node_a[array_base]));
+      (void)(code_emit(C_PUNCT, 8));
+    } else {
+      (void)(gen_array_base_type(ty));
+      (void)(code_emit(C_IDENT, sym_c_symbol(name)));
+      (void)(gen_array_suffixes(ty));
+    }
   } else {
     (void)(gen_type(node_kind[ty], ty, node_value[ty]));
     (void)(code_emit(C_IDENT, sym_c_symbol(name)));
@@ -4761,8 +4940,7 @@ void gen_stmt(int id) {
     (void)(code_emit(C_NEWLINE, 0));
   } else if (k == N_CONST) {
     (void)(gen_alignment(node_aux[id]));
-    (void)(code_emit(C_KW, 16));
-    (void)(gen_decl(node_b[id], node_a[id]));
+    (void)(gen_const_decl(node_b[id], node_a[id]));
     (void)(code_emit(C_PUNCT, 11));
     (void)(gen_initializer(node_b[id], node_c[id]));
     (void)(code_emit(C_PUNCT, 12));
@@ -5080,19 +5258,16 @@ void gen_struct_decl_specialized(int decl, int inst, int cname) {
   (void)(code_emit(C_PUNCT, 12));
   (void)(code_emit(C_NEWLINE, 0));
 }
-void gen_function_specialized(int decl, int inst, int cname) {
-  (void)(gen_bind_decl(decl, inst));
-  int ret = gen_substitute_type(node_b[decl]);
-  (void)(gen_type(node_kind[ret], ret, node_value[ret]));
-  (void)(code_emit(C_IDENT, cname));
-  (void)(code_emit(C_PUNCT, 6));
-  int p = node_c[decl];
+void gen_function_params(int params, int is_extern) {
+  int p = params;
   if (p == 0)
     (void)(code_emit(C_KW, 4));
   else {
     while (p != 0) {
-      int pt = gen_substitute_type(node_b[p]);
-      (void)(gen_decl(pt, node_a[p]));
+      if (is_extern == 1)
+        (void)(gen_extern_param(gen_substitute_type(node_b[p]), node_a[p]));
+      else
+        (void)(gen_decl(gen_substitute_type(node_b[p]), node_a[p]));
       if (node_next[p] != 0)
         (void)(code_emit(C_PUNCT, 7));
       else {
@@ -5100,7 +5275,49 @@ void gen_function_specialized(int decl, int inst, int cname) {
       p = node_next[p];
     }
   }
-  (void)(code_emit(C_PUNCT, 8));
+}
+void gen_function_type_params(int types) {
+  int p = types;
+  if (p == 0)
+    (void)(code_emit(C_KW, 4));
+  else {
+    while (p != 0) {
+      int pt = gen_substitute_type(p);
+      (void)(gen_type(node_kind[pt], pt, node_value[pt]));
+      if (node_next[p] != 0)
+        (void)(code_emit(C_PUNCT, 7));
+      else {
+      }
+      p = node_next[p];
+    }
+  }
+}
+void gen_function_signature_parts(int ret_ty, int name, int params, int is_extern) {
+  int ret = gen_substitute_type(ret_ty);
+  if ((ret != 0) && (node_kind[ret] == TY_FUN)) {
+    int inner_ret = gen_substitute_type(node_b[ret]);
+    (void)(gen_type(node_kind[inner_ret], inner_ret, node_value[inner_ret]));
+    (void)(code_emit(C_PUNCT, 4));
+    (void)(code_emit(C_PUNCT, 9));
+    (void)(code_emit(C_IDENT, name));
+    (void)(code_emit(C_PUNCT, 6));
+    (void)(gen_function_params(params, is_extern));
+    (void)(code_emit(C_PUNCT, 8));
+    (void)(code_emit(C_PUNCT, 5));
+    (void)(code_emit(C_PUNCT, 6));
+    (void)(gen_function_type_params(node_a[ret]));
+    (void)(code_emit(C_PUNCT, 8));
+  } else {
+    (void)(gen_type(node_kind[ret], ret, node_value[ret]));
+    (void)(code_emit(C_IDENT, name));
+    (void)(code_emit(C_PUNCT, 6));
+    (void)(gen_function_params(params, is_extern));
+    (void)(code_emit(C_PUNCT, 8));
+  }
+}
+void gen_function_specialized(int decl, int inst, int cname) {
+  (void)(gen_bind_decl(decl, inst));
+  (void)(gen_function_signature_parts(node_b[decl], cname, node_c[decl], 0));
   int old_active_function = gen_active_function;
   gen_active_function = decl;
   (void)(gen_stmt(node_a[decl]));
@@ -5163,33 +5380,40 @@ void gen_match_stmt(int id) {
   (void)(code_emit(C_NEWLINE, 0));
   int arm = node_b[id];
   while (arm != 0) {
-    int variant = tc_match_variant_member(enum_decl, node_value[arm]);
-    if (variant != 0) {
-      (void)(code_emit(C_KW, 6));
-      (void)(code_emit(C_PUNCT, 4));
-      (void)(code_emit(C_IDENT, temp));
-      if (tagged == 1)
-        (void)(code_emit(C_PUNCT, 17));
-      else {
-      }
-      if (tagged == 1)
-        (void)(code_emit(C_IDENT, sym_tag_id()));
-      else {
-      }
-      (void)(code_emit(C_OP, 5));
-      (void)(code_emit(C_IDENT, sym_c_symbol(sym_qualified(enum_name, node_a[variant]))));
-      (void)(code_emit(C_PUNCT, 5));
+    if (node_value[arm] == 0) {
+      (void)(code_emit(C_KW, 7));
       (void)(code_emit(C_PUNCT, 13));
-      int field = node_b[variant];
-      int binding = node_a[arm];
-      while ((field != 0) && (binding != 0)) {
-        (void)(gen_match_binding(temp, variant, binding, field));
-        field = node_next[field];
-        binding = node_next[binding];
-      }
       (void)(gen_stmt(node_b[arm]));
       (void)(code_emit(C_PUNCT, 14));
     } else {
+      int variant = tc_match_variant_member(enum_decl, node_value[arm]);
+      if (variant != 0) {
+        (void)(code_emit(C_KW, 6));
+        (void)(code_emit(C_PUNCT, 4));
+        (void)(code_emit(C_IDENT, temp));
+        if (tagged == 1)
+          (void)(code_emit(C_PUNCT, 17));
+        else {
+        }
+        if (tagged == 1)
+          (void)(code_emit(C_IDENT, sym_tag_id()));
+        else {
+        }
+        (void)(code_emit(C_OP, 5));
+        (void)(code_emit(C_IDENT, sym_c_symbol(sym_qualified(enum_name, node_a[variant]))));
+        (void)(code_emit(C_PUNCT, 5));
+        (void)(code_emit(C_PUNCT, 13));
+        int field = node_b[variant];
+        int binding = node_a[arm];
+        while ((field != 0) && (binding != 0)) {
+          (void)(gen_match_binding(temp, variant, binding, field));
+          field = node_next[field];
+          binding = node_next[binding];
+        }
+        (void)(gen_stmt(node_b[arm]));
+        (void)(code_emit(C_PUNCT, 14));
+      } else {
+      }
     }
     arm = node_next[arm];
   }
@@ -5444,29 +5668,16 @@ void gen_extern_param(int ty, int name) {
     (void)(gen_decl(ty, name));
 }
 void gen_function_signature(int id) {
-  if (bi_has_flag(node_value[id], BI_FLAG_MAIN) == 1)
+  int ret = gen_substitute_type(node_b[id]);
+  if (bi_has_flag(node_value[id], BI_FLAG_MAIN) == 1) {
     (void)(code_emit(C_KW, 1));
-  else
-    (void)(gen_type(node_aux[id], node_b[id], 0));
-  (void)(code_emit(C_IDENT, sym_c_symbol(node_value[id])));
-  (void)(code_emit(C_PUNCT, 6));
-  int param = node_c[id];
-  if (param == 0)
-    (void)(code_emit(C_KW, 4));
-  else {
-    while (param != 0) {
-      if (node_kind[id] == N_EXTERN)
-        (void)(gen_extern_param(node_b[param], node_a[param]));
-      else
-        (void)(gen_decl(node_b[param], node_a[param]));
-      if (node_next[param] != 0)
-        (void)(code_emit(C_PUNCT, 7));
-      else {
-      }
-      param = node_next[param];
-    }
-  }
-  (void)(code_emit(C_PUNCT, 8));
+    (void)(code_emit(C_IDENT, sym_c_symbol(node_value[id])));
+    (void)(code_emit(C_PUNCT, 6));
+    (void)(gen_function_params(node_c[id], 0));
+    (void)(code_emit(C_PUNCT, 8));
+  } else
+    (void)(gen_function_signature_parts(ret, sym_c_symbol(node_value[id]), node_c[id],
+                                        (node_kind[id] == N_EXTERN)));
 }
 void gen_prototype(int id) {
   gen_source_pos = node_pos[id];
@@ -5478,6 +5689,8 @@ void gen_prototype(int id) {
 void gen_function(int id) {
   gen_source_pos = node_pos[id];
   gen_source_epoch = (gen_source_epoch + 1);
+  int old_active_function = gen_active_function;
+  gen_active_function = id;
   (void)(gen_function_signature(id));
   if ((bi_has_flag(node_value[id], BI_FLAG_MAIN) == 1) && (node_kind[node_a[id]] == N_BLOCK)) {
     (void)(code_emit(C_PUNCT, 13));
@@ -5499,6 +5712,7 @@ void gen_function(int id) {
     (void)(code_emit(C_PUNCT, 14));
   } else
     (void)(gen_stmt(node_a[id]));
+  gen_active_function = old_active_function;
 }
 void gen_closure_emit_env(int serial, int closure_id) {
   int env_name_emit = gen_closure_env_name(serial);
@@ -5993,25 +6207,8 @@ void gen_program(int id) {
   while (si < gen_spec_count) {
     if (gen_spec_kind[si] == 2) {
       (void)(gen_bind_decl(gen_spec_decl[si], gen_spec_type[si]));
-      int rr = gen_substitute_type(node_b[gen_spec_decl[si]]);
-      (void)(gen_type(node_kind[rr], rr, node_value[rr]));
-      (void)(code_emit(C_IDENT, gen_spec_name[si]));
-      (void)(code_emit(C_PUNCT, 6));
-      int pp = node_c[gen_spec_decl[si]];
-      if (pp == 0)
-        (void)(code_emit(C_KW, 4));
-      else {
-        while (pp != 0) {
-          int pt = gen_substitute_type(node_b[pp]);
-          (void)(gen_decl(pt, node_a[pp]));
-          if (node_next[pp] != 0)
-            (void)(code_emit(C_PUNCT, 7));
-          else {
-          }
-          pp = node_next[pp];
-        }
-      }
-      (void)(code_emit(C_PUNCT, 8));
+      (void)(gen_function_signature_parts(node_b[gen_spec_decl[si]], gen_spec_name[si],
+                                          node_c[gen_spec_decl[si]], 0));
       (void)(code_emit(C_PUNCT, 12));
       (void)(code_emit(C_NEWLINE, 0));
       (void)(gen_bind_clear());
@@ -6172,6 +6369,163 @@ int ast_generic_params(void) {
   }
   return params;
 }
+int ast_append_array_dimension(int ty, int size) {
+  if ((ty == 0) || (node_kind[ty] != TY_ARRAY))
+    return ast_node(TY_ARRAY, ty, 0, 0, size, 0);
+  else {
+  }
+  int child = ast_append_array_dimension(node_a[ty], size);
+  return ast_node(TY_ARRAY, child, 0, 0, node_value[ty], 0);
+}
+void ensure_ast_consts(int need) {
+  if (need < ast_const_cap)
+    return;
+  else {
+  }
+  int n = next_capacity(ast_const_cap, need);
+  ast_const_name = grow_ints(ast_const_name, ast_const_cap, n);
+  ast_const_value = grow_ints(ast_const_value, ast_const_cap, n);
+  ast_const_cap = n;
+}
+void ast_const_add(int name, int value) {
+  (void)(ensure_ast_consts(ast_const_count));
+  ast_const_name[ast_const_count] = name;
+  ast_const_value[ast_const_count] = value;
+  ast_const_count = (ast_const_count + 1);
+}
+int ast_const_find(int name) {
+  int i = (ast_const_count - 1);
+  while (i >= 0) {
+    if (ast_const_name[i] == name)
+      return (i + 1);
+    else {
+    }
+    i = (i - 1);
+  }
+  return 0;
+}
+int ast_const_add_checked(int left, int right) {
+  if (right > (2147483647 - left))
+    return (0 - 1);
+  else {
+  }
+  return (left + right);
+}
+int ast_const_sub_checked(int left, int right) {
+  if (right > left)
+    return (0 - 1);
+  else {
+  }
+  return (left - right);
+}
+int ast_const_mul_checked(int left, int right) {
+  if ((left != 0) && (right > (2147483647 / left)))
+    return (0 - 1);
+  else {
+  }
+  return (left * right);
+}
+int ast_const_eval(int id) {
+  if (id == 0)
+    return (0 - 1);
+  else {
+  }
+  if (node_kind[id] == N_INT) {
+    if (node_value[id] < 0)
+      return (0 - 1);
+    else {
+    }
+    return node_value[id];
+  } else {
+  }
+  if (node_kind[id] == N_VAR) {
+    int found = ast_const_find(node_value[id]);
+    if ((found == 0) && (ast_namespace_scope != 0))
+      found = ast_const_find(sym_qualified(ast_namespace_scope, node_value[id]));
+    else {
+    }
+    if (found != 0)
+      return ast_const_value[(found - 1)];
+    else {
+    }
+    return (0 - 1);
+  } else {
+  }
+  if (node_kind[id] != N_BINOP)
+    return (0 - 1);
+  else {
+  }
+  int left = ast_const_eval(node_a[id]);
+  int right = ast_const_eval(node_b[id]);
+  if ((left < 0) || (right < 0))
+    return (0 - 1);
+  else {
+  }
+  if (node_value[id] == OP_ADD)
+    return ast_const_add_checked(left, right);
+  else {
+  }
+  if (node_value[id] == OP_SUB)
+    return ast_const_sub_checked(left, right);
+  else {
+  }
+  if (node_value[id] == OP_MUL)
+    return ast_const_mul_checked(left, right);
+  else {
+  }
+  if (node_value[id] == OP_DIV) {
+    if (right == 0)
+      return (0 - 1);
+    else {
+    }
+    return (left / right);
+  } else {
+  }
+  if (node_value[id] == OP_MOD) {
+    if (right == 0)
+      return (0 - 1);
+    else {
+    }
+    return (left % right);
+  } else {
+  }
+  return (0 - 1);
+}
+int ast_array_dimension_value(void) {
+  if (input_peek() == T_INT) {
+    int raw_size = input_payload();
+    input_pos = (input_pos + 1);
+    return raw_size;
+  } else {
+  }
+  if ((input_peek() != T_ID) && (input_peek() != T_ARRAY))
+    return (0 - 1);
+  else {
+  }
+  int name = input_payload();
+  input_pos = (input_pos + 1);
+  int qualified = 0;
+  while (input_take(T_SCOPE) == 1) {
+    if ((input_peek() != T_ID) && (input_peek() != T_ARRAY))
+      return (0 - 1);
+    else {
+    }
+    int rhs = input_payload();
+    input_pos = (input_pos + 1);
+    name = sym_qualified(name, rhs);
+    qualified = 1;
+  }
+  if ((ast_namespace_scope != 0) && (qualified == 0))
+    name = sym_qualified(ast_namespace_scope, name);
+  else {
+  }
+  int found = ast_const_find(name);
+  if (found == 0)
+    return (0 - 1);
+  else {
+  }
+  return ast_const_value[(found - 1)];
+}
 int ast_type(void) {
   int base = 0;
   int named = 0;
@@ -6212,12 +6566,7 @@ int ast_type(void) {
       ty = ast_node(TY_PTR, ty, 0, 0, 0, 0);
     }
     while (input_take(T_LBRACK) == 1) {
-      if (input_peek() != T_INT)
-        return 0;
-      else {
-      }
-      int size = input_payload();
-      input_pos = (input_pos + 1);
+      int size = ast_array_dimension_value();
       if (size < 0)
         return 0;
       else {
@@ -6226,7 +6575,7 @@ int ast_type(void) {
         return 0;
       else {
       }
-      ty = ast_node(TY_ARRAY, ty, 0, 0, size, 0);
+      ty = ast_append_array_dimension(ty, size);
     }
     return ty;
   } else {
@@ -6437,17 +6786,16 @@ int ast_type(void) {
     ty = ast_node(TY_PTR, ty, 0, 0, 0, 0);
   }
   while (input_take(T_LBRACK) == 1) {
-    if (input_peek() != T_INT)
+    int size = ast_array_dimension_value();
+    if (size < 0)
       return 0;
     else {
     }
-    int size = input_payload();
-    input_pos = (input_pos + 1);
     if (input_take(T_RBRACK) == 0)
       return 0;
     else {
     }
-    ty = ast_node(TY_ARRAY, ty, 0, 0, size, 0);
+    ty = ast_append_array_dimension(ty, size);
   }
   return ty;
 }
@@ -6594,13 +6942,57 @@ int ast_primary(void) {
       input_pos = (input_pos + 1);
       name = sym_qualified(name, rhs);
     }
-    if (input_take(T_LPAREN) == 1) {
+    int explicit_args = 0;
+    int explicit_valid = 0;
+    int generic_probe = input_pos;
+    if (input_take(T_LT) == 1) {
+      if (input_peek() != T_GT) {
+        int type_arg = ast_type();
+        if (type_arg != 0) {
+          explicit_args = type_arg;
+          while (input_take(T_COMMA) == 1) {
+            type_arg = ast_type();
+            if (type_arg == 0) {
+              explicit_args = 0;
+              break;
+            } else {
+            }
+            explicit_args = ast_link(explicit_args, type_arg);
+          }
+          if ((explicit_args != 0) && (input_take(T_GT) == 1))
+            explicit_valid = 1;
+          else {
+          }
+        } else {
+        }
+      } else {
+      }
+      if (explicit_valid == 0) {
+        input_pos = generic_probe;
+        explicit_args = 0;
+      } else {
+      }
+    } else {
+    }
+    if (explicit_valid == 1) {
+      if (input_take(T_LPAREN) == 0) {
+        input_pos = generic_probe;
+        explicit_valid = 0;
+        explicit_args = 0;
+      } else {
+      }
+    } else {
+    }
+    if ((explicit_valid == 0) && (input_take(T_LPAREN) == 1)) {
+    } else {
+    }
+    if ((explicit_valid == 1) || (input_kind[(input_pos - 1)] == T_LPAREN)) {
       int args = ast_call_args();
       if (args < 0)
         return (0 - 1);
       else {
       }
-      return ast_node(N_CALL, args, 0, 0, name, 0);
+      return ast_node(N_CALL, args, explicit_args, 0, name, 0);
     } else {
     }
     int base = ast_node(N_VAR, 0, 0, 0, name, 0);
@@ -7098,8 +7490,17 @@ int ast_stmt(void) {
       }
       int variant = input_payload();
       input_pos = (input_pos + 1);
+      int is_default = ast_is_match_default(variant);
+      if (is_default == 1)
+        variant = 0;
+      else {
+      }
       int bindings = 0;
       if (input_take(T_LPAREN) == 1) {
+        if (is_default == 1)
+          return (0 - 1);
+        else {
+        }
         if (input_peek() != T_ID)
           return (0 - 1);
         else {
@@ -7170,22 +7571,34 @@ int ast_stmt(void) {
   }
   if (input_take(T_LET) == 1) {
     if (input_take(T_LPAREN) == 1) {
+      int bindings = 0;
+      int binding_count = 0;
       if (input_peek() != T_ID)
         return (0 - 1);
       else {
       }
-      int first_name = input_payload();
-      input_pos = (input_pos + 1);
-      if (input_take(T_COMMA) == 0)
+      while (1 == 1) {
+        int binding_name = input_payload();
+        input_pos = (input_pos + 1);
+        int binding = ast_node(N_VAR, 0, 0, 0, binding_name, 0);
+        if (bindings == 0)
+          bindings = binding;
+        else
+          bindings = ast_link(bindings, binding);
+        binding_count = (binding_count + 1);
+        if (input_take(T_COMMA) == 0)
+          break;
+        else {
+        }
+        if (input_peek() != T_ID)
+          return (0 - 1);
+        else {
+        }
+      }
+      if (binding_count < 2)
         return (0 - 1);
       else {
       }
-      if (input_peek() != T_ID)
-        return (0 - 1);
-      else {
-      }
-      int second_name = input_payload();
-      input_pos = (input_pos + 1);
       if (input_take(T_RPAREN) == 0)
         return (0 - 1);
       else {
@@ -7212,10 +7625,7 @@ int ast_stmt(void) {
         return (0 - 1);
       else {
       }
-      int first_binding = ast_node(N_VAR, 0, 0, 0, first_name, 0);
-      int second_binding = ast_node(N_VAR, 0, 0, 0, second_name, 0);
-      return ast_node(N_TUPLE_BIND, ast_link(first_binding, second_binding), tuple_ty, tuple_value,
-                      0, 0);
+      return ast_node(N_TUPLE_BIND, bindings, tuple_ty, tuple_value, 0, 0);
     } else {
     }
     if (input_peek() != T_ID)
@@ -7862,6 +8272,11 @@ int ast_decl(void) {
       return (0 - 1);
     else {
     }
+    int const_value = ast_const_eval(value);
+    if ((node_kind[ty] == TY_INT) && (const_value >= 0))
+      (void)(ast_const_add(name, const_value));
+    else {
+    }
     return ast_node(N_CONST, name, ty, value, 0, alignment);
   } else {
   }
@@ -8232,6 +8647,35 @@ int is_digit(int c) {
   }
   return 1;
 }
+int hex_digit_value(int c) {
+  if ((c >= 48) && (c <= 57))
+    return (c - 48);
+  else {
+  }
+  if ((c >= 65) && (c <= 70))
+    return (c - 55);
+  else {
+  }
+  if ((c >= 97) && (c <= 102))
+    return (c - 87);
+  else {
+  }
+  return (0 - 1);
+}
+int is_hex_digit(int c) {
+  if (hex_digit_value(c) >= 0)
+    return 1;
+  else {
+  }
+  return 0;
+}
+int is_binary_digit(int c) {
+  if ((c == 48) || (c == 49))
+    return 1;
+  else {
+  }
+  return 0;
+}
 int is_alpha(int c) {
   if (c > 64) {
     if (c < 91)
@@ -8371,6 +8815,13 @@ int ast_decl_name(int name) {
 }
 int ast_type_name(int name) {
   return name;
+}
+int ast_is_match_default(int name) {
+  if (((name != 0) && (sym_len[name] == 1)) && (source[sym_start[name]] == 95))
+    return 1;
+  else {
+  }
+  return 0;
 }
 int sym_intern(int start, int length, int kind, int scope) {
   int h = span_hash(start, length);
@@ -8921,30 +9372,164 @@ int word_code(int start, int length) {
   }
   return L_ID;
 }
-void lexer_skip(void) {
-  while (is_space(source_peek()) == 1) {
-    (void)(source_take());
+void ensure_lexer_literal_digits(int need) {
+  if (need < lexer_literal_digits_cap)
+    return;
+  else {
   }
-  if (source_peek() == 47) {
-    if ((source_pos + 1) < source_len) {
-      if (source[(source_pos + 1)] == 47) {
-        while (source_peek() != 10) {
-          if (source_pos > (source_len - 1))
-            return;
-          else {
-          }
-          (void)(source_take());
+  int n = next_capacity(lexer_literal_digits_cap, need);
+  lexer_literal_digits = grow_ints(lexer_literal_digits, lexer_literal_digits_cap, n);
+  lexer_literal_digits_cap = n;
+}
+int lexer_make_integer(int start, int length, int base) {
+  (void)(ensure_lexer_literal_digits(32));
+  int digit_count = 1;
+  int overflow_u64 = 0;
+  int p = start;
+  int end = (start + length);
+  int prefix = 0;
+  if ((base == 16) || (base == 2))
+    prefix = 2;
+  else {
+  }
+  p = (start + prefix);
+  lexer_literal_digits[0] = 0;
+  while (p < end) {
+    int digit = (0 - 1);
+    if (base == 16)
+      digit = hex_digit_value(source[p]);
+    else if (base == 2) {
+      if ((source[p] == 48) || (source[p] == 49))
+        digit = (source[p] - 48);
+      else {
+      }
+    } else if (is_digit(source[p]) == 1)
+      digit = (source[p] - 48);
+    else {
+    }
+    if ((digit < 0) || (digit >= base)) {
+      lexer_error = 1;
+      return 0;
+    } else {
+    }
+    if (overflow_u64 == 0) {
+      int i = 0;
+      int carry = digit;
+      while (i < digit_count) {
+        int product = ((lexer_literal_digits[i] * base) + carry);
+        lexer_literal_digits[i] = (product % 10);
+        carry = (product / 10);
+        i = (i + 1);
+      }
+      if (carry != 0) {
+        if (digit_count >= 20)
+          overflow_u64 = 1;
+        else {
+          lexer_literal_digits[digit_count] = carry;
+          digit_count = (digit_count + 1);
         }
-        (void)(lexer_skip());
       } else {
       }
     } else {
     }
+    p = (p + 1);
+  }
+  if (overflow_u64 == 1) {
+    lexer_error = 1;
+    return 0;
   } else {
+  }
+  int decimal_start = (source_len + sym_text_len);
+  int i = (digit_count - 1);
+  int out = 0;
+  while (i >= 0) {
+    (void)(ensure_source((decimal_start + out)));
+    source[(decimal_start + out)] = (48 + lexer_literal_digits[i]);
+    out = (out + 1);
+    i = (i - 1);
+  }
+  int text_id = sym_intern(decimal_start, out, L_INT, 0);
+  sym_text_len = (sym_text_len + out);
+  int value = 0;
+  int overflow_int = 0;
+  i = (digit_count - 1);
+  while (i >= 0) {
+    int digit = lexer_literal_digits[i];
+    if (overflow_int == 0) {
+      if (value > 214748364)
+        overflow_int = 1;
+      else if ((value == 214748364) && (digit > 7))
+        overflow_int = 1;
+      else
+        value = ((value * 10) + digit);
+    } else {
+    }
+    i = (i - 1);
+  }
+  tok_kind = L_INT;
+  tok_value = value;
+  if (overflow_int == 1)
+    tok_value = (0 - 1);
+  else {
+  }
+  tok_text = text_id;
+  tok_length = length;
+  return 1;
+}
+void lexer_skip(void) {
+  while (1 == 1) {
+    while (is_space(source_peek()) == 1) {
+      (void)(source_take());
+    }
+    if ((source_peek() != 47) || ((source_pos + 1) >= source_len))
+      return;
+    else {
+    }
+    if (source[(source_pos + 1)] == 47) {
+      (void)(source_take());
+      (void)(source_take());
+      while (source_peek() != 10) {
+        if (source_pos >= source_len)
+          return;
+        else {
+        }
+        (void)(source_take());
+      }
+    } else if (source[(source_pos + 1)] == 42) {
+      (void)(source_take());
+      (void)(source_take());
+      int closed = 0;
+      while (source_pos < source_len) {
+        if (((source_peek() == 42) && ((source_pos + 1) < source_len)) &&
+            (source[(source_pos + 1)] == 47)) {
+          (void)(source_take());
+          (void)(source_take());
+          closed = 1;
+          break;
+        } else {
+        }
+        (void)(source_take());
+      }
+      if (closed == 0) {
+        lexer_error = 1;
+        current_source_pos = source_pos;
+        return;
+      } else {
+      }
+    } else
+      return;
   }
 }
 int lexer_next(void) {
   (void)(lexer_skip());
+  if (lexer_error == 1) {
+    tok_kind = L_EOF;
+    tok_value = 0;
+    tok_text = 0;
+    tok_length = 0;
+    return tok_kind;
+  } else {
+  }
   tok_start = source_pos;
   tok_length = 0;
   tok_text = 0;
@@ -9030,6 +9615,42 @@ int lexer_next(void) {
   } else {
   }
   if (is_digit(c) == 1) {
+    if (((c == 48) && ((source_pos + 1) < source_len)) &&
+        ((source[(source_pos + 1)] == 120) || (source[(source_pos + 1)] == 88))) {
+      (void)(source_take());
+      (void)(source_take());
+      int hex_start = tok_start;
+      while (is_hex_digit(source_peek()) == 1) {
+        (void)(source_take());
+      }
+      if (source_pos == (tok_start + 2)) {
+        lexer_error = 1;
+        return L_EOF;
+      } else {
+      }
+      tok_length = (source_pos - tok_start);
+      (void)(lexer_make_integer(hex_start, tok_length, 16));
+      return tok_kind;
+    } else {
+    }
+    if (((c == 48) && ((source_pos + 1) < source_len)) &&
+        ((source[(source_pos + 1)] == 98) || (source[(source_pos + 1)] == 66))) {
+      (void)(source_take());
+      (void)(source_take());
+      int binary_start = tok_start;
+      while (is_binary_digit(source_peek()) == 1) {
+        (void)(source_take());
+      }
+      if (source_pos == (tok_start + 2)) {
+        lexer_error = 1;
+        return L_EOF;
+      } else {
+      }
+      tok_length = (source_pos - tok_start);
+      (void)(lexer_make_integer(binary_start, tok_length, 2));
+      return tok_kind;
+    } else {
+    }
     int value = 0;
     int overflow = 0;
     while (is_digit(source_peek()) == 1) {
@@ -9045,11 +9666,33 @@ int lexer_next(void) {
       } else {
       }
     }
+    int is_float = 0;
     if (source_peek() == 46) {
+      is_float = 1;
       (void)(source_take());
       while (is_digit(source_peek()) == 1) {
         (void)(source_take());
       }
+    } else {
+    }
+    if ((source_peek() == 101) || (source_peek() == 69)) {
+      is_float = 1;
+      (void)(source_take());
+      if ((source_peek() == 43) || (source_peek() == 45))
+        (void)(source_take());
+      else {
+      }
+      if (is_digit(source_peek()) == 0) {
+        lexer_error = 1;
+        return L_EOF;
+      } else {
+      }
+      while (is_digit(source_peek()) == 1) {
+        (void)(source_take());
+      }
+    } else {
+    }
+    if (is_float == 1) {
       tok_kind = L_FLOAT;
       tok_length = (source_pos - tok_start);
       tok_text = 0;
@@ -9319,7 +9962,8 @@ void include_process_line(int *line, int length) {
   }
 }
 void include_expand_handle(int *handle) {
-  int *line = alloc_ints(include_line_cap);
+  int line_capacity = include_line_initial_cap;
+  int *line = alloc_ints(line_capacity);
   int length = 0;
   int line_number = 1;
   int c = read_char(handle);
@@ -9330,11 +9974,14 @@ void include_expand_handle(int *handle) {
       line_number = (line_number + 1);
       source_active_line = line_number;
     } else {
-      if (length < include_line_cap) {
-        line[length] = c;
-        length = (length + 1);
-      } else
-        (void)(source_import_fail(3, source_active_file, 0, line_number));
+      if (length >= line_capacity) {
+        int next_line_capacity = next_capacity(line_capacity, length);
+        line = grow_ints(line, line_capacity, next_line_capacity);
+        line_capacity = next_line_capacity;
+      } else {
+      }
+      line[length] = c;
+      length = (length + 1);
     }
     c = read_char(handle);
   }
@@ -9342,6 +9989,7 @@ void include_expand_handle(int *handle) {
     (void)(include_process_line(line, length));
   else {
   }
+  (void)(free_ints(line));
 }
 void load_source_file(char *path) {
   (void)(source_reset());
@@ -9751,8 +10399,10 @@ void load_tokens_from_file(char *path) {
   sym_text_len = 0;
   sym_count = 1;
   ast_namespace_scope = 0;
+  ast_const_count = 0;
   (void)(c_source_reset());
   ffi_header_count = 0;
+  lexer_error = 0;
   include_ok = 1;
   source_import_error_kind = 0;
   int *handle = basalt_include_open_root(path);
@@ -9800,6 +10450,7 @@ void ensure_tc_vars(int need) {
   tc_var_elem_kind = grow_ints(tc_var_elem_kind, tc_var_cap, n);
   tc_var_elem_name = grow_ints(tc_var_elem_name, tc_var_cap, n);
   tc_var_type = grow_ints(tc_var_type, tc_var_cap, n);
+  tc_var_fun_target = grow_ints(tc_var_fun_target, tc_var_cap, n);
   tc_var_owned = grow_ints(tc_var_owned, tc_var_cap, n);
   tc_var_moved = grow_ints(tc_var_moved, tc_var_cap, n);
   tc_var_borrow_count = grow_ints(tc_var_borrow_count, tc_var_cap, n);
@@ -9811,6 +10462,7 @@ void ensure_tc_vars(int need) {
   tc_var_param = grow_ints(tc_var_param, tc_var_cap, n);
   tc_var_param_pos = grow_ints(tc_var_param_pos, tc_var_cap, n);
   tc_var_mode = grow_ints(tc_var_mode, tc_var_cap, n);
+  tc_var_const = grow_ints(tc_var_const, tc_var_cap, n);
   tc_var_closure_caps = grow_ints(tc_var_closure_caps, tc_var_cap, n);
   tc_var_closure_moved = grow_ints(tc_var_closure_moved, tc_var_cap, n);
   tc_var_ffi_borrowed = grow_ints(tc_var_ffi_borrowed, tc_var_cap, n);
@@ -9836,6 +10488,10 @@ void ensure_tc_flow_frames(int need) {
   tc_flow_frame_yes = grow_ints(tc_flow_frame_yes, tc_flow_frame_cap, n);
   tc_flow_frame_count = grow_ints(tc_flow_frame_count, tc_flow_frame_cap, n);
   tc_flow_frame_has_yes = grow_ints(tc_flow_frame_has_yes, tc_flow_frame_cap, n);
+  tc_flow_frame_field_base = grow_ints(tc_flow_frame_field_base, tc_flow_frame_cap, n);
+  tc_flow_frame_field_yes = grow_ints(tc_flow_frame_field_yes, tc_flow_frame_cap, n);
+  tc_flow_frame_field_count = grow_ints(tc_flow_frame_field_count, tc_flow_frame_cap, n);
+  tc_flow_frame_field_yes_count = grow_ints(tc_flow_frame_field_yes_count, tc_flow_frame_cap, n);
   tc_flow_frame_cap = n;
 }
 void ensure_tc_flow_log(int need) {
@@ -9854,6 +10510,10 @@ void ensure_tc_flow_log(int need) {
   tc_flow_log_borrow_param = grow_ints(tc_flow_log_borrow_param, tc_flow_log_cap, n);
   tc_flow_log_ffi = grow_ints(tc_flow_log_ffi, tc_flow_log_cap, n);
   tc_flow_log_closure_moved = grow_ints(tc_flow_log_closure_moved, tc_flow_log_cap, n);
+  tc_flow_log_fun_target = grow_ints(tc_flow_log_fun_target, tc_flow_log_cap, n);
+  tc_flow_log_field_root = grow_ints(tc_flow_log_field_root, tc_flow_log_cap, n);
+  tc_flow_log_field_name = grow_ints(tc_flow_log_field_name, tc_flow_log_cap, n);
+  tc_flow_log_field_fun = grow_ints(tc_flow_log_field_fun, tc_flow_log_cap, n);
   tc_flow_log_cap = n;
 }
 void tc_flow_append_current(int count) {
@@ -9871,17 +10531,62 @@ void tc_flow_append_current(int count) {
     tc_flow_log_borrow_param[slot] = tc_var_borrow_param[i];
     tc_flow_log_ffi[slot] = tc_var_ffi_borrowed[i];
     tc_flow_log_closure_moved[slot] = tc_var_closure_moved[i];
+    tc_flow_log_fun_target[slot] = tc_var_fun_target[i];
     i = (i + 1);
   }
   tc_flow_log_count = (tc_flow_log_count + count);
+}
+void tc_flow_append_fields(void) {
+  (void)(ensure_tc_flow_log((tc_flow_field_log_count + tc_field_target_count)));
+  int i = 0;
+  while (i < tc_field_target_count) {
+    int slot = (tc_flow_field_log_count + i);
+    tc_flow_log_field_root[slot] = tc_field_target_root[i];
+    tc_flow_log_field_name[slot] = tc_field_target_name[i];
+    tc_flow_log_field_fun[slot] = tc_field_target_fun[i];
+    i = (i + 1);
+  }
+  tc_flow_field_log_count = (tc_flow_field_log_count + tc_field_target_count);
+}
+int tc_flow_field_log_find(int start, int count, int root, int name) {
+  int i = 0;
+  while (i < count) {
+    int slot = (start + i);
+    if ((tc_flow_log_field_root[slot] == root) && (tc_flow_log_field_name[slot] == name))
+      return slot;
+    else {
+    }
+    i = (i + 1);
+  }
+  return (0 - 1);
+}
+void tc_flow_restore_fields(int frame) {
+  int start = tc_flow_frame_field_base[frame];
+  int count = tc_flow_frame_field_count[frame];
+  int i = 0;
+  tc_field_target_count = 0;
+  (void)(ensure_tc_field_targets(count));
+  while (i < count) {
+    int slot = (start + i);
+    tc_field_target_root[i] = tc_flow_log_field_root[slot];
+    tc_field_target_name[i] = tc_flow_log_field_name[slot];
+    tc_field_target_fun[i] = tc_flow_log_field_fun[slot];
+    i = (i + 1);
+  }
+  tc_field_target_count = count;
 }
 void tc_flow_save_base(void) {
   (void)(ensure_tc_flow_frames(tc_flow_depth));
   tc_flow_frame_base[tc_flow_depth] = tc_flow_log_count;
   tc_flow_frame_count[tc_flow_depth] = tc_var_count;
   tc_flow_frame_yes[tc_flow_depth] = (0 - 1);
+  tc_flow_frame_field_base[tc_flow_depth] = tc_flow_field_log_count;
+  tc_flow_frame_field_count[tc_flow_depth] = tc_field_target_count;
+  tc_flow_frame_field_yes[tc_flow_depth] = (0 - 1);
+  tc_flow_frame_field_yes_count[tc_flow_depth] = 0;
   tc_flow_frame_has_yes[tc_flow_depth] = 0;
   (void)(tc_flow_append_current(tc_var_count));
+  (void)(tc_flow_append_fields());
   tc_flow_depth = (tc_flow_depth + 1);
 }
 void tc_flow_save_yes(void) {
@@ -9891,8 +10596,12 @@ void tc_flow_save_yes(void) {
   else {
   }
   tc_flow_frame_yes[frame] = tc_flow_log_count;
+  tc_flow_frame_field_yes[frame] = tc_flow_field_log_count;
+  tc_flow_frame_field_yes_count[frame] = tc_field_target_count;
   (void)(tc_flow_append_current(tc_flow_frame_count[frame]));
+  (void)(tc_flow_append_fields());
   tc_var_count = tc_flow_frame_count[frame];
+  (void)(tc_flow_restore_fields(frame));
   tc_flow_frame_has_yes[frame] = 1;
 }
 void tc_flow_restore_base(void) {
@@ -9916,9 +10625,11 @@ void tc_flow_restore_base(void) {
     tc_var_borrow_param[i] = tc_flow_log_borrow_param[slot];
     tc_var_ffi_borrowed[i] = tc_flow_log_ffi[slot];
     tc_var_closure_moved[i] = tc_flow_log_closure_moved[slot];
+    tc_var_fun_target[i] = tc_flow_log_fun_target[slot];
     i = (i + 1);
   }
   tc_var_count = count;
+  (void)(tc_flow_restore_fields(frame));
 }
 void tc_flow_merge_yes(void) {
   int frame = (tc_flow_depth - 1);
@@ -9973,7 +10684,34 @@ void tc_flow_merge_yes(void) {
       tc_var_closure_moved[i] = 1;
     else {
     }
+    if (tc_flow_log_fun_target[slot] == tc_var_fun_target[i]) {
+    } else
+      tc_var_fun_target[i] = 0;
     i = (i + 1);
+  }
+  int field_yes_start = tc_flow_frame_field_yes[frame];
+  int field_yes_count = tc_flow_frame_field_yes_count[frame];
+  int fi = 0;
+  while (fi < tc_field_target_count) {
+    int yi = tc_flow_field_log_find(field_yes_start, field_yes_count, tc_field_target_root[fi],
+                                    tc_field_target_name[fi]);
+    if (yi < 0)
+      tc_field_target_fun[fi] = 0;
+    else if (tc_flow_log_field_fun[yi] != tc_field_target_fun[fi])
+      tc_field_target_fun[fi] = 0;
+    else {
+    }
+    fi = (fi + 1);
+  }
+  fi = 0;
+  while (fi < field_yes_count) {
+    int yslot = (field_yes_start + fi);
+    if (((tc_flow_log_field_root[yslot] >= 0) && (tc_flow_log_field_root[yslot] < count)) &&
+        (tc_field_target_get(tc_flow_log_field_root[yslot], tc_flow_log_field_name[yslot]) == 0))
+      (void)(tc_field_target_set(tc_flow_log_field_root[yslot], tc_flow_log_field_name[yslot], 0));
+    else {
+    }
+    fi = (fi + 1);
   }
   tc_var_count = count;
   if (base < 0)
@@ -9988,6 +10726,7 @@ void tc_flow_end(void) {
   else {
   }
   tc_flow_log_count = tc_flow_frame_base[frame];
+  tc_flow_field_log_count = tc_flow_frame_field_base[frame];
   tc_flow_depth = frame;
 }
 void ensure_tc_scopes(int need) {
@@ -10057,6 +10796,19 @@ void tc_leave_scope(void) {
     }
     i = (i + 1);
   }
+  int field_read = 0;
+  int field_write = 0;
+  while (field_read < tc_field_target_count) {
+    if (tc_field_target_root[field_read] < begin) {
+      tc_field_target_root[field_write] = tc_field_target_root[field_read];
+      tc_field_target_name[field_write] = tc_field_target_name[field_read];
+      tc_field_target_fun[field_write] = tc_field_target_fun[field_read];
+      field_write = (field_write + 1);
+    } else {
+    }
+    field_read = (field_read + 1);
+  }
+  tc_field_target_count = field_write;
   tc_var_count = begin;
 }
 void ensure_tc_path(int need) {
@@ -10100,6 +10852,53 @@ void ensure_tc_bindings(int need) {
 void tc_bind_clear(void) {
   tc_bind_count = 0;
 }
+void tc_bind_push(void) {
+  (void)(ensure_tc_bindings(tc_bind_count));
+  int need = (tc_bind_stack_count + tc_bind_count);
+  if (need >= tc_bind_stack_cap) {
+    int n = next_capacity(tc_bind_stack_cap, need);
+    tc_bind_stack_name = grow_ints(tc_bind_stack_name, tc_bind_stack_cap, n);
+    tc_bind_stack_type = grow_ints(tc_bind_stack_type, tc_bind_stack_cap, n);
+    tc_bind_stack_cap = n;
+  } else {
+  }
+  if (tc_bind_frame_depth >= tc_bind_frame_cap) {
+    int nframe = next_capacity(tc_bind_frame_cap, tc_bind_frame_depth);
+    tc_bind_frame_base = grow_ints(tc_bind_frame_base, tc_bind_frame_cap, nframe);
+    tc_bind_frame_size = grow_ints(tc_bind_frame_size, tc_bind_frame_cap, nframe);
+    tc_bind_frame_cap = nframe;
+  } else {
+  }
+  tc_bind_frame_base[tc_bind_frame_depth] = tc_bind_stack_count;
+  tc_bind_frame_size[tc_bind_frame_depth] = tc_bind_count;
+  int i = 0;
+  while (i < tc_bind_count) {
+    tc_bind_stack_name[(tc_bind_stack_count + i)] = tc_bind_name[i];
+    tc_bind_stack_type[(tc_bind_stack_count + i)] = tc_bind_type[i];
+    i = (i + 1);
+  }
+  tc_bind_stack_count = (tc_bind_stack_count + tc_bind_count);
+  tc_bind_frame_depth = (tc_bind_frame_depth + 1);
+}
+void tc_bind_pop(void) {
+  if (tc_bind_frame_depth < 1) {
+    tc_bind_count = 0;
+    return;
+  } else {
+  }
+  tc_bind_frame_depth = (tc_bind_frame_depth - 1);
+  int base = tc_bind_frame_base[tc_bind_frame_depth];
+  int size = tc_bind_frame_size[tc_bind_frame_depth];
+  (void)(ensure_tc_bindings(size));
+  int i = 0;
+  while (i < size) {
+    tc_bind_name[i] = tc_bind_stack_name[(base + i)];
+    tc_bind_type[i] = tc_bind_stack_type[(base + i)];
+    i = (i + 1);
+  }
+  tc_bind_count = size;
+  tc_bind_stack_count = base;
+}
 int tc_bind_find(int name) {
   int i = 0;
   while (i < tc_bind_count) {
@@ -10114,7 +10913,12 @@ int tc_bind_find(int name) {
 int tc_bind_add(int name, int ty) {
   int old = tc_bind_find(name);
   if (old != 0) {
-    if (tc_type_equal(old, ty) == 0) {
+    int compatible = tc_type_equal(old, ty);
+    if ((node_kind[old] == TY_PARAM) && (node_kind[ty] == TY_PARAM))
+      compatible = tc_param_type_same(old, ty);
+    else {
+    }
+    if (compatible == 0) {
       (void)(tc_fail_types(12, node_kind[old], node_kind[ty]));
       return 0;
     } else {
@@ -10126,6 +10930,37 @@ int tc_bind_add(int name, int ty) {
   tc_bind_name[tc_bind_count] = name;
   tc_bind_type[tc_bind_count] = ty;
   tc_bind_count = (tc_bind_count + 1);
+  return 1;
+}
+int tc_bind_explicit_args(int fun_node, int args) {
+  int formal = node_aux[fun_node];
+  int actual = args;
+  while ((formal != 0) && (actual != 0)) {
+    (void)(tc_check_type(actual));
+    if (tc_ok == 0) {
+      (void)(tc_fail(76));
+      return 0;
+    } else {
+    }
+    formal = node_next[formal];
+    actual = node_next[actual];
+  }
+  if ((formal != 0) || (actual != 0)) {
+    (void)(tc_fail(76));
+    return 0;
+  } else {
+  }
+  formal = node_aux[fun_node];
+  actual = args;
+  while (formal != 0) {
+    if (tc_bind_add(node_a[formal], actual) == 0) {
+      (void)(tc_fail(76));
+      return 0;
+    } else {
+    }
+    formal = node_next[formal];
+    actual = node_next[actual];
+  }
   return 1;
 }
 int tc_is_integer_kind(int kind) {
@@ -10255,6 +11090,89 @@ int tc_literal_fits(int id, int target_kind) {
   }
   return 1;
 }
+int tc_negative_integer_literal_conversion(int id, int target_kind, int actual_kind) {
+  if (((id == 0) || (node_kind[id] != N_BINOP)) || (node_value[id] != OP_SUB))
+    return 0;
+  else {
+  }
+  if ((node_kind[node_a[id]] != N_INT) || (node_kind[node_b[id]] != N_INT))
+    return 0;
+  else {
+  }
+  if ((node_value[node_a[id]] != 0) || (node_value[node_b[id]] < 0))
+    return 0;
+  else {
+  }
+  if ((tc_is_integer_kind(target_kind) == 0) || (tc_is_integer_kind(actual_kind) == 0))
+    return 0;
+  else {
+  }
+  if (((((target_kind == TY_U8) || (target_kind == TY_U16)) || (target_kind == TY_U32)) ||
+       (target_kind == TY_U64)) ||
+      (target_kind == TY_USIZE))
+    return 0;
+  else {
+  }
+  if (target_kind == TY_I8) {
+    if (node_value[node_b[id]] <= 128)
+      return 1;
+    else {
+    }
+    return 0;
+  } else {
+  }
+  if (target_kind == TY_I16) {
+    if (node_value[node_b[id]] <= 32768)
+      return 1;
+    else {
+    }
+    return 0;
+  } else {
+  }
+  if ((target_kind == TY_I32) || (target_kind == TY_INT)) {
+    if (node_value[node_b[id]] <= 2147483647)
+      return 1;
+    else {
+    }
+    return 0;
+  } else {
+  }
+  if (((target_kind == TY_I64) || (target_kind == TY_LONG)) || (target_kind == TY_LLONG)) {
+    if (node_value[node_b[id]] <= 2147483647)
+      return 1;
+    else {
+    }
+    return 0;
+  } else {
+  }
+  return 0;
+}
+int tc_integer_literal_conversion(int id, int target_kind, int actual_kind) {
+  if ((tc_is_integer_kind(target_kind) == 0) || (tc_is_integer_kind(actual_kind) == 0))
+    return 0;
+  else {
+  }
+  if ((id != 0) && (node_kind[id] == N_INT)) {
+    if (tc_literal_fits(id, target_kind) == 0)
+      return 0;
+    else {
+    }
+    return 1;
+  } else {
+  }
+  return tc_negative_integer_literal_conversion(id, target_kind, actual_kind);
+}
+int tc_type_is_structural(int kind) {
+  if (((((((kind == TY_PTR) || (kind == TY_ARRAY)) || (kind == TY_DYN_ARRAY)) ||
+         (kind == TY_GENERIC)) ||
+        (kind == TY_TUPLE)) ||
+       (kind == TY_CLOSURE)) ||
+      (kind == TY_VARIANT))
+    return 1;
+  else {
+  }
+  return 0;
+}
 int tc_type_equal(int a, int b) {
   if ((a == 0) || (b == 0))
     return 0;
@@ -10263,7 +11181,7 @@ int tc_type_equal(int a, int b) {
   int ak = node_kind[a];
   int bk = node_kind[b];
   if ((ak == TY_PARAM) || (bk == TY_PARAM)) {
-    if ((ak == bk) && (node_value[a] == node_value[b]))
+    if (ak == bk)
       return 1;
     else {
     }
@@ -10416,6 +11334,20 @@ int tc_type_node_from_summary(int kind, int name, int elem_kind, int elem_name) 
     }
   } else {
   }
+  if (kind == TY_PARAM) {
+    if ((name != 0) && (node_kind[name] == TY_PARAM))
+      return name;
+    else {
+    }
+  } else {
+  }
+  if (kind == TY_ARRAY) {
+    if ((name != 0) && (node_kind[name] == TY_ARRAY))
+      return name;
+    else {
+    }
+  } else {
+  }
   if (kind == TY_CLOSURE) {
     if (name != 0)
       return name;
@@ -10431,14 +11363,16 @@ int tc_type_node_from_summary(int kind, int name, int elem_kind, int elem_name) 
     return ast_node(TY_VARIANT, 0, 0, 0, name, elem_name);
   else {
   }
-  if (kind == TY_PTR)
-    return ast_node(TY_PTR, tc_type_node_from_summary(elem_kind, elem_name, 0, 0), 0, 0, 0, 0);
-  else {
-  }
-  if (kind == TY_DYN_ARRAY)
-    return ast_node(TY_DYN_ARRAY, tc_type_node_from_summary(elem_kind, elem_name, 0, 0), 0, 0, 0,
-                    0);
-  else {
+  if ((kind == TY_PTR) || (kind == TY_DYN_ARRAY)) {
+    int child = 0;
+    if ((elem_name != 0) && (tc_type_is_structural(elem_kind) == 1))
+      child = elem_name;
+    else if (((elem_kind == TY_PARAM) && (elem_name != 0)) && (node_kind[elem_name] == TY_PARAM))
+      child = elem_name;
+    else
+      child = tc_type_node_from_summary(elem_kind, elem_name, 0, 0);
+    return ast_node(kind, child, 0, 0, 0, 0);
+  } else {
   }
   return ast_node(kind, 0, 0, 0, 0, 0);
 }
@@ -10575,6 +11509,11 @@ void tc_match_generic(int formal, int actual) {
   } else {
   }
   if ((node_kind[formal] == TY_ARRAY) && (node_kind[actual] == TY_ARRAY)) {
+    if (node_value[formal] != node_value[actual]) {
+      (void)(tc_fail_types(12, TY_ARRAY, TY_ARRAY));
+      return;
+    } else {
+    }
     (void)(tc_match_generic(node_a[formal], node_a[actual]));
     return;
   } else {
@@ -10597,9 +11536,13 @@ int tc_substitute_type(int ty) {
   }
   if (node_kind[ty] == TY_PARAM) {
     int b = tc_bind_find(node_value[ty]);
-    if (b != 0)
+    if ((b != 0) && (b != ty)) {
+      if ((node_kind[b] == TY_PARAM) && (node_value[b] == node_value[ty]))
+        return ast_node(TY_PARAM, node_a[ty], node_b[ty], node_c[ty], node_value[ty], node_aux[ty]);
+      else {
+      }
       return tc_substitute_type(b);
-    else {
+    } else {
     }
     return ast_node(TY_PARAM, node_a[ty], node_b[ty], node_c[ty], node_value[ty], node_aux[ty]);
   } else {
@@ -10644,6 +11587,20 @@ int tc_substitute_type(int ty) {
       p = node_next[p];
     }
     return ast_node(TY_TUPLE, items, 0, 0, 0, 0);
+  } else {
+  }
+  if ((node_kind[ty] == TY_FUN) || (node_kind[ty] == TY_CLOSURE)) {
+    int args = 0;
+    int p2 = node_a[ty];
+    while (p2 != 0) {
+      int q2 = tc_substitute_type(p2);
+      if (args == 0)
+        args = q2;
+      else
+        args = ast_link(args, q2);
+      p2 = node_next[p2];
+    }
+    return ast_node(node_kind[ty], args, tc_substitute_type(node_b[ty]), 0, 0, 0);
   } else {
   }
   return ast_node(node_kind[ty], node_a[ty], node_b[ty], node_c[ty], node_value[ty], node_aux[ty]);
@@ -10698,14 +11655,33 @@ int tc_array_elem_same(int a_kind, int a_name, int b_kind, int b_name) {
   }
   return 1;
 }
+int tc_param_type_same(int a_name, int b_name) {
+  if (a_name == b_name)
+    return 1;
+  else {
+  }
+  if ((a_name == 0) || (b_name == 0))
+    return 0;
+  else {
+  }
+  if ((node_kind[a_name] != TY_PARAM) || (node_kind[b_name] != TY_PARAM))
+    return 0;
+  else {
+  }
+  if (node_value[a_name] == node_value[b_name])
+    return 1;
+  else {
+  }
+  return 0;
+}
 int tc_same_full(int a_kind, int a_name, int a_elem_kind, int a_elem_name, int b_kind, int b_name,
                  int b_elem_kind, int b_elem_name) {
   if ((a_kind == TY_PARAM) || (b_kind == TY_PARAM)) {
     if ((a_kind == TY_PARAM) && (b_kind == TY_PARAM))
-      return 1;
+      return tc_param_type_same(a_name, b_name);
     else {
     }
-    return 1;
+    return 0;
   } else {
   }
   if ((a_kind == TY_GENERIC) || (b_kind == TY_GENERIC)) {
@@ -10732,6 +11708,14 @@ int tc_same_full(int a_kind, int a_name, int a_elem_kind, int a_elem_name, int b
     return 0;
   } else {
   }
+  if ((a_kind == TY_ARRAY) && (b_kind == TY_ARRAY)) {
+    if ((a_name != 0) && (b_name != 0))
+      return tc_type_equal(a_name, b_name);
+    else {
+    }
+    return 0;
+  } else {
+  }
   if ((a_kind == TY_PTR) && (b_kind == TY_PTR)) {
     if ((a_elem_kind == TY_VOID) || (b_elem_kind == TY_VOID))
       return 1;
@@ -10743,6 +11727,10 @@ int tc_same_full(int a_kind, int a_name, int a_elem_kind, int a_elem_name, int b
     }
     if ((a_elem_kind == TY_NAMED) && (a_elem_name != b_elem_name))
       return 0;
+    else {
+    }
+    if (((tc_type_is_structural(a_elem_kind) == 1) && (a_elem_name != 0)) && (b_elem_name != 0))
+      return tc_type_equal(a_elem_name, b_elem_name);
     else {
     }
     return 1;
@@ -10766,21 +11754,16 @@ int tc_same_full(int a_kind, int a_name, int a_elem_kind, int a_elem_name, int b
         return 0;
       else {
       }
+      if (((tc_type_is_structural(a_elem_kind) == 1) && (a_elem_name != 0)) && (b_elem_name != 0))
+        return tc_type_equal(a_elem_name, b_elem_name);
+      else {
+      }
     } else {
     }
     return 1;
   } else {
   }
-  if ((tc_is_integer_kind(a_kind) == 1) && (tc_is_integer_kind(b_kind) == 1))
-    return 1;
-  else {
-  }
-  if (((a_kind == TY_CHAR) &&
-       ((((b_kind == TY_INT) || (b_kind == TY_BOOL)) || (b_kind == TY_LONG)) ||
-        (b_kind == TY_LLONG))) ||
-      ((b_kind == TY_CHAR) &&
-       ((((a_kind == TY_INT) || (a_kind == TY_BOOL)) || (a_kind == TY_LONG)) ||
-        (a_kind == TY_LLONG))))
+  if ((tc_is_legacy_integer_kind(a_kind) == 1) && (tc_is_legacy_integer_kind(b_kind) == 1))
     return 1;
   else {
   }
@@ -11115,6 +12098,37 @@ int tc_is_place(int id) {
   }
   return 0;
 }
+int tc_place_is_const(int id) {
+  if (id == 0)
+    return 0;
+  else {
+  }
+  if (node_kind[id] == N_VAR) {
+    if ((tc_lookup_var(node_value[id]) == 1) && (tc_var_const[tc_last_var_index] == 1))
+      return 1;
+    else {
+    }
+    return 0;
+  } else {
+  }
+  if ((node_kind[id] == N_FIELD_ACCESS) || (node_kind[id] == N_INDEX)) {
+    int base = node_a[id];
+    if (((((node_kind[base] == N_VAR) && (tc_lookup_var(node_value[base]) == 1)) &&
+          (tc_var_const[tc_last_var_index] == 1)) &&
+         (tc_last_var_type != 0)) &&
+        (node_kind[tc_last_var_type] == TY_PTR))
+      return 0;
+    else {
+    }
+    return tc_place_is_const(base);
+  } else {
+  }
+  if (node_kind[id] == N_DEREF)
+    return 0;
+  else {
+  }
+  return 0;
+}
 int tc_place_root(int id) {
   if (id == 0)
     return (0 - 1);
@@ -11365,6 +12379,85 @@ int tc_provenance_mut(int id) {
   }
   return 0;
 }
+void ensure_tc_field_targets(int need) {
+  if (need < tc_field_target_cap)
+    return;
+  else {
+  }
+  int n = next_capacity(tc_field_target_cap, need);
+  tc_field_target_root = grow_ints(tc_field_target_root, tc_field_target_cap, n);
+  tc_field_target_name = grow_ints(tc_field_target_name, tc_field_target_cap, n);
+  tc_field_target_fun = grow_ints(tc_field_target_fun, tc_field_target_cap, n);
+  tc_field_target_cap = n;
+}
+int tc_field_target_get(int root, int name) {
+  int i = (tc_field_target_count - 1);
+  while (i >= 0) {
+    if ((tc_field_target_root[i] == root) && (tc_field_target_name[i] == name))
+      return tc_field_target_fun[i];
+    else {
+    }
+    i = (i - 1);
+  }
+  return 0;
+}
+void tc_field_target_set(int root, int name, int target) {
+  if ((root < 0) || (name == 0))
+    return;
+  else {
+  }
+  int i = (tc_field_target_count - 1);
+  while (i >= 0) {
+    if ((tc_field_target_root[i] == root) && (tc_field_target_name[i] == name)) {
+      tc_field_target_fun[i] = target;
+      return;
+    } else {
+    }
+    i = (i - 1);
+  }
+  (void)(ensure_tc_field_targets(tc_field_target_count));
+  tc_field_target_root[tc_field_target_count] = root;
+  tc_field_target_name[tc_field_target_count] = name;
+  tc_field_target_fun[tc_field_target_count] = target;
+  tc_field_target_count = (tc_field_target_count + 1);
+}
+int tc_field_target_root_for_place(int id) {
+  if (id == 0)
+    return (0 - 1);
+  else {
+  }
+  if (node_kind[id] == N_VAR) {
+    if (tc_lookup_var(node_value[id]) == 1)
+      return tc_last_var_index;
+    else {
+    }
+    return (0 - 1);
+  } else {
+  }
+  if (((node_kind[id] == N_DEREF) || (node_kind[id] == N_INDEX)) ||
+      (node_kind[id] == N_FIELD_ACCESS))
+    return tc_place_root(id);
+  else {
+  }
+  return (0 - 1);
+}
+int tc_fun_type_has_sensitive_param(int ty) {
+  if ((ty == 0) || (node_kind[ty] != TY_FUN))
+    return 0;
+  else {
+  }
+  int p = node_a[ty];
+  while (p != 0) {
+    int pk = node_kind[p];
+    if (((((pk == TY_PTR) || (pk == TY_STRING)) || (pk == TY_DYN_ARRAY)) || (pk == TY_GENERIC)) ||
+        (pk == TY_CLOSURE))
+      return 1;
+    else {
+    }
+    p = node_next[p];
+  }
+  return 0;
+}
 int tc_contract_param_position(int fun, int name) {
   if (fun == 0)
     return 0;
@@ -11553,6 +12646,11 @@ void tc_check_mutable_place(int id) {
       return;
     } else {
     }
+    if (tc_var_const[tc_last_var_index] == 1) {
+      (void)(tc_fail(31));
+      return;
+    } else {
+    }
     if (tc_var_mode[tc_last_var_index] == 2) {
       (void)(tc_fail(70));
       return;
@@ -11568,6 +12666,11 @@ void tc_check_mutable_place(int id) {
   }
   if (tc_is_place(id) == 0) {
     (void)(tc_fail(70));
+    return;
+  } else {
+  }
+  if (tc_place_is_const(id) == 1) {
+    (void)(tc_fail(31));
     return;
   } else {
   }
@@ -11650,6 +12753,11 @@ void tc_move_value(int id) {
     return;
   else {
   }
+  if (tc_loop_depth > 0) {
+    (void)(tc_fail(75));
+    return;
+  } else {
+  }
   if (tc_lookup_var(node_value[id]) == 0) {
     (void)(tc_fail(5));
     return;
@@ -11704,6 +12812,12 @@ void tc_check_call_borrow(int arg, int mode) {
     else {
     }
   } else if (mode == 3) {
+    if ((tc_expr_borrow_mut == 0) &&
+        ((tc_var_mode[source_index] == 2) || (tc_var_borrow_mode[source_index] == 2))) {
+      (void)(tc_fail(37));
+      return;
+    } else {
+    }
     if (((tc_expr_borrow_mut == 1) && (tc_var_borrow_mut[source_index] == 1)) &&
         (tc_var_borrow_count[source_index] == 0)) {
     } else if ((tc_var_borrow_count[source_index] > 0) || (tc_var_borrow_mut[source_index] > 0))
@@ -11820,6 +12934,11 @@ void tc_require_mutable(int id) {
   }
   if (node_kind[id] == N_VAR) {
     if (tc_lookup_var(node_value[id]) == 1) {
+      if (tc_var_const[tc_last_var_index] == 1) {
+        (void)(tc_fail(31));
+        return;
+      } else {
+      }
       if (tc_var_mode[tc_last_var_index] == 2)
         (void)(tc_fail(37));
       else if (tc_borrow_conflict(tc_last_var_index) == 1)
@@ -11833,6 +12952,11 @@ void tc_require_mutable(int id) {
   }
   if (tc_is_place(id) == 0) {
     (void)(tc_fail(70));
+    return;
+  } else {
+  }
+  if (tc_place_is_const(id) == 1) {
+    (void)(tc_fail(31));
     return;
   } else {
   }
@@ -11889,9 +13013,9 @@ void tc_add_var(int name, int kind, int named, int elem_kind, int elem_name, int
     begin = tc_scope_start[(tc_scope_count - 1)];
   else {
   }
-  int i = begin;
+  int i = 0;
   while (i < tc_var_count) {
-    if (tc_var_name[i] == name) {
+    if ((tc_var_name[i] == name) && ((tc_allow_outer_shadow == 0) || (i >= begin))) {
       (void)(tc_fail(3));
       return;
     } else {
@@ -11905,6 +13029,7 @@ void tc_add_var(int name, int kind, int named, int elem_kind, int elem_name, int
   tc_var_elem_kind[tc_var_count] = elem_kind;
   tc_var_elem_name[tc_var_count] = elem_name;
   tc_var_type[tc_var_count] = type_node;
+  tc_var_fun_target[tc_var_count] = 0;
   tc_var_owned[tc_var_count] = 0;
   tc_var_moved[tc_var_count] = 0;
   tc_var_borrow_count[tc_var_count] = 0;
@@ -11916,6 +13041,7 @@ void tc_add_var(int name, int kind, int named, int elem_kind, int elem_name, int
   tc_var_param[tc_var_count] = 0;
   tc_var_param_pos[tc_var_count] = 0;
   tc_var_mode[tc_var_count] = 0;
+  tc_var_const[tc_var_count] = 0;
   tc_var_closure_caps[tc_var_count] = 0;
   tc_var_closure_moved[tc_var_count] = 0;
   tc_var_ffi_borrowed[tc_var_count] = 0;
@@ -11927,6 +13053,7 @@ void tc_add_var(int name, int kind, int named, int elem_kind, int elem_name, int
 }
 int tc_lookup_var(int name) {
   tc_last_var_type = 0;
+  tc_last_var_fun_target = 0;
   tc_last_var_owned = 0;
   tc_last_var_moved = 0;
   tc_last_var_ffi_borrowed = 0;
@@ -11949,6 +13076,11 @@ int tc_lookup_var(int name) {
       tc_elem_kind = tc_var_elem_kind[i];
       tc_elem_name = tc_var_elem_name[i];
       tc_last_var_type = tc_var_type[i];
+      tc_last_var_fun_target = tc_var_fun_target[i];
+      if (tc_kind == TY_ARRAY)
+        tc_name = tc_last_var_type;
+      else {
+      }
       if ((tc_kind == TY_DYN_ARRAY) && (tc_last_var_type != 0)) {
         tc_elem_kind = node_kind[node_a[tc_last_var_type]];
         if (tc_elem_kind == TY_NAMED)
@@ -11994,25 +13126,21 @@ void tc_type_node(int ty) {
   tc_kind = node_kind[ty];
   if (tc_kind == TY_NAMED) {
     tc_name = node_value[ty];
+  } else if (tc_kind == TY_ARRAY) {
+    tc_name = ty;
   } else if ((((tc_kind == TY_GENERIC) || (tc_kind == TY_TUPLE)) || (tc_kind == TY_CLOSURE)) ||
              (tc_kind == TY_PARAM)) {
     tc_name = ty;
   } else {
     tc_name = 0;
   }
-  if ((tc_kind == TY_PTR) && (node_a[ty] != 0)) {
+  if (((tc_kind == TY_PTR) || (tc_kind == TY_DYN_ARRAY)) && (node_a[ty] != 0)) {
     tc_elem_kind = node_kind[node_a[ty]];
     if (tc_elem_kind == TY_NAMED) {
       tc_elem_name = node_value[node_a[ty]];
-    } else if ((tc_elem_kind == TY_GENERIC) || (tc_elem_kind == TY_PARAM)) {
+    } else if (tc_type_is_structural(tc_elem_kind) == 1) {
       tc_elem_name = node_a[ty];
-    } else {
-    }
-  } else if ((tc_kind == TY_DYN_ARRAY) && (node_a[ty] != 0)) {
-    tc_elem_kind = node_kind[node_a[ty]];
-    if (tc_elem_kind == TY_NAMED) {
-      tc_elem_name = node_value[node_a[ty]];
-    } else if ((tc_elem_kind == TY_GENERIC) || (tc_elem_kind == TY_PARAM)) {
+    } else if (tc_elem_kind == TY_PARAM) {
       tc_elem_name = node_a[ty];
     } else {
     }
@@ -12153,8 +13281,11 @@ int tc_check_variant(int id) {
     else {
     }
     if (tc_same_full(ak, an, aek, aen, fk, f_name, fek, f_elem_name) == 0) {
-      (void)(tc_fail_types(12, fk, ak));
-      return 1;
+      if (tc_integer_literal_conversion(arg, fk, ak) == 0) {
+        (void)(tc_fail_types(12, fk, ak));
+        return 1;
+      } else {
+      }
     } else {
     }
     arg = node_next[arg];
@@ -12258,6 +13389,7 @@ void tc_expr(int id) {
   tc_expr_borrow_param = 0;
   tc_expr_owner_source = (0 - 1);
   tc_expr_is_owned = 0;
+  tc_expr_fun_target = 0;
   tc_expr_ffi_borrowed = 0;
   if ((id != 0) && (tc_ok == 1))
     tc_error_pos = node_pos[id];
@@ -12325,6 +13457,9 @@ void tc_expr(int id) {
   } else {
   }
   if (k == N_CLOSURE) {
+    int saved_allow_outer_shadow = tc_allow_outer_shadow;
+    (void)(tc_enter_scope());
+    tc_allow_outer_shadow = 1;
     int cap = node_a[id];
     while (cap != 0) {
       int cap_name = node_a[cap];
@@ -12366,7 +13501,6 @@ void tc_expr(int id) {
       }
       cap = node_next[cap];
     }
-    (void)(tc_enter_scope());
     int body_cap = node_a[id];
     while (body_cap != 0) {
       int body_cap_type = node_b[body_cap];
@@ -12399,6 +13533,7 @@ void tc_expr(int id) {
       }
       body_cap = node_next[body_cap];
     }
+    tc_allow_outer_shadow = saved_allow_outer_shadow;
     int p = node_c[id];
     int param_pos = 1;
     while (p != 0) {
@@ -12528,6 +13663,7 @@ void tc_expr(int id) {
           (void)(tc_fail(33));
       } else {
       }
+      tc_expr_fun_target = tc_last_var_fun_target;
       tc_expr_borrow_source = tc_var_borrow_source[tc_last_var_index];
       if ((tc_expr_borrow_source < 0) && (tc_var_borrow_param[tc_last_var_index] > 0))
         tc_expr_borrow_source = tc_last_var_index;
@@ -12546,10 +13682,7 @@ void tc_expr(int id) {
       }
       tc_expr_is_owned = 0;
       tc_result_type = tc_last_var_type;
-      if (node_type[id] == 0)
-        node_type[id] = tc_last_var_type;
-      else {
-      }
+      node_type[id] = tc_last_var_type;
       node_aux[id] = tc_last_var_type;
       return;
     } else {
@@ -12577,6 +13710,7 @@ void tc_expr(int id) {
     if (address_entry != 0) {
       tc_kind = TY_FUN;
       tc_name = 0;
+      tc_expr_fun_target = address_entry;
       tc_result_type = tc_signature_type(address_entry);
       return;
     } else {
@@ -12586,8 +13720,7 @@ void tc_expr(int id) {
       return;
     } else {
     }
-    if (((node_kind[node_a[id]] == N_VAR) && (sym_type[node_value[node_a[id]]] > 100)) &&
-        (node_value[node_a[id]] != 0)) {
+    if ((node_value[id] == 1) && (tc_place_is_const(node_a[id]) == 1)) {
       (void)(tc_fail(70));
       return;
     } else {
@@ -12597,6 +13730,7 @@ void tc_expr(int id) {
     int oldn = tc_name;
     int olde = tc_elem_kind;
     int olden = tc_elem_name;
+    int old_type_node = tc_result_type;
     int old_source = tc_expr_borrow_source;
     int old_origin = tc_expr_borrow_origin;
     int old_mut = tc_expr_borrow_mut;
@@ -12618,6 +13752,13 @@ void tc_expr(int id) {
     if (node_value[id] == 1) {
       if ((old_mut == 0) && (tc_var_mode[root] == 2)) {
         (void)(tc_fail(70));
+        return;
+      } else {
+      }
+      if (((((old_mut == 0) && (old_origin >= 0)) && (old_origin < tc_var_count)) &&
+           (tc_var_borrow_mode[old_origin] == 2)) &&
+          (tc_var_param[old_origin] == 1)) {
+        (void)(tc_fail(37));
         return;
       } else {
       }
@@ -12643,17 +13784,29 @@ void tc_expr(int id) {
     else {
     }
     tc_kind = TY_PTR;
-    tc_name = oldn;
+    tc_name = 0;
     tc_elem_kind = oldk;
     tc_elem_name = oldn;
-    if (oldk == TY_PTR) {
+    if (old_type_node != 0) {
+      tc_elem_kind = node_kind[old_type_node];
+      if (tc_elem_kind == TY_NAMED)
+        tc_elem_name = node_value[old_type_node];
+      else if ((tc_elem_kind == TY_PARAM) || (tc_type_is_structural(tc_elem_kind) == 1))
+        tc_elem_name = old_type_node;
+      else
+        tc_elem_name = 0;
+    } else if (oldk == TY_PTR) {
       tc_elem_kind = olde;
       tc_elem_name = olden;
     } else {
     }
     tc_expr_owner_source = (0 - 1);
     tc_expr_is_owned = 0;
-    int pointee = tc_type_node_from_summary(oldk, oldn, olde, olden);
+    int pointee = old_type_node;
+    if (pointee == 0)
+      pointee = tc_type_node_from_summary(oldk, oldn, olde, olden);
+    else {
+    }
     tc_result_type = ast_node(TY_PTR, pointee, 0, 0, 0, 0);
     return;
   } else {
@@ -12664,18 +13817,26 @@ void tc_expr(int id) {
     int deref_origin = tc_expr_borrow_origin;
     int deref_mut = tc_expr_borrow_mut;
     int deref_param = tc_expr_borrow_param;
+    int deref_type_node = tc_result_type;
     if (tc_kind != TY_PTR)
       (void)(tc_fail(6));
     else {
-      tc_kind = tc_elem_kind;
-      tc_name = tc_elem_name;
-      tc_elem_kind = 0;
-      tc_elem_name = 0;
+      if (((deref_type_node != 0) && (node_kind[deref_type_node] == TY_PTR)) &&
+          (node_a[deref_type_node] != 0))
+        (void)(tc_type_node(node_a[deref_type_node]));
+      else {
+        tc_kind = tc_elem_kind;
+        tc_name = tc_elem_name;
+        tc_elem_kind = 0;
+        tc_elem_name = 0;
+        tc_result_type = tc_type_node_from_summary(tc_kind, tc_name, tc_elem_kind, tc_elem_name);
+      }
       tc_expr_borrow_source = deref_borrow;
       tc_expr_borrow_origin = deref_origin;
       tc_expr_borrow_mut = deref_mut;
       tc_expr_borrow_param = deref_param;
     }
+    node_type[id] = tc_result_type;
     return;
   } else {
   }
@@ -12690,6 +13851,7 @@ void tc_expr(int id) {
     int index_origin = tc_expr_borrow_origin;
     int index_mut = tc_expr_borrow_mut;
     int index_param = tc_expr_borrow_param;
+    int index_container_type = tc_result_type;
     if (tc_kind == TY_ARRAY) {
       int ix = node_b[id];
       int ik = (0 - 1);
@@ -12705,35 +13867,39 @@ void tc_expr(int id) {
         is_const = 1;
       } else {
       }
-      if ((((is_const == 1) && (tc_result_type != 0)) && (node_kind[tc_result_type] == TY_ARRAY)) &&
-          ((ik < 0) || (ik > (node_value[tc_result_type] - 1))))
+      if ((((is_const == 1) && (index_container_type != 0)) &&
+           (node_kind[index_container_type] == TY_ARRAY)) &&
+          ((ik < 0) || (ik > (node_value[index_container_type] - 1))))
         (void)(tc_fail(45));
       else {
       }
-      tc_kind = TY_INT;
-      tc_name = 0;
-      tc_elem_kind = 0;
-      tc_elem_name = 0;
-      tc_expr_borrow_source = (0 - 1);
-      tc_expr_borrow_origin = (0 - 1);
-      tc_expr_borrow_mut = 0;
-      tc_expr_borrow_param = 0;
-    } else if (tc_kind == TY_DYN_ARRAY) {
-      int ek = tc_elem_kind;
-      int en = tc_elem_name;
-      tc_kind = ek;
-      tc_name = en;
-      tc_elem_kind = 0;
-      tc_elem_name = 0;
+      if (((index_container_type != 0) && (node_kind[index_container_type] == TY_ARRAY)) &&
+          (node_a[index_container_type] != 0))
+        (void)(tc_type_node(node_a[index_container_type]));
+      else {
+        tc_kind = TY_INT;
+        tc_name = 0;
+        tc_elem_kind = 0;
+        tc_elem_name = 0;
+        tc_result_type = tc_type_node_from_summary(tc_kind, tc_name, tc_elem_kind, tc_elem_name);
+      }
       tc_expr_borrow_source = index_borrow;
       tc_expr_borrow_origin = index_origin;
       tc_expr_borrow_mut = index_mut;
       tc_expr_borrow_param = index_param;
-    } else if (tc_kind == TY_PTR) {
-      tc_kind = tc_elem_kind;
-      tc_name = tc_elem_name;
-      tc_elem_kind = 0;
-      tc_elem_name = 0;
+    } else if ((tc_kind == TY_DYN_ARRAY) || (tc_kind == TY_PTR)) {
+      if (((index_container_type != 0) && (node_kind[index_container_type] == tc_kind)) &&
+          (node_a[index_container_type] != 0))
+        (void)(tc_type_node(node_a[index_container_type]));
+      else {
+        int ek = tc_elem_kind;
+        int en = tc_elem_name;
+        tc_kind = ek;
+        tc_name = en;
+        tc_elem_kind = 0;
+        tc_elem_name = 0;
+        tc_result_type = tc_type_node_from_summary(tc_kind, tc_name, tc_elem_kind, tc_elem_name);
+      }
       tc_expr_borrow_source = index_borrow;
       tc_expr_borrow_origin = index_origin;
       tc_expr_borrow_mut = index_mut;
@@ -12749,6 +13915,8 @@ void tc_expr(int id) {
       tc_expr_borrow_param = 0;
     } else
       (void)(tc_fail(8));
+    tc_result_type = tc_type_node_from_summary(tc_kind, tc_name, tc_elem_kind, tc_elem_name);
+    node_type[id] = tc_result_type;
     return;
   } else {
   }
@@ -12760,6 +13928,8 @@ void tc_expr(int id) {
     int base_param = tc_expr_borrow_param;
     int base_kind = tc_kind;
     int base_name = tc_name;
+    int field_target_root = tc_field_target_root_for_place(node_a[id]);
+    tc_expr_fun_target = tc_field_target_get(field_target_root, node_value[id]);
     if (base_kind == TY_DYN_ARRAY) {
       if (bi_has_flag(node_value[id], BI_FLAG_DYNFIELD) == 1) {
         tc_kind = TY_INT;
@@ -12856,13 +14026,15 @@ void tc_expr(int id) {
         return;
       } else {
       }
+      (void)(tc_bind_push());
       (void)(tc_bind_clear());
       int gp = node_c[sgen];
       int ga = node_a[base_ty];
       while ((gp != 0) && (ga != 0)) {
-        if (tc_bind_add(node_a[gp], ga) == 0)
+        if (tc_bind_add(node_a[gp], ga) == 0) {
+          (void)(tc_bind_pop());
           return;
-        else {
+        } else {
         }
         gp = node_next[gp];
         ga = node_next[ga];
@@ -12872,6 +14044,7 @@ void tc_expr(int id) {
         if (node_a[gf] == node_value[id]) {
           int subst = tc_substitute_type(node_b[gf]);
           (void)(tc_type_node(subst));
+          (void)(tc_bind_pop());
           tc_expr_borrow_source = base_borrow;
           tc_expr_borrow_origin = base_origin;
           tc_expr_borrow_mut = base_mut;
@@ -12881,6 +14054,7 @@ void tc_expr(int id) {
         }
         gf = node_next[gf];
       }
+      (void)(tc_bind_pop());
       (void)(tc_fail(11));
       return;
     } else {
@@ -13627,17 +14801,33 @@ void tc_expr(int id) {
       return;
     } else {
     }
+    if ((node_b[id] != 0) && (btag != 0)) {
+      (void)(tc_fail(76));
+      return;
+    } else {
+    }
     int fun_node = tc_find_function_ctx(node_value[id], node_scope[id]);
     if (fun_node == 0) {
       if ((tc_lookup_var(node_value[id]) == 1) && (tc_kind == TY_FUN)) {
         int fty = tc_last_var_type;
+        int call_target_fp = tc_last_var_fun_target;
         if ((fty == 0) || (node_kind[fty] != TY_FUN)) {
           (void)(tc_fail(42));
           return;
         } else {
         }
+        if ((call_target_fp == 0) && (tc_fun_type_has_sensitive_param(fty) == 1)) {
+          (void)(tc_fail(73));
+          return;
+        } else {
+        }
         int arg_fp = node_a[id];
         int p_fp = node_a[fty];
+        int target_param_fp = 0;
+        if (call_target_fp != 0)
+          target_param_fp = node_c[call_target_fp];
+        else {
+        }
         while ((arg_fp != 0) && (p_fp != 0)) {
           (void)(tc_expr(arg_fp));
           int ak_fp = tc_kind;
@@ -13649,6 +14839,10 @@ void tc_expr(int id) {
           int pen_fp = tc_name;
           int peek_fp = tc_elem_kind;
           int peen_fp = tc_elem_name;
+          if ((call_target_fp != 0) && (target_param_fp != 0))
+            (void)(tc_check_call_borrow(arg_fp, node_aux[target_param_fp]));
+          else {
+          }
           if (tc_literal_fits(arg_fp, pek_fp) == 0)
             (void)(tc_fail(54));
           else {
@@ -13658,17 +14852,41 @@ void tc_expr(int id) {
           else {
           }
           if (tc_same_full(ak_fp, an_fp, aek_fp, aen_fp, pek_fp, pen_fp, peek_fp, peen_fp) == 0)
-            (void)(tc_fail_types(12, pek_fp, ak_fp));
+            if (tc_integer_literal_conversion(arg_fp, pek_fp, ak_fp) == 0)
+              (void)(tc_fail_types(12, pek_fp, ak_fp));
+            else {
+            }
           else {
           }
           arg_fp = node_next[arg_fp];
           p_fp = node_next[p_fp];
+          if (target_param_fp != 0)
+            target_param_fp = node_next[target_param_fp];
+          else {
+          }
         }
         if ((arg_fp != 0) || (p_fp != 0))
           (void)(tc_fail(13));
         else {
         }
+        int fp_ret_param = 0;
+        int fp_ret_mut = 0;
+        if (call_target_fp != 0) {
+          (void)(ensure_tc_fun_meta(call_target_fp));
+          fp_ret_param = tc_fun_return_param[call_target_fp];
+          fp_ret_mut = tc_fun_return_mut[call_target_fp];
+        } else {
+        }
+        int fp_ret_arg = tc_nth_arg(node_a[id], fp_ret_param);
+        int fp_ret_source = tc_provenance(fp_ret_arg);
+        int fp_ret_life = tc_provenance_param(fp_ret_arg);
         (void)(tc_type_node(node_b[fty]));
+        if (fp_ret_param > 0) {
+          tc_expr_borrow_source = fp_ret_source;
+          tc_expr_borrow_mut = fp_ret_mut;
+          tc_expr_borrow_param = fp_ret_life;
+        } else {
+        }
         return;
       } else {
       }
@@ -13711,8 +14929,19 @@ void tc_expr(int id) {
     } else {
     }
     (void)(ensure_tc_fun_meta(fun_node));
+    if ((node_b[id] != 0) && (node_kind[fun_node] != N_GENERIC_FUNC)) {
+      (void)(tc_fail(76));
+      return;
+    } else {
+    }
     if (node_kind[fun_node] == N_GENERIC_FUNC) {
+      (void)(tc_bind_push());
       (void)(tc_bind_clear());
+      if ((node_b[id] != 0) && (tc_bind_explicit_args(fun_node, node_b[id]) == 0)) {
+        (void)(tc_bind_pop());
+        return;
+      } else {
+      }
       int generic_moves_array = tc_generic_moves_array(fun_node);
       int ga = node_a[id];
       int gp = node_c[fun_node];
@@ -13762,6 +14991,7 @@ void tc_expr(int id) {
       } else {
       }
       node_aux[id] = tc_result_type;
+      (void)(tc_bind_pop());
       return;
     } else {
     }
@@ -13791,7 +15021,10 @@ void tc_expr(int id) {
       else {
       }
       if (tc_same_full(ak, an, aek, aen, pek, pen, peek, peen) == 0)
-        (void)(tc_fail_types(12, pek, ak));
+        if (tc_integer_literal_conversion(arg, pek, ak) == 0)
+          (void)(tc_fail_types(12, pek, ak));
+        else {
+        }
       else {
       }
       if ((ak == TY_FUN) && (pek == TY_FUN)) {
@@ -13838,6 +15071,7 @@ void tc_expr(int id) {
   }
   if (k == N_INDIRECT_CALL) {
     (void)(tc_expr(node_a[id]));
+    int call_target = tc_expr_fun_target;
     if (((tc_kind == TY_CLOSURE) && (tc_result_type != 0)) &&
         (node_kind[tc_result_type] == TY_CLOSURE)) {
     } else if (((tc_kind != TY_FUN) || (tc_result_type == 0)) ||
@@ -13847,8 +15081,18 @@ void tc_expr(int id) {
     } else {
     }
     int fty = tc_result_type;
+    if ((call_target == 0) && (tc_fun_type_has_sensitive_param(fty) == 1)) {
+      (void)(tc_fail(73));
+      return;
+    } else {
+    }
     int arg = node_b[id];
     int param = node_a[fty];
+    int target_param = 0;
+    if (call_target != 0)
+      target_param = node_c[call_target];
+    else {
+    }
     while ((arg != 0) && (param != 0)) {
       (void)(tc_type_node(param));
       int pk = tc_kind;
@@ -13861,23 +15105,51 @@ void tc_expr(int id) {
       int an = tc_name;
       int aek = tc_elem_kind;
       int aen = tc_elem_name;
+      if ((call_target != 0) && (target_param != 0))
+        (void)(tc_check_call_borrow(arg, node_aux[target_param]));
+      else {
+      }
       if (tc_literal_fits(arg, pk) == 0)
         (void)(tc_fail(54));
       else {
       }
       if (tc_same_full(ak, an, aek, aen, pk, pn, pek, pen) == 0)
-        (void)(tc_fail_types(12, pk, ak));
+        if (tc_integer_literal_conversion(arg, pk, ak) == 0)
+          (void)(tc_fail_types(12, pk, ak));
+        else {
+        }
       else {
       }
       arg = node_next[arg];
       param = node_next[param];
+      if (target_param != 0)
+        target_param = node_next[target_param];
+      else {
+      }
     }
     if ((arg != 0) || (param != 0)) {
       (void)(tc_fail(13));
       return;
     } else {
     }
+    int indirect_ret_param = 0;
+    int indirect_ret_mut = 0;
+    if (call_target != 0) {
+      (void)(ensure_tc_fun_meta(call_target));
+      indirect_ret_param = tc_fun_return_param[call_target];
+      indirect_ret_mut = tc_fun_return_mut[call_target];
+    } else {
+    }
+    int indirect_ret_arg = tc_nth_arg(node_b[id], indirect_ret_param);
+    int indirect_ret_source = tc_provenance(indirect_ret_arg);
+    int indirect_ret_life = tc_provenance_param(indirect_ret_arg);
     (void)(tc_type_node(node_b[fty]));
+    if (indirect_ret_param > 0) {
+      tc_expr_borrow_source = indirect_ret_source;
+      tc_expr_borrow_mut = indirect_ret_mut;
+      tc_expr_borrow_param = indirect_ret_life;
+    } else {
+    }
     return;
   } else {
   }
@@ -13918,17 +15190,21 @@ void tc_expr(int id) {
       tc_name = 0;
     } else if ((node_value[id] == OP_EQ) || (node_value[id] == OP_NEQ)) {
       int null_cmp = 0;
-      if ((((ak == TY_PTR) && (bk == TY_INT)) && (node_kind[node_b[id]] == N_INT)) &&
+      if (((((ak == TY_PTR) || (ak == TY_FUN)) && (bk == TY_INT)) &&
+           (node_kind[node_b[id]] == N_INT)) &&
           (node_value[node_b[id]] == 0))
         null_cmp = 1;
       else {
       }
-      if ((((ak == TY_INT) && (bk == TY_PTR)) && (node_kind[node_a[id]] == N_INT)) &&
+      if (((((bk == TY_PTR) || (bk == TY_FUN)) && (ak == TY_INT)) &&
+           (node_kind[node_a[id]] == N_INT)) &&
           (node_value[node_a[id]] == 0))
         null_cmp = 1;
       else {
       }
-      if ((tc_same_full(ak, an, ae, aen, bk, bn, be, ben) == 0) && (null_cmp == 0))
+      if ((((tc_same_full(ak, an, ae, aen, bk, bn, be, ben) == 0) && (null_cmp == 0)) &&
+           (tc_integer_literal_conversion(node_a[id], bk, ak) == 0)) &&
+          (tc_integer_literal_conversion(node_b[id], ak, bk) == 0))
         (void)(tc_fail(16));
       else {
       }
@@ -14199,14 +15475,18 @@ int tc_emit_field_type(int id) {
     return 0;
   else {
   }
+  int field_bind_pushed = 0;
   if (node_kind[decl] == N_GENERIC_STRUCT) {
     int gp = node_c[decl];
     int ga = args;
+    (void)(tc_bind_push());
+    field_bind_pushed = 1;
     (void)(tc_bind_clear());
     while ((gp != 0) && (ga != 0)) {
-      if (tc_bind_add(node_a[gp], ga) == 0)
+      if (tc_bind_add(node_a[gp], ga) == 0) {
+        (void)(tc_bind_pop());
         return 0;
-      else {
+      } else {
       }
       gp = node_next[gp];
       ga = node_next[ga];
@@ -14215,11 +15495,20 @@ int tc_emit_field_type(int id) {
   }
   int f = node_a[decl];
   while (f != 0) {
-    if (node_a[f] == node_value[id])
-      return tc_substitute_type(node_b[f]);
-    else {
+    if (node_a[f] == node_value[id]) {
+      int result_field_type = tc_substitute_type(node_b[f]);
+      if (field_bind_pushed == 1)
+        (void)(tc_bind_pop());
+      else {
+      }
+      return result_field_type;
+    } else {
     }
     f = node_next[f];
+  }
+  if (field_bind_pushed == 1)
+    (void)(tc_bind_pop());
+  else {
   }
   return 0;
 }
@@ -14227,6 +15516,24 @@ int tc_emit_arg_type(int id) {
   if (id == 0)
     return 0;
   else {
+  }
+  if ((node_type[id] != 0) &&
+      (((node_kind[id] == N_VAR) || (node_kind[id] == N_DEREF)) || (node_kind[id] == N_INDEX)))
+    return gen_substitute_type(node_type[id]);
+  else {
+  }
+  if (node_kind[id] == N_ADDRESS) {
+    if (node_kind[node_a[id]] == N_VAR) {
+      int addressed_function = tc_find_function_ctx(node_value[node_a[id]], node_scope[node_a[id]]);
+      if (addressed_function != 0)
+        return tc_signature_type(addressed_function);
+      else {
+      }
+    } else {
+    }
+    (void)(tc_expr(id));
+    return tc_result_type;
+  } else {
   }
   if (node_kind[id] == N_CLOSURE) {
     if (node_aux[id] > 0) {
@@ -14266,6 +15573,10 @@ int tc_emit_arg_type(int id) {
     }
   } else {
   }
+  if ((node_kind[id] == N_CALL) && (node_aux[id] != 0))
+    return gen_substitute_type(node_aux[id]);
+  else {
+  }
   if (node_kind[id] == N_CALL) {
     int call_param_type = gen_active_param_type(node_value[id]);
     if ((call_param_type != 0) &&
@@ -14276,6 +15587,11 @@ int tc_emit_arg_type(int id) {
   } else {
   }
   if (node_kind[id] == N_VAR) {
+    int stable_type = node_type[id];
+    if (stable_type != 0)
+      return gen_substitute_type(stable_type);
+    else {
+    }
     int formal_type = gen_active_param_type(node_value[id]);
     if (formal_type != 0)
       return gen_substitute_type(formal_type);
@@ -14285,16 +15601,6 @@ int tc_emit_arg_type(int id) {
     if (declared_type != 0)
       return gen_substitute_type(declared_type);
     else {
-    }
-    if (node_type[id] != 0) {
-      int stable_local_type = node_type[id];
-      int resolved_stable_type = gen_substitute_type(stable_local_type);
-      if (resolved_stable_type != 0)
-        return resolved_stable_type;
-      else {
-      }
-      return stable_local_type;
-    } else {
     }
     if (node_aux[id] != 0) {
       int local_type = node_aux[id];
@@ -14382,18 +15688,21 @@ int tc_expr_kind_for_emit(int id) {
   int f = tc_find_function_ctx(node_value[id], node_scope[id]);
   if (f != 0) {
     if (node_kind[f] == N_GENERIC_FUNC) {
-      int actual = 0;
+      int actual = node_b[id];
       int a = node_a[id];
-      while (a != 0) {
-        int q = tc_emit_arg_type(a);
-        if (q != 0) {
-          if (actual == 0)
-            actual = q;
-          else
-            actual = ast_link(actual, q);
-        } else {
+      if (actual == 0) {
+        while (a != 0) {
+          int q = tc_emit_arg_type(a);
+          if (q != 0) {
+            if (actual == 0)
+              actual = q;
+            else
+              actual = ast_link(actual, q);
+          } else {
+          }
+          a = node_next[a];
         }
-        a = node_next[a];
+      } else {
       }
       int saved_count = gen_bind_count;
       (void)(ensure_gen_bind((saved_count + saved_count)));
@@ -14452,22 +15761,24 @@ void tc_stmt(int id, int expected_kind, int expected_name) {
     (void)(tc_mark_float_expr(node_c[id], ck));
     (void)(tc_expr(node_c[id]));
     int const_ffi_borrowed = tc_expr_ffi_borrowed;
+    int const_fun_target = tc_expr_fun_target;
     if (tc_literal_fits(node_c[id], ck) == 0)
       (void)(tc_fail(54));
     else {
     }
     if (tc_same_full(ck, cn, ce, cen, tc_kind, tc_name, tc_elem_kind, tc_elem_name) == 0) {
-      if ((node_kind[node_c[id]] != N_INT) || (node_value[node_c[id]] != 0))
-        if (node_kind[node_c[id]] != N_NULL)
-          (void)(tc_fail(30));
-        else {
-        }
+      if (((tc_integer_literal_conversion(node_c[id], ck, tc_kind) == 0) &&
+           ((node_kind[node_c[id]] != N_INT) || (node_value[node_c[id]] != 0))) &&
+          (node_kind[node_c[id]] != N_NULL))
+        (void)(tc_fail(30));
       else {
       }
     } else {
     }
     (void)(tc_add_var(node_a[id], ck, cn, ce, cen, node_b[id]));
     sym_type[node_a[id]] = (ck + 100);
+    tc_var_const[tc_last_var_index] = 1;
+    tc_var_fun_target[tc_last_var_index] = const_fun_target;
     tc_var_ffi_borrowed[tc_last_var_index] = const_ffi_borrowed;
   } else if (k == N_LET) {
     (void)(tc_type_node(node_b[id]));
@@ -14486,6 +15797,7 @@ void tc_stmt(int id, int expected_kind, int expected_name) {
     int rhs_borrow_mut = tc_expr_borrow_mut;
     int rhs_borrow_param = tc_expr_borrow_param;
     int rhs_ffi_borrowed = tc_expr_ffi_borrowed;
+    int rhs_fun_target = tc_expr_fun_target;
     if ((tc_is_owner_kind(dk) == 1) && (node_kind[node_c[id]] == N_VAR))
       (void)(tc_fail(40));
     else {
@@ -14495,7 +15807,8 @@ void tc_stmt(int id, int expected_kind, int expected_name) {
     else {
     }
     if (tc_same_full(dk, dn, de, den, ek, en, ee, een) == 0) {
-      if (((node_kind[node_c[id]] != N_INT) || (node_value[node_c[id]] != 0)) &&
+      if (((tc_integer_literal_conversion(node_c[id], dk, ek) == 0) &&
+           ((node_kind[node_c[id]] != N_INT) || (node_value[node_c[id]] != 0))) &&
           (node_kind[node_c[id]] != N_NULL))
         (void)(tc_fail_types(20, dk, ek));
       else {
@@ -14507,6 +15820,7 @@ void tc_stmt(int id, int expected_kind, int expected_name) {
     else {
     }
     (void)(tc_add_var(node_a[id], dk, dn, de, den, node_b[id]));
+    tc_var_fun_target[tc_last_var_index] = rhs_fun_target;
     tc_var_ffi_borrowed[tc_last_var_index] = rhs_ffi_borrowed;
     if ((tc_is_owner_kind(dk) == 1) || (tc_owned_initializer(node_c[id]) == 1))
       tc_var_owned[tc_last_var_index] = 1;
@@ -14528,9 +15842,16 @@ void tc_stmt(int id, int expected_kind, int expected_name) {
     } else {
     }
   } else if ((k == N_ASSIGN) || (k == N_COMPOUND_ASSIGN)) {
-    if ((node_kind[node_a[id]] == N_VAR) && (sym_type[node_value[node_a[id]]] > 100))
+    if (tc_place_is_const(node_a[id]) == 1)
       (void)(tc_fail(31));
     else {
+    }
+    int lhs_field_root = (0 - 1);
+    int lhs_field_name = 0;
+    if (node_kind[node_a[id]] == N_FIELD_ACCESS) {
+      lhs_field_root = tc_field_target_root_for_place(node_a[node_a[id]]);
+      lhs_field_name = node_value[node_a[id]];
+    } else {
     }
     (void)(tc_expr(node_a[id]));
     int lk = tc_kind;
@@ -14546,6 +15867,7 @@ void tc_stmt(int id, int expected_kind, int expected_name) {
     int rhs_borrow_mut_assign = tc_expr_borrow_mut;
     int rhs_borrow_param_assign = tc_expr_borrow_param;
     int rhs_ffi_borrowed_assign = tc_expr_ffi_borrowed;
+    int rhs_fun_target_assign = tc_expr_fun_target;
     if (k == N_COMPOUND_ASSIGN) {
       int combined = ast_node(N_BINOP, node_a[id], node_b[id], 0, node_value[id], 0);
       (void)(tc_expr(combined));
@@ -14560,7 +15882,8 @@ void tc_stmt(int id, int expected_kind, int expected_name) {
     else {
     }
     if (tc_same_full(lk, ln, le, len, tc_kind, tc_name, tc_elem_kind, tc_elem_name) == 0) {
-      if (((node_kind[node_b[id]] != N_INT) || (node_value[node_b[id]] != 0)) &&
+      if (((tc_integer_literal_conversion(node_b[id], lk, tc_kind) == 0) &&
+           ((node_kind[node_b[id]] != N_INT) || (node_value[node_b[id]] != 0))) &&
           (node_kind[node_b[id]] != N_NULL))
         (void)(tc_fail_types(21, lk, tc_kind));
       else {
@@ -14572,12 +15895,22 @@ void tc_stmt(int id, int expected_kind, int expected_name) {
       tc_var_moved[lhs_index] = 0;
     } else {
     }
+    if ((tc_ok == 1) && (lk == TY_FUN)) {
+      if (node_kind[node_a[id]] == N_VAR)
+        tc_var_fun_target[lhs_index] = rhs_fun_target_assign;
+      else if (node_kind[node_a[id]] == N_FIELD_ACCESS) {
+        (void)(tc_field_target_set(lhs_field_root, lhs_field_name, rhs_fun_target_assign));
+      } else {
+      }
+    } else {
+    }
     if (((tc_ok == 1) && (node_kind[node_a[id]] == N_VAR)) && (lk == TY_PTR)) {
       (void)(tc_release_borrow(lhs_index));
       tc_var_borrow_source[lhs_index] = (0 - 1);
       tc_var_borrow_mode[lhs_index] = 0;
       tc_var_borrow_parent[lhs_index] = (0 - 1);
       tc_var_borrow_param[lhs_index] = 0;
+      tc_var_fun_target[lhs_index] = rhs_fun_target_assign;
       tc_var_ffi_borrowed[lhs_index] = rhs_ffi_borrowed_assign;
       if (rhs_borrow_assign < 0) {
       } else {
@@ -14636,30 +15969,45 @@ void tc_stmt(int id, int expected_kind, int expected_name) {
       (void)(tc_fail(47));
     else {
       int arm = node_b[id];
+      int has_default = 0;
       while (arm != 0) {
-        int member = tc_match_variant_member(enum_decl, node_value[arm]);
-        if (member == 0)
-          (void)(tc_fail(48));
-        else {
-          if (tc_match_seen_variant(node_b[id], member) == 1)
-            (void)(tc_fail(49));
+        if (node_value[arm] == 0) {
+          if ((has_default == 1) || (node_next[arm] != 0))
+            (void)(tc_fail(74));
           else {
           }
-          node_aux[arm] = member;
+          has_default = 1;
           (void)(tc_enter_scope());
-          (void)(tc_match_check_arm_bindings(member, node_a[arm]));
           (void)(tc_stmt(node_b[arm], expected_kind, expected_name));
           (void)(tc_leave_scope());
+        } else {
+          int member = tc_match_variant_member(enum_decl, node_value[arm]);
+          if (member == 0)
+            (void)(tc_fail(48));
+          else {
+            if (tc_match_seen_variant(node_b[id], member) == 1)
+              (void)(tc_fail(49));
+            else {
+            }
+            node_aux[arm] = member;
+            (void)(tc_enter_scope());
+            (void)(tc_match_check_arm_bindings(member, node_a[arm]));
+            (void)(tc_stmt(node_b[arm], expected_kind, expected_name));
+            (void)(tc_leave_scope());
+          }
         }
         arm = node_next[arm];
       }
-      int variant = node_a[enum_decl];
-      while (variant != 0) {
-        if (tc_match_seen_variant(node_b[id], variant) == 0)
-          (void)(tc_fail(51));
-        else {
+      if (has_default == 0) {
+        int variant = node_a[enum_decl];
+        while (variant != 0) {
+          if (tc_match_seen_variant(node_b[id], variant) == 0)
+            (void)(tc_fail(51));
+          else {
+          }
+          variant = node_next[variant];
         }
-        variant = node_next[variant];
+      } else {
       }
     }
   } else if ((k == N_PRINT) || (k == N_PRINTLN))
@@ -14697,7 +16045,8 @@ void tc_stmt(int id, int expected_kind, int expected_name) {
       }
       if (tc_same_full(expected_kind, expected_name, tc_expected_elem_kind, tc_expected_elem_name,
                        tc_kind, tc_name, tc_elem_kind, tc_elem_name) == 0)
-        if (node_kind[node_a[id]] != N_NULL)
+        if ((tc_integer_literal_conversion(node_a[id], expected_kind, tc_kind) == 0) &&
+            (node_kind[node_a[id]] != N_NULL))
           (void)(tc_fail_types(23, expected_kind, tc_kind));
         else {
         }
@@ -14993,8 +16342,18 @@ void tc_print_hint(int code) {
     (void)(runtime_write_string("return-borrow lifetime must come from one consistent parameter"));
   else if (code == 70)
     (void)(runtime_write_string("mutable borrow requires a mutable place"));
+  else if (code == 74)
+    (void)(runtime_write_string("default match arm must appear once and last"));
+  else if (code == 75)
+    (void)(runtime_write_string("do not move an owned value from a loop-carried binding"));
+  else if (code == 76)
+    (void)(runtime_write_string(
+        "explicit generic arguments must match a generic function's parameters"));
   else if (code == 72)
     (void)(runtime_write_string("reference return escapes its owner"));
+  else if (code == 73)
+    (void)(runtime_write_string(
+        "function-pointer target is unknown for an ownership-sensitive signature"));
   else
     (void)(runtime_write_string("inspect the expression at the reported source location"));
 }
@@ -15090,8 +16449,18 @@ void tc_diag(void) {
     (void)(runtime_write_string("type error: inconsistent return-borrow lifetime"));
   else if (tc_error_code == 70)
     (void)(runtime_write_string("type error: mutable borrow requires a mutable place"));
+  else if (tc_error_code == 74)
+    (void)(runtime_write_string("type error: default match arm must appear once and last"));
+  else if (tc_error_code == 75)
+    (void)(runtime_write_string("type error: owned value move is not allowed inside a loop"));
+  else if (tc_error_code == 76)
+    (void)(runtime_write_string(
+        "type error: explicit generic arguments do not match the function parameters"));
   else if (tc_error_code == 72)
     (void)(runtime_write_string("type error: reference return escapes its owner"));
+  else if (tc_error_code == 73)
+    (void)(runtime_write_string(
+        "type error: function-pointer target is unknown for an ownership-sensitive signature"));
   else if (tc_error_code == 44)
     (void)(runtime_write_string("type error: distinct functions collide after C mangling"));
   else
@@ -15438,17 +16807,21 @@ int tc_program(int root) {
       int ge = tc_elem_kind;
       int gen = tc_elem_name;
       (void)(tc_add_var(node_a[item], gk, gn, ge, gen, node_b[item]));
-      if (node_kind[item] == N_CONST)
+      if (node_kind[item] == N_CONST) {
         sym_type[node_a[item]] = (gk + 100);
-      else {
+        tc_var_const[tc_last_var_index] = 1;
+      } else {
       }
       (void)(tc_mark_float_expr(node_c[item], gk));
       (void)(tc_expr(node_c[item]));
+      int global_fun_target = tc_expr_fun_target;
+      tc_var_fun_target[tc_last_var_index] = global_fun_target;
       if (tc_literal_fits(node_c[item], gk) == 0)
         (void)(tc_fail(54));
       else {
       }
-      if (((tc_same_full(gk, gn, ge, gen, tc_kind, tc_name, tc_elem_kind, tc_elem_name) == 0) &&
+      if ((((tc_same_full(gk, gn, ge, gen, tc_kind, tc_name, tc_elem_kind, tc_elem_name) == 0) &&
+            (tc_integer_literal_conversion(node_c[item], gk, tc_kind) == 0)) &&
            ((node_kind[node_c[item]] != N_INT) || (node_value[node_c[item]] != 0))) &&
           (node_kind[node_c[item]] != N_NULL))
         (void)(tc_fail(29));
@@ -15461,7 +16834,7 @@ int tc_program(int root) {
   tc_global_count = tc_var_count;
   item = node_a[root];
   while (item != 0) {
-    if (node_kind[item] == N_FUNC) {
+    if ((node_kind[item] == N_FUNC) || (node_kind[item] == N_GENERIC_FUNC)) {
       tc_var_count = tc_global_count;
       tc_scope_count = 1;
       (void)(tc_enter_scope());
@@ -15518,6 +16891,10 @@ int pipeline_main(char *path) {
   ast_parse_mode = 0;
   pipeline_root = root;
   int parsed = 1;
+  if (lexer_error == 1)
+    parsed = 0;
+  else {
+  }
   if (root < 0)
     parsed = 0;
   else {

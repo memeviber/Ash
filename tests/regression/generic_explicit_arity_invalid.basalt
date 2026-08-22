@@ -1,0 +1,7 @@
+func identity<T>(value: T): T {
+  return value;
+}
+
+func main(): int {
+  return identity<int, int>(1);
+}

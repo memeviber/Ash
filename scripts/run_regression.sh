@@ -264,6 +264,7 @@ compile_run "$ROOT/tests/regression/stdlib_utf8_test.basalt" stdlib_utf8_test
 compile_run "$ROOT/tests/regression/stdlib_time_process_format_random_test.basalt" stdlib_time_process_format_random_test
 compile_run "$ROOT/tests/regression/numeric_compound_test.basalt" numeric_compound_test
 compile_run "$ROOT/tests/regression/f32_f64_test.basalt" f32_f64_test
+compile_run "$ROOT/tests/regression/block_comment_numeric_test.basalt" block_comment_numeric_test
 compile_run "$ROOT/tests/regression/generic_float_bound_nested_test.basalt" generic_float_bound_nested_test
 compile_run "$ROOT/tests/regression/generic_callback_borrow_lifecycle_test.basalt" generic_callback_borrow_lifecycle_test
 compile_run "$ROOT/tests/regression/compound_assignment_side_effect_test.basalt" compound_assignment_side_effect_test
@@ -277,7 +278,9 @@ auto_compile_cli
 compile_run "$ROOT/tests/regression/tagged_union_test.basalt" tagged_union_test
 compile_run "$ROOT/tests/regression/defer_test.basalt" defer_test
 compile_run "$ROOT/tests/regression/match_test.basalt" match_test
+compile_run "$ROOT/tests/regression/match_default_test.basalt" match_default_test
 compile_run "$ROOT/tests/regression/tuple_test.basalt" tuple_test
+compile_run "$ROOT/tests/regression/const_array_dimension_test.basalt" const_array_dimension_test
 compile_run "$ROOT/tests/regression/concurrency_test.basalt" concurrency_test
 compile_run "$ROOT/tests/regression/stdlib_concurrency_extended_test.basalt" stdlib_concurrency_extended_test
 compile_run "$ROOT/tests/regression/aligned_alloc_test.basalt" aligned_alloc_test
@@ -312,7 +315,9 @@ compile_run "$ROOT/tests/regression/map_bucket_mask_edge.basalt" map_bucket_mask
 compile_run "$ROOT/tests/stress/map_bucket_mask_stress.basalt" map_bucket_mask_stress
 compile_run "$ROOT/tests/regression/stress_containers_loop.basalt" stress_containers_loop
 compile_run "$ROOT/tests/regression/generic_map_probe.basalt" generic_map_probe
+compile_run "$ROOT/tests/regression/generic_explicit_args_test.basalt" generic_explicit_args_test
 compile_run "$ROOT/tests/regression/include_test_main.basalt" include_test_main
+compile_run "$ROOT/tests/regression/long_include_line_test.basalt" long_include_line_test
 expect_import_reject "$ROOT/tests/regression/include_cycle_a.basalt" include_cycle 62 "$ROOT/tests/regression/include_cycle_b.basalt" "$ROOT/tests/regression/include_cycle_a.basalt"
 expect_import_reject "$ROOT/tests/regression/include_alias_cycle_a.basalt" include_alias_cycle 62 "$ROOT/tests/regression/include_alias_cycle_b.basalt" "$ROOT/tests/regression/include_alias_cycle_a.basalt"
 expect_import_reject "$ROOT/tests/regression/include_missing_module.basalt" include_missing_module 63 "$ROOT/tests/regression/include_missing_module.basalt" "$ROOT/tests/regression/include_missing_target.basalt"
@@ -361,6 +366,7 @@ compile_run "$ROOT/tests/regression/namespace_lexical_parent_valid.basalt" names
 expect_reject "$ROOT/tests/regression/namespace_ambiguous_root_invalid.basalt" namespace_ambiguous_root_invalid
 grep -Fq 'diagnostic.code=41' "$OUT/namespace_ambiguous_root_invalid.boot.log"
 compile_run "$ROOT/tests/regression/namespace_global.basalt" namespace_global
+compile_run "$ROOT/tests/regression/stdout_stderr_identifier_test.basalt" stdout_stderr_identifier_test
 compile_run "$ROOT/tests/regression/pointer_struct_field.basalt" pointer_struct_field
 compile_run "$ROOT/tests/regression/pointer_generic_struct_test.basalt" pointer_generic_struct_test
 compile_run "$ROOT/tests/regression/fixed_array_valid.basalt" fixed_array_valid
@@ -376,6 +382,10 @@ expect_collision_reject "$ROOT/tests/regression/nested_namespace_segment_collisi
 expect_reject "$ROOT/tests/stress/modulo_invalid_string.basalt" modulo_invalid_string
 expect_reject "$ROOT/tests/regression/undefined_function_call.basalt" undefined_function_call
 expect_reject "$ROOT/tests/regression/non_function_value_call.basalt" non_function_value_call
+expect_reject "$ROOT/tests/regression/generic_explicit_arity_invalid.basalt" generic_explicit_arity_invalid
+grep -Fq 'diagnostic.code=76' "$OUT/generic_explicit_arity_invalid.boot.log"
+expect_reject "$ROOT/tests/regression/explicit_non_generic_invalid.basalt" explicit_non_generic_invalid
+grep -Fq 'diagnostic.code=76' "$OUT/explicit_non_generic_invalid.boot.log"
 expect_reject "$ROOT/tests/regression/unknown_variable_use.basalt" unknown_variable_use
 expect_reject "$ROOT/tests/regression/unknown_field_access.basalt" unknown_field_access
 expect_reject "$ROOT/tests/regression/deref_non_pointer.basalt" deref_non_pointer

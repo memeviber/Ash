@@ -1,0 +1,14 @@
+/* Block comment before declarations.
+   It deliberately spans multiple lines. */
+func main(): int {
+  let scientific: f64 = 1.5e-3;
+  let scientific_upper: f64 = 2.0E+1;
+  let hex_value: int = 0x2a;
+  let binary_value: int = 0b101010;
+  /* Inline block comment between statements. */
+  if scientific <= 0.001 then return 1;
+  if scientific_upper != 20.0 then return 2;
+  if hex_value != 42 then return 3;
+  if binary_value != 42 then return 4;
+  return 0;
+}

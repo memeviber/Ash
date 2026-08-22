@@ -1,0 +1,7 @@
+func plain(value: int): int {
+  return value;
+}
+
+func main(): int {
+  return plain<int>(1);
+}

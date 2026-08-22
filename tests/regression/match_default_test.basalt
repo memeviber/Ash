@@ -1,0 +1,26 @@
+enum Message {
+  Quit,
+  Write {
+    code: int;
+  },
+};
+
+func classify(message: Message): int {
+  match message {
+    Quit => {
+      return 1;
+    }
+    _ => {
+      return 9;
+    }
+  }
+  return 0;
+}
+
+func main(): int {
+  let quit: Message = Message::Quit();
+  if classify(quit) != 1 then return 1;
+  let written: Message = Message::Write(42);
+  if classify(written) != 9 then return 2;
+  return 0;
+}
