@@ -1,0 +1,8 @@
+extern func borrowed_pointer(): int*;
+extern func borrowed_text(): string;
+
+func main(): int {
+  let pointer: int* = borrowed_pointer();
+  memory_free(pointer);
+  return 0;
+}

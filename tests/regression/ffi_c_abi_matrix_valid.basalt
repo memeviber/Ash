@@ -1,0 +1,26 @@
+include "../../src/stdlib/string.basalt"
+includec "ffi_c_abi_matrix.c"
+
+extern "../../tests/regression/ffi_c_abi_matrix.h" func ffi_matrix_abs(value: int): int;
+extern "../../tests/regression/ffi_c_abi_matrix.h" func ffi_matrix_u64(value: u64): u64;
+extern "../../tests/regression/ffi_c_abi_matrix.h" func ffi_matrix_double(value: f64): f64;
+extern "../../tests/regression/ffi_c_abi_matrix.h" func ffi_matrix_echo(value: string): string;
+extern "../../tests/regression/ffi_c_abi_matrix.h" func ffi_matrix_read(value: int*): int;
+extern "../../tests/regression/ffi_c_abi_matrix.h" func ffi_matrix_touch(borrow_mut value: int*): void;
+
+func main(): int {
+  let value: int = 4;
+  let absolute: int = ffi_matrix_abs(0 - 9);
+  let wide: u64 = ffi_matrix_u64(41);
+  let doubled: f64 = ffi_matrix_double(1.5);
+  let text: string = ffi_matrix_echo("basalt");
+  let before: int = ffi_matrix_read(&value);
+  ffi_matrix_touch(&value);
+  if absolute != 9 then return 1;
+  if wide != 42 then return 2;
+  if doubled != 3.0 then return 3;
+  if str::eq(text, "basalt") == false then return 4;
+  if before != 4 then return 5;
+  if value != 5 then return 6;
+  return 0;
+}

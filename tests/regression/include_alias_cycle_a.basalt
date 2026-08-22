@@ -1,0 +1,4 @@
+include "include_alias_cycle_dir/./../include_alias_cycle_b.basalt"
+func main(): void {
+  return;
+}

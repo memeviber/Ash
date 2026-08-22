@@ -1,0 +1,5 @@
+extern func unsafe_move(move value: int*): void;
+
+func main(): int {
+  return 0;
+}

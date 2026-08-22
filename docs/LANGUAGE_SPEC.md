@@ -169,9 +169,11 @@ Tuple expressions and multiple return values use generated C struct-like represe
 
 ## Includes and controlled C interoperability
 
-`include "module.basalt";` loads Basalt source. Include resolution MUST use the including file as the base for relative paths, canonicalize paths before cycle checks, reject active include cycles, and avoid processing the same canonical module more than once.
+`include "module.basalt";` loads Basalt source. Resolution is relative to the file containing the directive, not to the process working directory. The loader MUST canonicalize the candidate path before registering it in the dependency graph. A canonical path is the runtime-resolved absolute path (`realpath` on POSIX and `_fullpath` on Windows when available); the fallback path remains deterministic when canonicalization fails. The compiler records one directed edge from the including source to the canonical target, deduplicates repeated edges, rejects an active back-edge as diagnostic **62**, and treats a previously loaded canonical module as a successful no-op. An unopenable target is diagnostic **63**, and a malformed include directive is diagnostic **64**. Import diagnostics MUST expose the canonical target through `diagnostic.target` and report the included source location when available.
 
-`includec "file.c";` injects raw C material through the emitter. It is an explicit escape hatch and MUST remain isolated from ordinary Basalt type checking. The injected material is responsible for providing any implementation and any declarations that are not represented by a controlled `extern` declaration.
+Namespaces are lexical scopes, not suffix-based global aliases. An unqualified type, function, or value name resolves in this order: the innermost lexical scope, the current namespace, each enclosing namespace from inner to outer, and finally the root namespace. A declaration in an unrelated sibling namespace MUST NOT become visible merely because its final segment matches. Qualified names are resolved by their complete namespace path. Generated C symbols remain deterministically mangled, and distinct source declarations that collide after mangling MUST be rejected before C emission.
+
+`includec "file.c";` injects raw C material through the emitter. It is an explicit escape hatch and MUST remain isolated from ordinary Basalt type checking. The injected material is responsible for providing any implementation and any declarations that are not represented by a controlled `extern` declaration. The compiler MUST NOT infer ownership, calling convention, or type safety from raw `includec` text.
 
 An `extern` declaration declares a C-provided function with a Basalt signature. The legacy form remains valid:
 
@@ -185,11 +187,39 @@ A controlled declaration MAY attach one validated header path immediately after 
 extern "stdlib.h" func abs(x: int): int;
 ```
 
-The header literal MUST be non-empty and contain only ASCII letters, digits, `.`, `/`, `_`, and `-`. The Bootstrap emitter emits each distinct controlled header once as a quoted `#include` after the runtime prologue and before raw `includec` material. Angle-bracket spelling, quotes, backslashes, newlines, and other preprocessor syntax are not accepted in the literal.
+The header literal MUST be non-empty and contain only ASCII letters, digits, `.`, `/`, `_`, and `-`. The Bootstrap emitter emits each distinct controlled header once as a quoted `#include` after the runtime prologue and before raw `includec` material. Angle-bracket spelling, quotes, backslashes, newlines, and other preprocessor syntax are not accepted in the literal. Header validation is path-syntax validation only; the selected C compiler remains responsible for locating and parsing the header.
 
-The compiler MUST accept scalar ABI types `int`, `bool`, `char`, `string`, `void`, `float`, `double`, `long`, `long long`, `u8`, `u16`, `u32`, `u64`, `i8`, `i16`, `i32`, `i64`, and `usize`, together with pointers, fixed-size arrays, and named struct types. Dynamic arrays, tuples, variants, generic types, and other compiler-only representations MUST be rejected in an `extern` parameter or return type. The checked Basalt contract covers declaration syntax, arity, and this ABI-safe type subset; C linker, calling-convention, and platform-specific ABI compatibility remain the build configuration's responsibility.
+The controlled FFI supports exactly the platform C ABI and the compiler's default calling convention. There is currently no Basalt syntax for selecting `stdcall`, `fastcall`, `vectorcall`, `sysv`, or another convention. Such annotations are not silently accepted: they are outside the grammar and MUST be reported as a parser error rather than emitted with an assumed convention. The compiler checks the Basalt-side declaration and generated C spelling, but it cannot prove that a C library's symbol, prototype, packing, or platform ABI agrees with the declaration; projects MUST compile and link against the real header and implementation as part of their platform validation.
 
-Unsafe extern parameter types use diagnostic code 55, unsafe return types use code 56, and invalid controlled header paths use code 57.
+The ABI-safe scalar mapping is:
+
+| Basalt type | Controlled C spelling | Boundary rule |
+| --- | --- | --- |
+| `int` | `int` | By value. |
+| `bool` | `bool` | Uses the generated runtime Boolean spelling. |
+| `char` | `char` | Byte-oriented character value. |
+| `f32` / `float` | `float` | By value. |
+| `f64` / `double` | `double` | By value. |
+| `long` | `long` | Platform C `long`; width is platform-defined. |
+| `long long` | `long long` | At least the C minimum width. |
+| `u8`, `u16`, `u32`, `u64` | `u8`, `u16`, `u32`, `u64` | Generated runtime typedefs provide the exact-width aliases. |
+| `i8`, `i16`, `i32`, `i64` | `i8`, `i16`, `i32`, `i64` | Generated runtime typedefs provide the exact-width aliases. |
+| `usize` | `usize` | Unsigned size-compatible runtime typedef. |
+| `string` parameter | `const char *` | Borrowed for the duration of the call; NUL-terminated. |
+| `string` return | `char *` | Borrowed C-owned or static storage; never Basalt-owned. |
+| `T*` | Pointer to the mapped C type | The pointee type is checked recursively. |
+| `T[N]` | C fixed array spelling | The element type is checked recursively; use is still subject to C parameter adjustment. |
+| plain named struct | Generated named C struct | Non-generic fields are checked recursively and passed by value. |
+| plain enum | Generated named C enum | Payload-free enumerators only. |
+| `void` | `void` | Return type only. |
+
+The checker MUST recursively reject dynamic arrays, generic or type-parameter nodes, tuples, closures, function types, tagged variants, and any named struct whose fields contain one of those representations. A named struct is accepted only after declaration identity is resolved and its traversal is guarded against recursive pointer references; an unbounded by-value recursive layout is rejected. Named enums are accepted only when they are plain payload-free enums under the generated C representation. Fixed arrays and pointers do not make an unsafe nested element safe.
+
+Extern parameter modes are deliberately strict. `move` is rejected at an extern boundary because no portable C transfer contract exists. Unannotated scalar, pointer, fixed-array, and string parameters use compatibility mode; raw pointer and string inputs are borrowed for the call and are not implicitly freed by the callee. `borrow` and `borrow_mut` are accepted only for pointer-compatible or string parameters and retain the ordinary tracked-source conflict and lifetime checks. An explicit ownership transfer must be implemented by a future ABI contract rather than inferred from a C prototype.
+
+Pointer and string returns from extern are non-owning borrowed values. The checker propagates this provenance through local and `const` bindings and rejects passing such a value to `memory_free`; the C library remains responsible for its lifetime. Basalt code MUST copy the bytes into a Basalt-owned string or buffer before retaining them beyond the C contract. No owned pointer/string return syntax is currently supported.
+
+Unsafe extern parameter types use diagnostic code **55**, unsafe return types use **56**, invalid controlled header paths use **57**, an unsupported extern ownership mode uses **65**, an invalid borrow mode/type combination uses **66**, and releasing a non-owning extern pointer/string uses **67**. These diagnostics are emitted before C generation.
 
 ## Diagnostics contract
 

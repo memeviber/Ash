@@ -1,0 +1,5 @@
+extern func unsafe_array(value: array::Array<int>[4]): void;
+
+func main(): int {
+  return 0;
+}

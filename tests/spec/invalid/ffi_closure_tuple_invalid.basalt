@@ -1,0 +1,6 @@
+extern func unsafe_callback(callback: closure(int): int): void;
+extern func unsafe_tuple(value: (int, int)): void;
+
+func main(): int {
+  return 0;
+}

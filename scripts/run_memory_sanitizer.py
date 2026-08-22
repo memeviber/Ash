@@ -2,9 +2,10 @@
 """Run repeatable ASan/LSan/UBSan ownership checks for Bootstrap Basalt and C.
 
 The harness deliberately keeps the generated fixtures in .tmp so no binaries or
-large generated C files enter the repository. The frozen Bootstrap C seed creates
-the current compiler, which is checked against a hand-written C baseline with the
-same observable result.
+large generated C files enter the repository. The shared Bootstrap builder uses the
+frozen seed to create stage 2 and then the current compiler, which is checked against
+a hand-written C baseline with the same observable result.
+
 """
 
 from __future__ import annotations
@@ -327,22 +328,20 @@ def main() -> int:
     source.write_text(BASALT_SOURCE, encoding="utf-8")
     c_source.write_text(C_SOURCE, encoding="utf-8")
 
-    seed_source = root / "src" / "bootstrap" / "basaltc.seed.c"
-    seed_compiler = binaries / "bootstrap.seed.bin"
-    current_source = sources / "basaltc.current.c"
-    bootstrap_compiler = binaries / "bootstrap.current.bin"
-    seed_build = run(["gcc", *STRICT_FLAGS, str(seed_source), "-o", str(seed_compiler)],
-                     stdout=logs / "bootstrap-seed-build.out", stderr=logs / "bootstrap-seed-build.err")
-    if seed_build.returncode != 0:
-        raise RuntimeError(f"Bootstrap seed C build failed; see {logs / 'bootstrap-seed-build.err'}")
-    current_build = run([str(seed_compiler), str(root / "src" / "bootstrap" / "basaltc.basalt"), str(current_source)],
-                        stdout=logs / "bootstrap-current-generate.out", stderr=logs / "bootstrap-current-generate.err")
-    if current_build.returncode != 0:
-        raise RuntimeError(f"Current Bootstrap generation failed; see {logs / 'bootstrap-current-generate.err'}")
-    current_compile = run(["gcc", *STRICT_FLAGS, str(current_source), "-o", str(bootstrap_compiler)],
-                          stdout=logs / "bootstrap-current-build.out", stderr=logs / "bootstrap-current-build.err")
-    if current_compile.returncode != 0:
-        raise RuntimeError(f"Current Bootstrap C build failed; see {logs / 'bootstrap-current-build.err'}")
+    bootstrap_stage = root / "scripts" / "bootstrap_stage.sh"
+    stage_out = out / "bootstrap-stage"
+    stage_build = run(
+        ["bash", "-c", 'source "$1"; shift; bootstrap_stage "$@"',
+         "bootstrap_stage", str(bootstrap_stage), str(root), str(stage_out), *STRICT_FLAGS],
+        stdout=logs / "bootstrap-stage.out", stderr=logs / "bootstrap-stage.err")
+    if stage_build.returncode != 0:
+        raise RuntimeError(f"Bootstrap staged build failed; see {logs / 'bootstrap-stage.err'}")
+    current_paths = text_of(logs / "bootstrap-stage.out").splitlines()
+    if not current_paths:
+        raise RuntimeError("Bootstrap staged builder did not return the current compiler path")
+    bootstrap_compiler = Path(current_paths[-1].strip())
+    if not bootstrap_compiler.exists():
+        raise RuntimeError(f"Bootstrap staged builder returned missing compiler {bootstrap_compiler}")
     bootstrap_generated = compile_basalt(bootstrap_compiler, source, sources, logs, "bootstrap")
 
     artifacts = {
@@ -384,7 +383,7 @@ def main() -> int:
 
 ## Result
 
-The complex ownership workload was compiled and run through the frozen Bootstrap compiler and a hand-written C baseline under AddressSanitizer, LeakSanitizer leak detection, and UndefinedBehaviorSanitizer. Output parity: **{'PASS' if output_parity else 'FAIL'}**. Sanitizer status: **{'PASS' if sanitizer_clean else 'FAIL'}**.
+The complex ownership workload was compiled and run through the current Bootstrap compiler produced by the shared seed→stage2→current builder and through a hand-written C baseline under AddressSanitizer, LeakSanitizer leak detection, and UndefinedBehaviorSanitizer. Output parity: **{'PASS' if output_parity else 'FAIL'}**. Sanitizer status: **{'PASS' if sanitizer_clean else 'FAIL'}**.
 
 | Variant | Return code | Output | Sanitizer diagnostics |
 |---|---:|---|---|

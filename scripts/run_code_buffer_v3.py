@@ -14,7 +14,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / ".tmp" / "code_buffer_v3"
-MODERN_C = ROOT / "src" / "bootstrap" / "basaltc.seed.c"
+BOOTSTRAP_STAGE = ROOT / "scripts" / "bootstrap_stage.sh"
 ASSIGNMENTS = 20_000
 EXPECTED = f"{ASSIGNMENTS}\n"
 STRICT = ["-std=c11", "-Wall", "-Wextra", "-Wpedantic", "-Wconversion", "-Wshadow", "-Werror"]
@@ -41,14 +41,14 @@ def main() -> int:
     lines.extend(["  println total;", "  return 0;", "}", ""])
     source.write_text("\n".join(lines), encoding="utf-8")
 
-    seed_bin = OUT / "bootstrap.seed.bin"
-    current_c = OUT / "basaltc.current.c"
-    boot_bin = OUT / "bootstrap.current.bin"
+    stage_out = OUT / "bootstrap-stage"
     boot_c = OUT / "workload.c"
 
-    run(["gcc", *STRICT, str(MODERN_C), "-o", str(seed_bin)])
-    run([str(seed_bin), str(ROOT / "src" / "bootstrap" / "basaltc.basalt"), str(current_c)])
-    run(["gcc", *STRICT, str(current_c), "-o", str(boot_bin)])
+    stage_result = run(
+        ["bash", "-c", "source \"$1\" && bootstrap_stage \"$2\" \"$3\" \"${@:4}\"", "bootstrap_stage", str(BOOTSTRAP_STAGE), str(ROOT), str(stage_out), *STRICT],
+        capture=True,
+    )
+    boot_bin = Path(stage_result.stdout.strip().splitlines()[-1])
     run([str(boot_bin), str(source), str(boot_c)])
     workload_bin = OUT / "workload.bin"
     run(["gcc", *STRICT, str(boot_c), "-o", str(workload_bin)])

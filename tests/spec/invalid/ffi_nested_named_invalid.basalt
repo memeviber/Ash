@@ -1,0 +1,16 @@
+include "../../../src/stdlib/array.basalt"
+
+struct UnsafeContainer {
+  values: array::Array<int>;
+}
+
+struct GenericBox<T> {
+  value: T;
+}
+
+extern func unsafe_pointer(value: UnsafeContainer*): void;
+extern func unsafe_generic(value: GenericBox<int>): void;
+
+func main(): int {
+  return 0;
+}

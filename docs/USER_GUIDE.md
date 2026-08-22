@@ -424,9 +424,15 @@ func main(): int {
 }
 ```
 
-The controlled header literal is emitted as a quoted C include. It must be non-empty and contain only letters, digits, `.`, `/`, `_`, and `-`; preprocessor syntax such as angle brackets, quotes, backslashes, and newlines is rejected. Repeated declarations using the same header emit that header only once. Controlled extern parameters and returns may use scalar types, pointers, fixed-size arrays, or named structs. Dynamic arrays, tuples, variants, generic types, and other compiler-only representations are rejected at compile time with diagnostics 55 or 56.
+The controlled header literal is emitted as a quoted C include. It must be non-empty and contain only letters, digits, `.`, `/`, `_`, and `-`; preprocessor syntax such as angle brackets, quotes, backslashes, and newlines is rejected. Repeated declarations using the same header emit that header only once. The header path is checked for safe syntax, while the final C compiler must still be able to locate and parse the real header.
 
-**`include`** pulls in another Basalt file (paths are resolved relative to the including file's directory):
+The controlled FFI uses the platform C ABI and the compiler's default calling convention only. There is no accepted Basalt annotation for `stdcall`, `fastcall`, `vectorcall`, `sysv`, or another convention; unsupported annotations are parser errors, not silently ignored metadata. The compiler checks the Basalt-side signature but cannot prove that a third-party symbol, prototype, packing, or platform ABI agrees with it, so compile and link the real header and implementation for each target.
+
+Extern boundary mappings are intentionally explicit. `int`, `bool`, `char`, `float`/`f32`, `double`/`f64`, `long`, `long long`, the fixed-width integer aliases, and `usize` are passed by value using their generated C spellings. Pointers and fixed arrays are accepted only when their pointee or element types are recursively ABI-safe. Plain non-generic structs with safe fields and payload-free plain enums are accepted; dynamic arrays, generic/type-parameter types, tuples, closures, function types, tagged variants, and unsafe nested fields are rejected even behind a pointer or array. Parameter and return failures use diagnostics 55 and 56; malformed headers use 57.
+
+Extern ownership is not inferred from a C prototype. `move` is rejected at this boundary with diagnostic 65. Unannotated pointer and string inputs are borrowed for the call. `borrow` and `borrow_mut` are allowed only for pointer-compatible or string inputs; a scalar borrow is diagnostic 66. Pointer and string returns are always non-owning borrowed values. Their provenance follows local and `const` bindings, and `memory_free` rejects them with diagnostic 67. Copy an external string or buffer into Basalt-owned storage before retaining it beyond the provider's lifetime.
+
+**`include`** pulls in another Basalt file. A relative path is resolved against the including file's directory, canonicalized before graph registration, and processed at most once per compilation. Repeated canonical includes are successful no-ops. An active back-edge is rejected with diagnostic 62, an unopenable target with 63, and a malformed directive with 64. Import diagnostics expose the canonical target in `diagnostic.target` and report the relevant source file and line.
 
 ```basalt
 include "../../src/stdlib/option.basalt"
@@ -440,7 +446,7 @@ includec "my_helpers.c"
 extern func compute(x: int): int;
 ```
 
-Use controlled `extern "header.h"` declarations when the C function boundary is stable and representable by Basalt types. Use `includec` only for C text that must be injected directly; its contents are not type-checked by Basalt.
+Use controlled `extern "header.h"` declarations when the C function boundary is stable and representable by Basalt types. Use `includec` only for C text that must be injected directly; its contents are not type-checked by Basalt and do not change FFI ownership or calling-convention policy.
 
 ### 4.11 Built-in functions
 

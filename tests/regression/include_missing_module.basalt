@@ -1,0 +1,4 @@
+include "include_missing_target.basalt"
+func main(): void {
+  return;
+}

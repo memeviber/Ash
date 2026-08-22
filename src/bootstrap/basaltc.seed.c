@@ -235,6 +235,7 @@ static char **basalt_inc_active = NULL;
 static size_t basalt_inc_active_n = 0, basalt_inc_active_cap = 0;
 static char **basalt_inc_loaded = NULL;
 static size_t basalt_inc_loaded_n = 0, basalt_inc_loaded_cap = 0;
+static char *basalt_inc_last_path = NULL;
 static int basalt_inc_status = 0;
 static BASALT_UNUSED int basalt_inc_eq(const char *a, const char *b) {
   return strcmp(a, b) == 0;
@@ -268,8 +269,13 @@ static BASALT_UNUSED char *basalt_inc_strdup(const char *p) {
   return (char *)basalt_track(q);
 }
 static BASALT_UNUSED char *basalt_inc_realpath(const char *p) {
-  if (p && p[0] == 0 && basalt_inc_active_n)
-    return basalt_inc_active[basalt_inc_active_n - 1];
+  if (p && p[0] == 0) {
+    if (basalt_inc_last_path)
+      return basalt_inc_last_path;
+    if (basalt_inc_active_n)
+      return basalt_inc_active[basalt_inc_active_n - 1];
+    return basalt_inc_strdup("");
+  }
 #if defined(_WIN32)
   char *q = _fullpath(NULL, p, 0);
   if (q)
@@ -339,12 +345,14 @@ static BASALT_UNUSED int basalt_include_line_mode(int *line, int n) {
 static BASALT_UNUSED void *basalt_include_open_root(const char *path) {
   char *p = basalt_inc_realpath(path);
   FILE *f;
+  basalt_inc_last_path = p;
   if (!basalt_inc_begin(p))
     return NULL;
   f = fopen(p, (const char[]){114, 0});
   if (!f) {
     basalt_inc_status = 3;
-    basalt_include_close();
+    if (basalt_inc_active_n)
+      basalt_inc_active_n--;
     return NULL;
   }
   return (void *)f;
@@ -354,6 +362,7 @@ static BASALT_UNUSED void *basalt_include_open_line(int *line, int n, int mode) 
   char *raw, *joined, *canon;
   FILE *f;
   (void)mode;
+  basalt_inc_last_path = basalt_inc_strdup("");
   while (i < n && line[i] != 34)
     i++;
   if (i >= n)
@@ -385,12 +394,14 @@ static BASALT_UNUSED void *basalt_include_open_line(int *line, int n, int mode) 
     return NULL;
   joined = basalt_inc_join(basalt_inc_active[basalt_inc_active_n - 1], raw);
   canon = basalt_inc_realpath(joined);
+  basalt_inc_last_path = canon;
   if (!basalt_inc_begin(canon))
     return NULL;
   f = fopen(canon, (const char[]){114, 0});
   if (!f) {
     basalt_inc_status = 3;
-    basalt_include_close();
+    if (basalt_inc_active_n)
+      basalt_inc_active_n--;
     return NULL;
   }
   return (void *)f;
@@ -401,6 +412,7 @@ static BASALT_UNUSED int basalt_include_last_status(void) {
 static BASALT_UNUSED void basalt_include_reset_session(void) {
   basalt_inc_active_n = 0;
   basalt_inc_loaded_n = 0;
+  basalt_inc_last_path = NULL;
   basalt_inc_status = 0;
 }
 static BASALT_UNUSED void *open_file(const char *p, const char *m) {
@@ -1441,6 +1453,7 @@ void gen_for_clause(int id);
 void gen_fun_decl(int ty, int name);
 void gen_decl(int ty, int name);
 void gen_stmt(int id);
+int gen_generic_base_equal(int formal, int actual);
 void gen_unify_formal(int formal, int actual);
 void gen_bind_decl(int decl, int inst);
 void gen_struct_decl_specialized(int decl, int inst, int cname);
@@ -1506,7 +1519,10 @@ void ensure_source_file_names(int need);
 void ensure_source_file_text(int need);
 int source_path_length(char *path);
 int source_file_intern(char *path);
-int source_file_intern_include(int *line, int length, int base_id);
+void ensure_source_deps(int need);
+void source_dep_add(int from_id, int to_id);
+int source_dep_reaches(int current, int target);
+void source_import_fail(int kind, int file_id, int target_id, int line);
 void source_reset(void);
 void source_put(int c);
 int is_space(int c);
@@ -1568,7 +1584,6 @@ int tc_same_full(int a_kind, int a_name, int a_elem_kind, int a_elem_name, int b
                  int b_elem_kind, int b_elem_name);
 int tc_ptr_diff_ok(int a_kind, int a_elem_kind, int a_elem_name, int b_kind, int b_elem_kind,
                    int b_elem_name);
-int sym_suffix_equal(int full, int base);
 int tc_find_struct(int name);
 int tc_find_struct_ctx(int name, int ns);
 int tc_find_enum(int name);
@@ -1605,6 +1620,8 @@ void tc_check_closure_value_escape(int id);
 void tc_attach_closure_caps(int destination, int caps);
 void tc_expr(int id);
 int tc_find_function(int name);
+int sym_find_last_scope(int name);
+int sym_prefix_scope(int name, int length);
 int tc_find_function_ctx(int name, int ns);
 int tc_find_enum_value(int name);
 int tc_find_enum_variant(int name);
@@ -1626,9 +1643,14 @@ void tc_print_type_kind(int kind);
 int tc_diag_has_types(int code);
 void tc_print_hint(int code);
 void tc_diag(void);
+void source_import_diag(void);
 int tc_check_function_symbols(int root);
 int tc_reserved_function(int name);
+int tc_ffi_struct_safe(int name);
+int tc_ffi_enum_safe(int name);
 int tc_check_ffi_type(int ty);
+int tc_ffi_pointer_compatible(int ty);
+int tc_check_ffi_return_type(int ty);
 int tc_program(int root);
 int pipeline_main(char *path);
 void emit_symbol(int *out, int id);
@@ -1783,6 +1805,14 @@ int source_file_name_text_len = 0;
 int source_file_name_text_cap = 0;
 int source_active_file = 0;
 int source_active_line = 1;
+int *source_dep_from = 0;
+int *source_dep_to = 0;
+int source_dep_cap = 0;
+int source_dep_count = 0;
+int source_import_error_kind = 0;
+int source_import_error_file = 0;
+int source_import_error_target = 0;
+int source_import_error_line = 1;
 char *tc_diag_ascii =
     " !\"#$%&'()*+,-./"
     "0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~";
@@ -2153,8 +2183,11 @@ int *tc_var_param = 0;
 int *tc_var_mode = 0;
 int *tc_var_closure_caps = 0;
 int *tc_var_closure_moved = 0;
+int *tc_var_ffi_borrowed = 0;
 int tc_last_var_type = 0;
 int tc_last_var_owned = 0;
+int tc_last_var_ffi_borrowed = 0;
+int tc_expr_ffi_borrowed = 0;
 int tc_last_var_moved = 0;
 int tc_last_var_index = 0;
 int tc_expr_borrow_source = (0 - 1);
@@ -2873,7 +2906,7 @@ int gen_substitute_type(int ty) {
   }
   if (node_kind[ty] == TY_PARAM) {
     int b = gen_bind_find(node_value[ty]);
-    if (b != 0)
+    if ((b != 0) && (b != ty))
       return gen_substitute_type(b);
     else {
     }
@@ -2893,6 +2926,12 @@ int gen_substitute_type(int ty) {
   else {
   }
   if (node_kind[ty] == TY_GENERIC) {
+    int generic_name = node_value[ty];
+    int generic_decl = tc_find_struct_ctx(generic_name, node_scope[ty]);
+    if (generic_decl != 0)
+      generic_name = node_value[generic_decl];
+    else {
+    }
     int args = 0;
     int p = node_a[ty];
     while (p != 0) {
@@ -2903,7 +2942,9 @@ int gen_substitute_type(int ty) {
         args = ast_link(args, q);
       p = node_next[p];
     }
-    return ast_node(TY_GENERIC, args, 0, 0, node_value[ty], 0);
+    int result_generic = ast_node(TY_GENERIC, args, 0, 0, generic_name, 0);
+    node_scope[result_generic] = node_scope[ty];
+    return result_generic;
   } else {
   }
   if ((node_kind[ty] == TY_FUN) || (node_kind[ty] == TY_CLOSURE)) {
@@ -3518,7 +3559,7 @@ void gen_type(int kind, int child, int size) {
     (void)(code_emit(C_PUNCT, 18));
   } else if (kind == TY_PARAM) {
     int b = gen_bind_find(node_value[child]);
-    if (b != 0)
+    if ((b != 0) && (b != child))
       (void)(gen_type(node_kind[b], b, node_value[b]));
     else
       (void)(code_emit(C_IDENT, sym_c_symbol(node_value[child])));
@@ -4509,10 +4550,11 @@ void gen_for_clause(int id) {
   else {
   }
   if (node_kind[id] == N_LET) {
-    (void)(gen_type(node_kind[node_b[id]], node_b[id], node_value[node_b[id]]));
+    int for_type = gen_substitute_type(node_b[id]);
+    (void)(gen_type(node_kind[for_type], for_type, node_value[for_type]));
     (void)(code_emit(C_IDENT, node_a[id]));
     (void)(code_emit(C_PUNCT, 11));
-    (void)(gen_initializer(node_b[id], node_c[id]));
+    (void)(gen_initializer(for_type, node_c[id]));
   } else if (node_kind[id] == N_ASSIGN) {
     (void)(gen_assignment(node_a[id], node_b[id]));
   } else if (node_kind[id] == N_COMPOUND_ASSIGN) {
@@ -4523,7 +4565,7 @@ void gen_for_clause(int id) {
   }
 }
 void gen_fun_decl(int ty, int name) {
-  int ret = node_b[ty];
+  int ret = gen_substitute_type(node_b[ty]);
   (void)(gen_type(node_kind[ret], ret, node_value[ret]));
   (void)(code_emit(C_PUNCT, 4));
   (void)(code_emit(C_PUNCT, 9));
@@ -4532,7 +4574,8 @@ void gen_fun_decl(int ty, int name) {
   (void)(code_emit(C_PUNCT, 6));
   int p = node_a[ty];
   while (p != 0) {
-    (void)(gen_type(node_kind[p], p, node_value[p]));
+    int parameter_type = gen_substitute_type(p);
+    (void)(gen_type(node_kind[parameter_type], parameter_type, node_value[parameter_type]));
     if (node_next[p] != 0)
       (void)(code_emit(C_PUNCT, 7));
     else {
@@ -4576,10 +4619,11 @@ void gen_stmt(int id) {
     (void)(code_emit(C_PUNCT, 12));
     (void)(code_emit(C_NEWLINE, 0));
   } else if (k == N_LET) {
+    int local_type = gen_substitute_type(node_b[id]);
     (void)(gen_alignment(node_aux[id]));
-    (void)(gen_decl(node_b[id], node_a[id]));
+    (void)(gen_decl(local_type, node_a[id]));
     (void)(code_emit(C_PUNCT, 11));
-    (void)(gen_initializer(node_b[id], node_c[id]));
+    (void)(gen_initializer(local_type, node_c[id]));
     (void)(code_emit(C_PUNCT, 12));
     (void)(code_emit(C_NEWLINE, 0));
   } else if (k == N_ASSIGN) {
@@ -4771,6 +4815,23 @@ void gen_stmt(int id) {
   } else {
   }
 }
+int gen_generic_base_equal(int formal, int actual) {
+  if ((formal == 0) || (actual == 0))
+    return 0;
+  else {
+  }
+  if (node_value[formal] == node_value[actual])
+    return 1;
+  else {
+  }
+  int formal_decl = tc_find_struct_ctx(node_value[formal], node_scope[formal]);
+  int actual_decl = tc_find_struct_ctx(node_value[actual], node_scope[actual]);
+  if (((formal_decl != 0) && (actual_decl != 0)) && (formal_decl == actual_decl))
+    return 1;
+  else {
+  }
+  return 0;
+}
 void gen_unify_formal(int formal, int actual) {
   if ((formal == 0) || (actual == 0))
     return;
@@ -4789,7 +4850,7 @@ void gen_unify_formal(int formal, int actual) {
   } else {
   }
   if ((node_kind[formal] == TY_GENERIC) && (node_kind[actual] == TY_GENERIC)) {
-    if (node_value[formal] != node_value[actual])
+    if (gen_generic_base_equal(formal, actual) == 0)
       return;
     else {
     }
@@ -7887,90 +7948,81 @@ int source_file_intern(char *path) {
   source_file_count = (source_file_count + 1);
   return id;
 }
-int source_file_intern_include(int *line, int length, int base_id) {
-  int q = 0;
-  while ((q < length) && (line[q] != 34)) {
-    q = (q + 1);
-  }
-  if (q == length)
-    return base_id;
+void ensure_source_deps(int need) {
+  if (need < source_dep_cap)
+    return;
   else {
   }
-  int a = (q + 1);
-  int b = a;
-  while ((b < length) && (line[b] != 34)) {
-    b = (b + 1);
-  }
-  if (b == length)
-    return base_id;
+  int n = next_capacity(source_dep_cap, need);
+  source_dep_from = grow_ints(source_dep_from, source_dep_cap, n);
+  source_dep_to = grow_ints(source_dep_to, source_dep_cap, n);
+  source_dep_cap = n;
+}
+void source_dep_add(int from_id, int to_id) {
+  if ((from_id < 1) || (to_id < 1))
+    return;
   else {
   }
-  int base_len = 0;
-  if (base_id > 0)
-    base_len = source_file_name_len[base_id];
-  else {
-  }
-  int prefix_len = 0;
-  int p = base_len;
-  int found_slash = 0;
-  while ((p > 0) && (found_slash == 0)) {
-    if ((source_file_name_text[((source_file_name_start[base_id] + p) - 1)] == 47) ||
-        (source_file_name_text[((source_file_name_start[base_id] + p) - 1)] == 92)) {
-      prefix_len = p;
-      found_slash = 1;
-    } else
-      p = (p - 1);
-  }
-  int raw_len = (b - a);
-  int total = (prefix_len + raw_len);
-  int id = 1;
-  while (id < source_file_count) {
-    if (source_file_name_len[id] == total) {
-      int i = 0;
-      int same = 1;
-      while (i < prefix_len) {
-        if (source_file_name_text[(source_file_name_start[id] + i)] !=
-            source_file_name_text[(source_file_name_start[base_id] + i)])
-          same = 0;
-        else {
-        }
-        i = (i + 1);
-      }
-      i = 0;
-      while (i < raw_len) {
-        if (source_file_name_text[((source_file_name_start[id] + prefix_len) + i)] != line[(a + i)])
-          same = 0;
-        else {
-        }
-        i = (i + 1);
-      }
-      if (same == 1)
-        return id;
-      else {
-      }
-    } else {
+  int i = 0;
+  while (i < source_dep_count) {
+    if ((source_dep_from[i] == from_id) && (source_dep_to[i] == to_id))
+      return;
+    else {
     }
-    id = (id + 1);
+    i = (i + 1);
   }
-  id = source_file_count;
-  (void)(ensure_source_file_names(id));
-  (void)(ensure_source_file_text((source_file_name_text_len + total)));
-  source_file_name_start[id] = source_file_name_text_len;
-  source_file_name_len[id] = total;
-  int j = 0;
-  while (j < prefix_len) {
-    source_file_name_text[(source_file_name_text_len + j)] =
-        source_file_name_text[(source_file_name_start[base_id] + j)];
-    j = (j + 1);
+  (void)(ensure_source_deps(source_dep_count));
+  source_dep_from[source_dep_count] = from_id;
+  source_dep_to[source_dep_count] = to_id;
+  source_dep_count = (source_dep_count + 1);
+}
+int source_dep_reaches(int current, int target) {
+  int capacity = (source_file_count + 1);
+  int *work = alloc_ints(capacity);
+  int *seen = alloc_ints(capacity);
+  int work_count = 1;
+  int found = 0;
+  work[0] = current;
+  if ((current >= 0) && (current < capacity))
+    seen[current] = 1;
+  else {
   }
-  j = 0;
-  while (j < raw_len) {
-    source_file_name_text[((source_file_name_text_len + prefix_len) + j)] = line[(a + j)];
-    j = (j + 1);
+  while ((work_count > 0) && (found == 0)) {
+    work_count = (work_count - 1);
+    int item = work[work_count];
+    if (item == target)
+      found = 1;
+    else {
+      int i = 0;
+      while (i < source_dep_count) {
+        if (source_dep_from[i] == item) {
+          int next = source_dep_to[i];
+          if (((next >= 0) && (next < capacity)) && (seen[next] == 0)) {
+            seen[next] = 1;
+            work[work_count] = next;
+            work_count = (work_count + 1);
+          } else {
+          }
+        } else {
+        }
+        i = (i + 1);
+      }
+    }
   }
-  source_file_name_text_len = (source_file_name_text_len + total);
-  source_file_count = (source_file_count + 1);
-  return id;
+  (void)(free_ints(work));
+  (void)(free_ints(seen));
+  return found;
+}
+void source_import_fail(int kind, int file_id, int target_id, int line) {
+  if (include_ok == 0)
+    return;
+  else {
+  }
+  include_ok = 0;
+  source_import_error_kind = kind;
+  source_import_error_file = file_id;
+  source_import_error_target = target_id;
+  source_import_error_line = line;
 }
 void source_reset(void) {
   source_len = 0;
@@ -7979,6 +8031,11 @@ void source_reset(void) {
   source_file_name_text_len = 0;
   source_active_file = 0;
   source_active_line = 1;
+  source_dep_count = 0;
+  source_import_error_kind = 0;
+  source_import_error_file = 0;
+  source_import_error_target = 0;
+  source_import_error_line = 1;
 }
 void source_put(int c) {
   (void)(ensure_source(source_len));
@@ -8159,15 +8216,7 @@ int ast_decl_name(int name) {
   return sym_qualified(ast_namespace_scope, name);
 }
 int ast_type_name(int name) {
-  if (ast_generic_param(name) == 1)
-    return name;
-  else {
-  }
-  if (ast_namespace_scope == 0)
-    return name;
-  else {
-  }
-  return sym_qualified(ast_namespace_scope, name);
+  return name;
 }
 int sym_intern(int start, int length, int kind, int scope) {
   int h = span_hash(start, length);
@@ -9039,32 +9088,75 @@ void include_process_line(int *line, int length) {
       i = (i + 1);
     }
     (void)(source_put(10));
-  } else {
-    int child_file = source_file_intern_include(line, length, source_active_file);
-    int *child = basalt_include_open_line(line, length, mode);
-    if (child == 0) {
-      if (basalt_include_last_status() == 1)
-        include_ok = 0;
-      else {
-      }
+  } else if (mode == 1) {
+    int parent_file = source_active_file;
+    int parent_line = source_active_line;
+    int *child_module = basalt_include_open_line(line, length, mode);
+    int status_module = basalt_include_last_status();
+    char *target_path = basalt_inc_realpath("");
+    int target_file = 0;
+    if (target_path[0] != 0)
+      target_file = source_file_intern(target_path);
+    else {
+    }
+    if (target_file == 0) {
+      (void)(source_import_fail(3, parent_file, 0, parent_line));
     } else {
-      if (mode == 1) {
-        int parent_file = source_active_file;
-        int parent_line = source_active_line;
-        source_active_file = child_file;
+      (void)(source_dep_add(parent_file, target_file));
+      if (source_dep_reaches(target_file, parent_file) == 1)
+        (void)(source_import_fail(1, parent_file, target_file, parent_line));
+      else if (child_module == 0) {
+        if (status_module == 2) {
+        } else if (status_module == 1)
+          (void)(source_import_fail(1, parent_file, target_file, parent_line));
+        else if (status_module == 3)
+          (void)(source_import_fail(2, parent_file, target_file, parent_line));
+        else
+          (void)(source_import_fail(3, parent_file, target_file, parent_line));
+      } else {
+        source_active_file = target_file;
         source_active_line = 1;
-        (void)(include_expand_handle(child));
+        (void)(include_expand_handle(child_module));
         source_active_file = parent_file;
         source_active_line = parent_line;
+        (void)(close_file(child_module));
+        (void)(basalt_include_close());
+      }
+    }
+  } else {
+    int parent_file = source_active_file;
+    int parent_line = source_active_line;
+    int *child_c = basalt_include_open_line(line, length, mode);
+    int status_c = basalt_include_last_status();
+    char *target_path_c = basalt_inc_realpath("");
+    int target_file_c = 0;
+    if (target_path_c[0] != 0)
+      target_file_c = source_file_intern(target_path_c);
+    else {
+    }
+    if (target_file_c == 0) {
+      (void)(source_import_fail(3, parent_file, 0, parent_line));
+    } else {
+      (void)(source_dep_add(parent_file, target_file_c));
+      if (source_dep_reaches(target_file_c, parent_file) == 1)
+        (void)(source_import_fail(1, parent_file, target_file_c, parent_line));
+      else if (child_c == 0) {
+        if (status_c == 2) {
+        } else if (status_c == 1)
+          (void)(source_import_fail(1, parent_file, target_file_c, parent_line));
+        else if (status_c == 3)
+          (void)(source_import_fail(2, parent_file, target_file_c, parent_line));
+        else
+          (void)(source_import_fail(3, parent_file, target_file_c, parent_line));
       } else {
-        int c = read_char(child);
+        int c = read_char(child_c);
         while (c != (0 - 1)) {
           (void)(c_source_put(c));
-          c = read_char(child);
+          c = read_char(child_c);
         }
+        (void)(close_file(child_c));
+        (void)(basalt_include_close());
       }
-      (void)(close_file(child));
-      (void)(basalt_include_close());
     }
   }
 }
@@ -9084,7 +9176,7 @@ void include_expand_handle(int *handle) {
         line[length] = c;
         length = (length + 1);
       } else
-        include_ok = 0;
+        (void)(source_import_fail(3, source_active_file, 0, line_number));
     }
     c = read_char(handle);
   }
@@ -9500,11 +9592,13 @@ void load_tokens_from_file(char *path) {
   (void)(c_source_reset());
   ffi_header_count = 0;
   include_ok = 1;
+  source_import_error_kind = 0;
   int *handle = basalt_include_open_root(path);
-  if (handle == 0)
-    include_ok = 0;
-  else {
-    source_active_file = source_file_intern(path);
+  int root_id = source_file_intern(basalt_inc_realpath(path));
+  if (handle == 0) {
+    (void)(source_import_fail(2, 0, root_id, 1));
+  } else {
+    source_active_file = root_id;
     source_active_line = 1;
     (void)(include_expand_handle(handle));
     (void)(close_file(handle));
@@ -9553,6 +9647,7 @@ void ensure_tc_vars(int need) {
   tc_var_mode = grow_ints(tc_var_mode, tc_var_cap, n);
   tc_var_closure_caps = grow_ints(tc_var_closure_caps, tc_var_cap, n);
   tc_var_closure_moved = grow_ints(tc_var_closure_moved, tc_var_cap, n);
+  tc_var_ffi_borrowed = grow_ints(tc_var_ffi_borrowed, tc_var_cap, n);
   tc_var_cap = n;
 }
 void ensure_tc_scopes(int need) {
@@ -10070,6 +10165,8 @@ void tc_match_generic(int formal, int actual) {
   } else {
   }
   if (node_kind[formal] == TY_GENERIC) {
+    (void)(tc_check_type(formal));
+    (void)(tc_check_type(actual));
     if ((node_kind[actual] != TY_GENERIC) || (node_value[formal] != node_value[actual])) {
       (void)(tc_fail_types(12, node_kind[formal], node_kind[actual]));
       return;
@@ -10367,38 +10464,6 @@ int tc_ptr_diff_ok(int a_kind, int a_elem_kind, int a_elem_name, int b_kind, int
   }
   return 1;
 }
-int sym_suffix_equal(int full, int base) {
-  if (sym_len[full] == sym_len[base]) {
-    int i = 0;
-    while (i < sym_len[base]) {
-      if (source[(sym_start[full] + i)] != source[(sym_start[base] + i)])
-        return 0;
-      else {
-      }
-      i = (i + 1);
-    }
-    return 1;
-  } else {
-  }
-  if (sym_len[full] < (sym_len[base] + 3))
-    return 0;
-  else {
-  }
-  int start = ((sym_start[full] + sym_len[full]) - sym_len[base]);
-  if ((source[(start - 1)] != 58) || (source[(start - 2)] != 58))
-    return 0;
-  else {
-  }
-  int j = 0;
-  while (j < sym_len[base]) {
-    if (source[(start + j)] != source[(sym_start[base] + j)])
-      return 0;
-    else {
-    }
-    j = (j + 1);
-  }
-  return 1;
-}
 int tc_find_struct(int name) {
   int item = node_a[tc_root];
   while (item != 0) {
@@ -10417,28 +10482,23 @@ int tc_find_struct_ctx(int name, int ns) {
     return exact;
   else {
   }
-  if (ns == 0) {
-    int broad = node_a[tc_root];
-    while (broad != 0) {
-      if (((node_kind[broad] == N_STRUCT) || (node_kind[broad] == N_GENERIC_STRUCT)) &&
-          (sym_suffix_equal(node_value[broad], name) == 1))
-        return broad;
-      else {
-      }
-      broad = node_next[broad];
-    }
+  if (ns == 0)
     return 0;
-  } else {
+  else {
   }
-  int item = node_a[tc_root];
-  while (item != 0) {
-    if ((((node_kind[item] == N_STRUCT) || (node_kind[item] == N_GENERIC_STRUCT)) &&
-         (node_scope[item] == ns)) &&
-        (sym_suffix_equal(node_value[item], name) == 1))
+  int scope = ns;
+  while (scope != 0) {
+    int candidate = sym_qualified(scope, name);
+    int item = tc_find_struct(candidate);
+    if (item != 0)
       return item;
     else {
     }
-    item = node_next[item];
+    int split = sym_find_last_scope(scope);
+    if (split == 0)
+      scope = 0;
+    else
+      scope = sym_prefix_scope(scope, split);
   }
   return 0;
 }
@@ -10459,26 +10519,23 @@ int tc_find_enum_ctx(int name, int ns) {
     return exact;
   else {
   }
-  if (ns == 0) {
-    int broad = node_a[tc_root];
-    while (broad != 0) {
-      if ((node_kind[broad] == N_ENUM) && (sym_suffix_equal(node_value[broad], name) == 1))
-        return broad;
-      else {
-      }
-      broad = node_next[broad];
-    }
+  if (ns == 0)
     return 0;
-  } else {
+  else {
   }
-  int item = node_a[tc_root];
-  while (item != 0) {
-    if (((node_kind[item] == N_ENUM) && (node_scope[item] == ns)) &&
-        (sym_suffix_equal(node_value[item], name) == 1))
+  int scope = ns;
+  while (scope != 0) {
+    int candidate = sym_qualified(scope, name);
+    int item = tc_find_enum(candidate);
+    if (item != 0)
       return item;
     else {
     }
-    item = node_next[item];
+    int split = sym_find_last_scope(scope);
+    if (split == 0)
+      scope = 0;
+    else
+      scope = sym_prefix_scope(scope, split);
   }
   return 0;
 }
@@ -10538,15 +10595,20 @@ void tc_check_type(int ty) {
   }
   int k = node_kind[ty];
   if (k == TY_NAMED) {
-    if (tc_named_exists_ctx(node_value[ty], node_scope[ty]) == 0)
+    int resolved_struct = tc_find_struct_ctx(node_value[ty], node_scope[ty]);
+    int resolved_enum = tc_find_enum_ctx(node_value[ty], node_scope[ty]);
+    if (resolved_struct != 0)
+      node_value[ty] = node_value[resolved_struct];
+    else if (resolved_enum != 0)
+      node_value[ty] = node_value[resolved_enum];
+    else
       (void)(tc_fail(2));
-    else {
-    }
   } else if (k == TY_GENERIC) {
     int s = tc_find_struct_ctx(node_value[ty], node_scope[ty]);
     if ((s == 0) || (node_kind[s] != N_GENERIC_STRUCT))
       (void)(tc_fail(2));
     else {
+      node_value[ty] = node_value[s];
       if (tc_generic_arity(s) != tc_generic_arg_count(ty))
         (void)(tc_fail(37));
       else {
@@ -10975,6 +11037,7 @@ void tc_add_var(int name, int kind, int named, int elem_kind, int elem_name, int
   tc_var_mode[tc_var_count] = 0;
   tc_var_closure_caps[tc_var_count] = 0;
   tc_var_closure_moved[tc_var_count] = 0;
+  tc_var_ffi_borrowed[tc_var_count] = 0;
   tc_last_var_index = tc_var_count;
   sym_type[name] = kind;
   sym_elem_kind[name] = elem_kind;
@@ -10985,6 +11048,7 @@ int tc_lookup_var(int name) {
   tc_last_var_type = 0;
   tc_last_var_owned = 0;
   tc_last_var_moved = 0;
+  tc_last_var_ffi_borrowed = 0;
   tc_expr_borrow_source = (0 - 1);
   tc_expr_owner_source = (0 - 1);
   tc_expr_is_owned = 0;
@@ -11011,6 +11075,7 @@ int tc_lookup_var(int name) {
       }
       tc_last_var_owned = tc_var_owned[i];
       tc_last_var_moved = tc_var_moved[i];
+      tc_last_var_ffi_borrowed = tc_var_ffi_borrowed[i];
       tc_expr_borrow_source = tc_var_borrow_source[i];
       tc_last_var_index = i;
       return 1;
@@ -11295,6 +11360,7 @@ void tc_expr(int id) {
   tc_expr_borrow_source = (0 - 1);
   tc_expr_owner_source = (0 - 1);
   tc_expr_is_owned = 0;
+  tc_expr_ffi_borrowed = 0;
   if ((id != 0) && (tc_ok == 1))
     tc_error_pos = node_pos[id];
   else {
@@ -11545,6 +11611,7 @@ void tc_expr(int id) {
       } else {
       }
       tc_expr_borrow_source = tc_var_borrow_source[tc_last_var_index];
+      tc_expr_ffi_borrowed = tc_last_var_ffi_borrowed;
       if (tc_last_var_owned == 1)
         tc_expr_owner_source = tc_last_var_index;
       else {
@@ -11967,6 +12034,11 @@ void tc_expr(int id) {
       (void)(tc_expr(aa));
       if (tc_kind != TY_PTR) {
         (void)(tc_fail(8));
+        return;
+      } else {
+      }
+      if (tc_expr_ffi_borrowed == 1) {
+        (void)(tc_fail(67));
         return;
       } else {
       }
@@ -12703,6 +12775,10 @@ void tc_expr(int id) {
     else {
     }
     (void)(tc_type_node(node_b[fun_node]));
+    if ((node_kind[fun_node] == N_EXTERN) && ((tc_kind == TY_PTR) || (tc_kind == TY_STRING)))
+      tc_expr_ffi_borrowed = 1;
+    else {
+    }
     return;
   } else {
   }
@@ -12876,6 +12952,33 @@ int tc_find_function(int name) {
   }
   return 0;
 }
+int sym_find_last_scope(int name) {
+  int i = (sym_len[name] - 1);
+  while (i > 1) {
+    if ((source[(sym_start[name] + i)] == 58) && (source[((sym_start[name] + i) - 1)] == 58))
+      return (i - 1);
+    else {
+    }
+    i = (i - 1);
+  }
+  return 0;
+}
+int sym_prefix_scope(int name, int length) {
+  if (length <= 0)
+    return 0;
+  else {
+  }
+  int start = (source_len + sym_text_len);
+  int i = 0;
+  while (i < length) {
+    (void)(ensure_source((start + i)));
+    source[(start + i)] = source[(sym_start[name] + i)];
+    i = (i + 1);
+  }
+  int id = sym_intern(start, length, L_ID, 0);
+  sym_text_len = (sym_text_len + length);
+  return id;
+}
 int tc_find_function_ctx(int name, int ns) {
   int exact = tc_find_function(name);
   if (exact != 0)
@@ -12886,16 +12989,19 @@ int tc_find_function_ctx(int name, int ns) {
     return 0;
   else {
   }
-  int item = node_a[tc_root];
-  while (item != 0) {
-    if (((((node_kind[item] == N_FUNC) || (node_kind[item] == N_GENERIC_FUNC)) ||
-          (node_kind[item] == N_EXTERN)) &&
-         (node_scope[item] == ns)) &&
-        (sym_suffix_equal(node_value[item], name) == 1))
+  int scope = ns;
+  while (scope != 0) {
+    int candidate = sym_qualified(scope, name);
+    int item = tc_find_function(candidate);
+    if (item != 0)
       return item;
     else {
     }
-    item = node_next[item];
+    int split = sym_find_last_scope(scope);
+    if (split == 0)
+      scope = 0;
+    else
+      scope = sym_prefix_scope(scope, split);
   }
   return 0;
 }
@@ -12964,7 +13070,7 @@ int tc_match_variant_member(int decl, int name) {
     else {
     }
     int qualified = sym_qualified(node_value[decl], node_a[field]);
-    if ((qualified == name) || (sym_suffix_equal(qualified, name) == 1))
+    if (qualified == name)
       return field;
     else {
     }
@@ -13291,6 +13397,7 @@ void tc_stmt(int id, int expected_kind, int expected_name) {
     int cen = tc_elem_name;
     (void)(tc_mark_float_expr(node_c[id], ck));
     (void)(tc_expr(node_c[id]));
+    int const_ffi_borrowed = tc_expr_ffi_borrowed;
     if (tc_literal_fits(node_c[id], ck) == 0)
       (void)(tc_fail(54));
     else {
@@ -13307,6 +13414,7 @@ void tc_stmt(int id, int expected_kind, int expected_name) {
     }
     (void)(tc_add_var(node_a[id], ck, cn, ce, cen, node_b[id]));
     sym_type[node_a[id]] = (ck + 100);
+    tc_var_ffi_borrowed[tc_last_var_index] = const_ffi_borrowed;
   } else if (k == N_LET) {
     (void)(tc_type_node(node_b[id]));
     int dk = tc_kind;
@@ -13320,6 +13428,7 @@ void tc_stmt(int id, int expected_kind, int expected_name) {
     int ee = tc_elem_kind;
     int een = tc_elem_name;
     int rhs_borrow = tc_expr_borrow_source;
+    int rhs_ffi_borrowed = tc_expr_ffi_borrowed;
     if ((tc_is_owner_kind(dk) == 1) && (node_kind[node_c[id]] == N_VAR))
       (void)(tc_fail(40));
     else {
@@ -13341,6 +13450,7 @@ void tc_stmt(int id, int expected_kind, int expected_name) {
     else {
     }
     (void)(tc_add_var(node_a[id], dk, dn, de, den, node_b[id]));
+    tc_var_ffi_borrowed[tc_last_var_index] = rhs_ffi_borrowed;
     if ((tc_is_owner_kind(dk) == 1) || (tc_owned_initializer(node_c[id]) == 1))
       tc_var_owned[tc_last_var_index] = 1;
     else {
@@ -13371,6 +13481,7 @@ void tc_stmt(int id, int expected_kind, int expected_name) {
     (void)(tc_mark_float_expr(node_b[id], lk));
     (void)(tc_expr(node_b[id]));
     int rhs_borrow_assign = tc_expr_borrow_source;
+    int rhs_ffi_borrowed_assign = tc_expr_ffi_borrowed;
     if (k == N_COMPOUND_ASSIGN) {
       int combined = ast_node(N_BINOP, node_a[id], node_b[id], 0, node_value[id], 0);
       (void)(tc_expr(combined));
@@ -13409,6 +13520,7 @@ void tc_stmt(int id, int expected_kind, int expected_name) {
       } else {
       }
       tc_var_borrow_source[lhs_index] = (0 - 1);
+      tc_var_ffi_borrowed[lhs_index] = rhs_ffi_borrowed_assign;
       if (rhs_borrow_assign < 0) {
       } else
         (void)(tc_record_borrow(lhs_index, rhs_borrow_assign));
@@ -13769,6 +13881,14 @@ void tc_print_hint(int code) {
   else if (code == 57)
     (void)(runtime_write_string(
         "header path must contain only alphanumeric characters, '.', '/', '_', '-'"));
+  else if (code == 65)
+    (void)(runtime_write_string("use the default borrowed C parameter or borrow/borrow_mut with a "
+                                "pointer-compatible type"));
+  else if (code == 66)
+    (void)(runtime_write_string("use borrow or borrow_mut only with string or pointer parameters"));
+  else if (code == 67)
+    (void)(runtime_write_string("do not pass an extern-returned pointer or string to memory_free; "
+                                "call the matching C release API instead"));
   else if (code == 58)
     (void)(runtime_write_string("move only an owned binding or an owned container result"));
   else if (code == 59)
@@ -13855,6 +13975,13 @@ void tc_diag(void) {
     (void)(runtime_write_string("type error: extern return type is not FFI-safe"));
   else if (tc_error_code == 57)
     (void)(runtime_write_string("type error: extern header path contains invalid characters"));
+  else if (tc_error_code == 65)
+    (void)(runtime_write_string("type error: extern move ownership is unsupported"));
+  else if (tc_error_code == 66)
+    (void)(runtime_write_string(
+        "type error: extern borrow mode requires a pointer-compatible type"));
+  else if (tc_error_code == 67)
+    (void)(runtime_write_string("type error: cannot release a borrowed extern return"));
   else if (tc_error_code == 58)
     (void)(runtime_write_string("type error: explicit move requires an owned value"));
   else if (tc_error_code == 59)
@@ -13896,6 +14023,45 @@ void tc_diag(void) {
   (void)(tc_print_source_excerpt(tc_error_pos));
   (void)(runtime_write_char(10));
 }
+void source_import_diag(void) {
+  int code = 64;
+  if (source_import_error_kind == 1)
+    code = 62;
+  else if (source_import_error_kind == 2)
+    code = 63;
+  else {
+  }
+  if (source_import_error_kind == 1)
+    (void)(runtime_write_string("import error: dependency cycle detected"));
+  else if (source_import_error_kind == 2)
+    (void)(runtime_write_string("import error: module file could not be opened"));
+  else
+    (void)(runtime_write_string("import error: malformed or invalid include directive"));
+  (void)(runtime_write_char(10));
+  (void)(runtime_write_string("diagnostic.code="));
+  (void)(runtime_write_int(code));
+  (void)(runtime_write_char(10));
+  (void)(runtime_write_string("diagnostic.file="));
+  (void)(tc_print_source_file(source_import_error_file));
+  (void)(runtime_write_char(10));
+  (void)(runtime_write_string("diagnostic.line="));
+  (void)(runtime_write_int(source_import_error_line));
+  (void)(runtime_write_char(10));
+  (void)(runtime_write_string("diagnostic.column=1\n"));
+  (void)(runtime_write_string("diagnostic.hint="));
+  if (source_import_error_kind == 1)
+    (void)(runtime_write_string("remove the import edge that closes the dependency cycle"));
+  else if (source_import_error_kind == 2)
+    (void)(runtime_write_string("check the canonical path and ensure the module exists"));
+  else
+    (void)(runtime_write_string(
+        "use include or includec followed by a quoted path and optional semicolon"));
+  (void)(runtime_write_char(10));
+  (void)(runtime_write_string("diagnostic.target="));
+  (void)(tc_print_source_file(source_import_error_target));
+  (void)(runtime_write_char(10));
+  (void)(runtime_write_string("diagnostic.excerpt=include directive\n"));
+}
 int tc_check_function_symbols(int root) {
   int a = node_a[root];
   while (a != 0) {
@@ -13932,9 +14098,54 @@ int tc_reserved_function(int name) {
   }
   return 0;
 }
+int tc_ffi_struct_safe(int name) {
+  int i = 0;
+  while (i < tc_path_count) {
+    if (tc_path_name[i] == name)
+      return 0;
+    else {
+    }
+    i = (i + 1);
+  }
+  int decl = tc_find_struct(name);
+  if ((decl == 0) || (node_kind[decl] != N_STRUCT))
+    return 0;
+  else {
+  }
+  (void)(ensure_tc_path(tc_path_count));
+  tc_path_name[tc_path_count] = name;
+  tc_path_count = (tc_path_count + 1);
+  int field = node_a[decl];
+  int safe = 1;
+  while (field != 0) {
+    if (tc_check_ffi_type(node_b[field]) == 0)
+      safe = 0;
+    else {
+    }
+    field = node_next[field];
+  }
+  tc_path_count = (tc_path_count - 1);
+  return safe;
+}
+int tc_ffi_enum_safe(int name) {
+  int decl = tc_find_enum(name);
+  if (decl == 0)
+    return 0;
+  else {
+  }
+  int member = node_a[decl];
+  while (member != 0) {
+    if (node_b[member] != 0)
+      return 0;
+    else {
+    }
+    member = node_next[member];
+  }
+  return 1;
+}
 int tc_check_ffi_type(int ty) {
   if (ty == 0)
-    return 1;
+    return 0;
   else {
   }
   int k = node_kind[ty];
@@ -13954,19 +14165,57 @@ int tc_check_ffi_type(int ty) {
     return 1;
   else {
   }
-  if (k == TY_PTR)
-    return 1;
+  if (k == TY_PTR) {
+    if (node_a[ty] == 0)
+      return 0;
+    else {
+    }
+    return tc_check_ffi_type(node_a[ty]);
+  } else {
+  }
+  if (k == TY_ARRAY) {
+    if ((node_a[ty] == 0) || (node_value[ty] < 1))
+      return 0;
+    else {
+    }
+    return tc_check_ffi_type(node_a[ty]);
+  } else {
+  }
+  if (k == TY_NAMED) {
+    int resolved_struct = tc_find_struct_ctx(node_value[ty], node_scope[ty]);
+    int resolved_enum = tc_find_enum_ctx(node_value[ty], node_scope[ty]);
+    if (resolved_struct != 0) {
+      node_value[ty] = node_value[resolved_struct];
+      return tc_ffi_struct_safe(node_value[ty]);
+    } else {
+    }
+    if (resolved_enum != 0) {
+      node_value[ty] = node_value[resolved_enum];
+      return tc_ffi_enum_safe(node_value[ty]);
+    } else {
+    }
+    return 0;
+  } else {
+  }
+  return 0;
+}
+int tc_ffi_pointer_compatible(int ty) {
+  if (ty == 0)
+    return 0;
   else {
   }
-  if (k == TY_ARRAY)
-    return 1;
-  else {
-  }
-  if (k == TY_NAMED)
+  if ((node_kind[ty] == TY_PTR) || (node_kind[ty] == TY_STRING))
     return 1;
   else {
   }
   return 0;
+}
+int tc_check_ffi_return_type(int ty) {
+  if ((ty == 0) || (node_kind[ty] == TY_ARRAY))
+    return 0;
+  else {
+  }
+  return tc_check_ffi_type(ty);
 }
 int tc_program(int root) {
   tc_root = root;
@@ -14031,6 +14280,22 @@ int tc_program(int root) {
       }
       int ffi_param = node_c[item];
       while (ffi_param != 0) {
+        int ffi_mode = node_aux[ffi_param];
+        if (ffi_mode == 1) {
+          if (tc_ok == 1) {
+            tc_error_pos = node_pos[ffi_param];
+            (void)(tc_fail(65));
+          } else {
+          }
+        } else if (((ffi_mode == 2) || (ffi_mode == 3)) &&
+                   (tc_ffi_pointer_compatible(node_b[ffi_param]) == 0)) {
+          if (tc_ok == 1) {
+            tc_error_pos = node_pos[ffi_param];
+            (void)(tc_fail(66));
+          } else {
+          }
+        } else {
+        }
         if (tc_check_ffi_type(node_b[ffi_param]) == 0) {
           if (tc_ok == 1) {
             tc_error_pos = node_pos[ffi_param];
@@ -14041,7 +14306,8 @@ int tc_program(int root) {
         }
         ffi_param = node_next[ffi_param];
       }
-      if (tc_check_ffi_type(node_b[item]) == 0) {
+      tc_path_count = 0;
+      if (tc_check_ffi_return_type(node_b[item]) == 0) {
         if (tc_ok == 1) {
           tc_error_pos = node_pos[item];
           (void)(tc_fail(56));
@@ -14172,7 +14438,9 @@ int pipeline_main(char *path) {
   } else {
   }
   if (parsed == 0) {
-    if (tc_error_code == 0) {
+    if (source_import_error_kind != 0)
+      (void)(source_import_diag());
+    else if (tc_error_code == 0) {
       (void)(runtime_write_string("parse error\n"));
       (void)(runtime_write_string("diagnostic.code=0\n"));
       (void)(runtime_write_string("diagnostic.file="));
@@ -14744,7 +15012,8 @@ void emit_runtime(int *out) {
       out,
       "static char** basalt_inc_active=NULL;static size_t "
       "basalt_inc_active_n=0,basalt_inc_active_cap=0;static char** basalt_inc_loaded=NULL;static "
-      "size_t basalt_inc_loaded_n=0,basalt_inc_loaded_cap=0;static int basalt_inc_status=0;\n"));
+      "size_t basalt_inc_loaded_n=0,basalt_inc_loaded_cap=0;static char* "
+      "basalt_inc_last_path=NULL;static int basalt_inc_status=0;\n"));
   (void)(write_string(out, "static BASALT_UNUSED int basalt_inc_eq(const char*a,const "
                            "char*b){return strcmp(a,b)==0;}\n"));
   (void)(write_string(
@@ -14757,12 +15026,14 @@ void emit_runtime(int *out) {
   (void)(write_string(out, "static BASALT_UNUSED char* basalt_inc_strdup(const char*p){size_t "
                            "n=strlen(p);char*q=(char*)malloc(n+1);if(!q)exit(2);memcpy(q,p,n+1);"
                            "return(char*)basalt_track(q);}\n"));
-  (void)(write_string(out, "static BASALT_UNUSED char* basalt_inc_realpath(const "
-                           "char*p){if(p&&p[0]==0&&basalt_inc_active_n)return "
-                           "basalt_inc_active[basalt_inc_active_n-1];\n#if "
-                           "defined(_WIN32)\nchar*q=_fullpath(NULL,p,0);if(q)return(char*)basalt_"
-                           "track(q);\n#else\nchar*q=realpath(p,NULL);if(q)return(char*)basalt_"
-                           "track(q);\n#endif\nreturn basalt_inc_strdup(p);}\n"));
+  (void)(write_string(
+      out, "static BASALT_UNUSED char* basalt_inc_realpath(const "
+           "char*p){if(p&&p[0]==0){if(basalt_inc_last_path)return "
+           "basalt_inc_last_path;if(basalt_inc_active_n)return "
+           "basalt_inc_active[basalt_inc_active_n-1];return basalt_inc_strdup(\"\");}\n#if "
+           "defined(_WIN32)\nchar*q=_fullpath(NULL,p,0);if(q)return(char*)basalt_track(q);\n#"
+           "else\nchar*q=realpath(p,NULL);if(q)return(char*)basalt_track(q);\n#endif\nreturn "
+           "basalt_inc_strdup(p);}\n"));
   (void)(write_string(out, "static BASALT_UNUSED int "
                            "basalt_inc_begin(char*p){if(basalt_inc_find(basalt_inc_active,basalt_"
                            "inc_active_n,p)!=(size_t)-1){basalt_inc_status=1;return "
@@ -14791,28 +15062,30 @@ void emit_runtime(int *out) {
            "'u'&&line[i+5]=='d'&&line[i+6]=='e'&&line[i+7]=='c'){j=i+8;while(j<n&&(line[j]==' "
            "'||line[j]==9))j++;if(j<n&&line[j]==34)return 2;}return 0;}\n"));
   (void)(write_string(out, "static BASALT_UNUSED void* basalt_include_open_root(const "
-                           "char*path){char*p=basalt_inc_realpath(path);FILE*f;if(!basalt_inc_"
-                           "begin(p))return NULL;f=fopen(p,(const "
-                           "char[]){114,0});if(!f){basalt_inc_status=3;basalt_include_close();"
-                           "return NULL;}return(void*)f;}\n"));
+                           "char*path){char*p=basalt_inc_realpath(path);FILE*f;basalt_inc_last_"
+                           "path=p;if(!basalt_inc_begin(p))return NULL;f=fopen(p,(const "
+                           "char[]){114,0});if(!f){basalt_inc_status=3;if(basalt_inc_active_n)"
+                           "basalt_inc_active_n--;return NULL;}return(void*)f;}\n"));
   (void)(write_string(
       out, "static BASALT_UNUSED void* basalt_include_open_line(int*line,int n,int mode){int "
-           "i=0,a,b,j;char*raw,*joined,*canon;FILE*f;(void)mode;while(i<n&&line[i]!=34)i++;if(i>=n)"
-           "return NULL;a=++i;while(i<n&&line[i]!=34)i++;if(i>=n)return "
+           "i=0,a,b,j;char*raw,*joined,*canon;FILE*f;(void)mode;basalt_inc_last_path=basalt_inc_"
+           "strdup(\"\");while(i<n&&line[i]!=34)i++;if(i>=n)return "
+           "NULL;a=++i;while(i<n&&line[i]!=34)i++;if(i>=n)return "
            "NULL;b=i;raw=(char*)malloc((size_t)(b-a)+1);if(!raw)exit(2);{int "
            "k;for(k=0;k<b-a;k++)raw[k]=(char)line[a+k];}raw[b-a]=0;raw=(char*)basalt_track(raw);j="
            "i+1;while(j<n&&(line[j]==32||line[j]==9))j++;if(j<n&&line[j]==59)j++;while(j<n&&(line["
            "j]==32||line[j]==9))j++;if(j!=n)return "
            "NULL;joined=basalt_inc_join(basalt_inc_active[basalt_inc_active_n-1],raw);canon=basalt_"
-           "inc_realpath(joined);if(!basalt_inc_begin(canon))return NULL;f=fopen(canon,(const "
-           "char[]){114,0});if(!f){basalt_inc_status=3;basalt_include_close();return "
-           "NULL;}return(void*)f;}\n"));
+           "inc_realpath(joined);basalt_inc_last_path=canon;if(!basalt_inc_begin(canon))return "
+           "NULL;f=fopen(canon,(const "
+           "char[]){114,0});if(!f){basalt_inc_status=3;if(basalt_inc_active_n)basalt_inc_active_n--"
+           ";return NULL;}return(void*)f;}\n"));
   (void)(write_string(
       out,
       "static BASALT_UNUSED int basalt_include_last_status(void){return basalt_inc_status;}\n"));
   (void)(write_string(out, "static BASALT_UNUSED void "
                            "basalt_include_reset_session(void){basalt_inc_active_n=0;basalt_inc_"
-                           "loaded_n=0;basalt_inc_status=0;}\n"));
+                           "loaded_n=0;basalt_inc_last_path=NULL;basalt_inc_status=0;}\n"));
   (void)(write_string(out, "static BASALT_UNUSED void* open_file(const char* p,const char* "
                            "m){return (void*)fopen(p,m);}\n"));
   (void)(write_string(

@@ -1,0 +1,10 @@
+struct FfiPair {
+  left: int;
+  right: int;
+}
+
+extern func ffi_named_pair_sum(value: FfiPair): int;
+
+func main(): int {
+  return 0;
+}

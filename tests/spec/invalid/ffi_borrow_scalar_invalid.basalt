@@ -1,0 +1,5 @@
+extern func unsafe_borrow(borrow value: int): void;
+
+func main(): int {
+  return 0;
+}

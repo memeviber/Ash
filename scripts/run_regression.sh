@@ -210,6 +210,16 @@ expect_reject() {
   printf 'PASS %s (rejected)\n' "$label"
 }
 
+expect_import_reject() {
+  local source=$1 label=$2 code=$3 diagnostic_file=$4 target=$5
+  expect_reject "$source" "$label"
+  local boot_log="$OUT/${label}.boot.log"
+  grep -Fq "diagnostic.code=${code}" "$boot_log"
+  grep -Fq "diagnostic.file=${diagnostic_file}" "$boot_log"
+  grep -Fq "diagnostic.target=${target}" "$boot_log"
+  printf 'PASS %s import diagnostic contract\n' "$label"
+}
+
 expect_collision_reject() {
   local source=$1 label=$2
   expect_reject "$source" "$label"
@@ -284,10 +294,15 @@ compile_run "$ROOT/tests/stress/map_bucket_mask_stress.basalt" map_bucket_mask_s
 compile_run "$ROOT/tests/regression/stress_containers_loop.basalt" stress_containers_loop
 compile_run "$ROOT/tests/regression/generic_map_probe.basalt" generic_map_probe
 compile_run "$ROOT/tests/regression/include_test_main.basalt" include_test_main
+expect_import_reject "$ROOT/tests/regression/include_cycle_a.basalt" include_cycle 62 "$ROOT/tests/regression/include_cycle_b.basalt" "$ROOT/tests/regression/include_cycle_a.basalt"
+expect_import_reject "$ROOT/tests/regression/include_alias_cycle_a.basalt" include_alias_cycle 62 "$ROOT/tests/regression/include_alias_cycle_b.basalt" "$ROOT/tests/regression/include_alias_cycle_a.basalt"
+expect_import_reject "$ROOT/tests/regression/include_missing_module.basalt" include_missing_module 63 "$ROOT/tests/regression/include_missing_module.basalt" "$ROOT/tests/regression/include_missing_target.basalt"
 compile_run "$ROOT/tests/regression/extern_ffi_test.basalt" extern_ffi_test
 compile_run "$ROOT/tests/regression/stress_ffi_loop.basalt" stress_ffi_loop
 compile_run "$ROOT/tests/spec/valid/controlled_ffi_valid.basalt" controlled_ffi_valid
 compile_run "$ROOT/tests/spec/valid/closure_valid.basalt" closure_valid
+compile_run "$ROOT/tests/regression/ffi_c_abi_matrix_valid.basalt" ffi_c_abi_matrix_valid
+compile_run "$ROOT/tests/regression/ffi_named_struct_valid.basalt" ffi_named_struct_valid
 if [[ "$(grep -F -c '#include "stdlib.h"' "$OUT/controlled_ffi_valid.boot.c")" -ne 1 ]]; then
   echo 'FAIL controlled_ffi_valid: duplicate controlled stdlib.h header' >&2
   exit 1
@@ -300,6 +315,18 @@ printf 'PASS controlled_ffi_valid header deduplication guard\n'
 expect_reject "$ROOT/tests/spec/invalid/ffi_unsafe_type_invalid.basalt" ffi_unsafe_type_invalid
 expect_reject "$ROOT/tests/spec/invalid/ffi_unsafe_return_invalid.basalt" ffi_unsafe_return_invalid
 expect_reject "$ROOT/tests/spec/invalid/ffi_bad_header_invalid.basalt" ffi_bad_header_invalid
+expect_reject "$ROOT/tests/spec/invalid/ffi_nested_named_invalid.basalt" ffi_nested_named_invalid
+grep -Fq 'diagnostic.code=55' "$OUT/ffi_nested_named_invalid.boot.log"
+expect_reject "$ROOT/tests/spec/invalid/ffi_nested_array_invalid.basalt" ffi_nested_array_invalid
+grep -Fq 'diagnostic.code=55' "$OUT/ffi_nested_array_invalid.boot.log"
+expect_reject "$ROOT/tests/spec/invalid/ffi_closure_tuple_invalid.basalt" ffi_closure_tuple_invalid
+grep -Fq 'diagnostic.code=55' "$OUT/ffi_closure_tuple_invalid.boot.log"
+expect_reject "$ROOT/tests/spec/invalid/ffi_move_invalid.basalt" ffi_move_invalid
+grep -Fq 'diagnostic.code=65' "$OUT/ffi_move_invalid.boot.log"
+expect_reject "$ROOT/tests/spec/invalid/ffi_borrow_scalar_invalid.basalt" ffi_borrow_scalar_invalid
+grep -Fq 'diagnostic.code=66' "$OUT/ffi_borrow_scalar_invalid.boot.log"
+expect_reject "$ROOT/tests/spec/invalid/ffi_borrowed_free_invalid.basalt" ffi_borrowed_free_invalid
+grep -Fq 'diagnostic.code=67' "$OUT/ffi_borrowed_free_invalid.boot.log"
 expect_reject "$ROOT/tests/spec/invalid/closure_escape_invalid.basalt" closure_escape_invalid
 expect_reject "$ROOT/tests/spec/invalid/closure_move_after_capture_invalid.basalt" closure_move_after_capture_invalid
 compile_run "$ROOT/tests/regression/print_pointer_test.basalt" print_pointer_test
@@ -308,6 +335,9 @@ grep -Fq '(void*)' "$OUT/print_pointer_test.boot.c"
 printf 'PASS print_pointer_test format guard\n'
 compile_run "$ROOT/tests/regression/namespace_collision.basalt" namespace_collision
 compile_run "$ROOT/tests/regression/nested_namespace_valid.basalt" nested_namespace_valid
+compile_run "$ROOT/tests/regression/namespace_lexical_parent_valid.basalt" namespace_lexical_parent_valid
+expect_reject "$ROOT/tests/regression/namespace_ambiguous_root_invalid.basalt" namespace_ambiguous_root_invalid
+grep -Fq 'diagnostic.code=41' "$OUT/namespace_ambiguous_root_invalid.boot.log"
 compile_run "$ROOT/tests/regression/namespace_global.basalt" namespace_global
 compile_run "$ROOT/tests/regression/pointer_struct_field.basalt" pointer_struct_field
 compile_run "$ROOT/tests/regression/pointer_generic_struct_test.basalt" pointer_generic_struct_test

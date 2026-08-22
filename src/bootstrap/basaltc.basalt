@@ -143,6 +143,14 @@ let source_file_name_text_len: int = 0;
 let source_file_name_text_cap: int = 0;
 let source_active_file: int = 0;
 let source_active_line: int = 1;
+let source_dep_from: int* = 0;
+let source_dep_to: int* = 0;
+let source_dep_cap: int = 0;
+let source_dep_count: int = 0;
+let source_import_error_kind: int = 0;
+let source_import_error_file: int = 0;
+let source_import_error_target: int = 0;
+let source_import_error_line: int = 1;
 let tc_diag_ascii: string = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~";
 let gen_source_pos: int = 0;
 let gen_source_epoch: int = 0;
@@ -660,14 +668,19 @@ func gen_find_spec_index(decl: int, name: int): int {
 
 func gen_substitute_type(ty: int): int {
   if ty == 0 then return 0;
-  if node_kind[ty] == TY_PARAM then { let b: int = gen_bind_find(node_value[ty]); if b != 0 then return gen_substitute_type(b); return ast_node(TY_PARAM, node_a[ty], node_b[ty], node_c[ty], node_value[ty], node_aux[ty]); }
+  if node_kind[ty] == TY_PARAM then { let b: int = gen_bind_find(node_value[ty]); if b != 0 && b != ty then return gen_substitute_type(b); return ast_node(TY_PARAM, node_a[ty], node_b[ty], node_c[ty], node_value[ty], node_aux[ty]); }
   if node_kind[ty] == TY_PTR then return ast_node(TY_PTR, gen_substitute_type(node_a[ty]), 0, 0, 0, 0);
   if node_kind[ty] == TY_ARRAY then return ast_node(TY_ARRAY, gen_substitute_type(node_a[ty]), 0, 0, node_value[ty], 0);
   if node_kind[ty] == TY_DYN_ARRAY then return ast_node(TY_DYN_ARRAY, gen_substitute_type(node_a[ty]), 0, 0, 0, 0);
   if node_kind[ty] == TY_GENERIC then {
+    let generic_name: int = node_value[ty];
+    let generic_decl: int = tc_find_struct_ctx(generic_name, node_scope[ty]);
+    if generic_decl != 0 then generic_name = node_value[generic_decl];
     let args: int = 0; let p: int = node_a[ty];
     while p != 0 { let q: int = gen_substitute_type(p); if args == 0 then args = q; else args = ast_link(args, q); p = node_next[p]; }
-    return ast_node(TY_GENERIC, args, 0, 0, node_value[ty], 0);
+    let result_generic: int = ast_node(TY_GENERIC, args, 0, 0, generic_name, 0);
+    node_scope[result_generic] = node_scope[ty];
+    return result_generic;
   }
   if node_kind[ty] == TY_FUN || node_kind[ty] == TY_CLOSURE then {
     let args2: int = 0; let p2: int = node_a[ty];
@@ -970,7 +983,7 @@ func gen_type(kind: int, child: int, size: int): void {
     code_emit(C_PUNCT, 18);
   } else if kind == TY_PARAM then {
     let b: int = gen_bind_find(node_value[child]);
-    if b != 0 then gen_type(node_kind[b], b, node_value[b]);
+    if b != 0 && b != child then gen_type(node_kind[b], b, node_value[b]);
     else code_emit(C_IDENT, sym_c_symbol(node_value[child]));
     code_emit(C_PUNCT, 18);
   } else gen_primitive_type(kind);
@@ -1511,10 +1524,11 @@ func gen_compound_assignment(lhs: int, op: int, rhs: int): void {
 func gen_for_clause(id: int): void {
   if id == 0 then return;
   if node_kind[id] == N_LET then {
-    gen_type(node_kind[node_b[id]], node_b[id], node_value[node_b[id]]);
+    let for_type: int = gen_substitute_type(node_b[id]);
+    gen_type(node_kind[for_type], for_type, node_value[for_type]);
     code_emit(C_IDENT, node_a[id]);
     code_emit(C_PUNCT, 11);
-    gen_initializer(node_b[id], node_c[id]);
+    gen_initializer(for_type, node_c[id]);
   } else if node_kind[id] == N_ASSIGN then {
     gen_assignment(node_a[id], node_b[id]);
   } else if node_kind[id] == N_COMPOUND_ASSIGN then {
@@ -1523,7 +1537,7 @@ func gen_for_clause(id: int): void {
 }
 
 func gen_fun_decl(ty: int, name: int): void {
-  let ret: int = node_b[ty];
+  let ret: int = gen_substitute_type(node_b[ty]);
   gen_type(node_kind[ret], ret, node_value[ret]);
   code_emit(C_PUNCT, 4);
   code_emit(C_PUNCT, 9);
@@ -1532,7 +1546,8 @@ func gen_fun_decl(ty: int, name: int): void {
   code_emit(C_PUNCT, 6);
   let p: int = node_a[ty];
   while p != 0 {
-    gen_type(node_kind[p], p, node_value[p]);
+    let parameter_type: int = gen_substitute_type(p);
+    gen_type(node_kind[parameter_type], parameter_type, node_value[parameter_type]);
     if node_next[p] != 0 then code_emit(C_PUNCT, 7);
     p = node_next[p];
   }
@@ -1571,10 +1586,11 @@ func gen_stmt(id: int): void {
     code_emit(C_PUNCT, 12);
     code_emit(C_NEWLINE, 0);
   } else if k == N_LET then {
+    let local_type: int = gen_substitute_type(node_b[id]);
     gen_alignment(node_aux[id]);
-    gen_decl(node_b[id], node_a[id]);
+    gen_decl(local_type, node_a[id]);
     code_emit(C_PUNCT, 11);
-    gen_initializer(node_b[id], node_c[id]);
+    gen_initializer(local_type, node_c[id]);
     code_emit(C_PUNCT, 12);
     code_emit(C_NEWLINE, 0);
   } else if k == N_ASSIGN then {
@@ -1719,6 +1735,15 @@ func gen_stmt(id: int): void {
   }
 }
 
+func gen_generic_base_equal(formal: int, actual: int): int {
+  if formal == 0 || actual == 0 then return 0;
+  if node_value[formal] == node_value[actual] then return 1;
+  let formal_decl: int = tc_find_struct_ctx(node_value[formal], node_scope[formal]);
+  let actual_decl: int = tc_find_struct_ctx(node_value[actual], node_scope[actual]);
+  if formal_decl != 0 && actual_decl != 0 && formal_decl == actual_decl then return 1;
+  return 0;
+}
+
 func gen_unify_formal(formal: int, actual: int): void {
   if formal == 0 || actual == 0 then return;
   if node_kind[formal] == TY_PARAM then {
@@ -1727,7 +1752,7 @@ func gen_unify_formal(formal: int, actual: int): void {
     return;
   }
   if node_kind[formal] == TY_GENERIC && node_kind[actual] == TY_GENERIC then {
-    if node_value[formal] != node_value[actual] then return;
+    if gen_generic_base_equal(formal, actual) == 0 then return;
     let fp: int = node_a[formal]; let ap: int = node_a[actual];
     while fp != 0 && ap != 0 { gen_unify_formal(fp, ap); fp = node_next[fp]; ap = node_next[ap]; }
     return;
@@ -3611,49 +3636,66 @@ func source_file_intern(path: string): int {
   return id;
 }
 
-func source_file_intern_include(line: int*, length: int, base_id: int): int {
-  let q: int = 0;
-  while q < length && line[q] != 34 { q = q + 1; }
-  if q == length then return base_id;
-  let a: int = q + 1;
-  let b: int = a;
-  while b < length && line[b] != 34 { b = b + 1; }
-  if b == length then return base_id;
-  let base_len: int = 0;
-  if base_id > 0 then base_len = source_file_name_len[base_id];
-  let prefix_len: int = 0;
-  let p: int = base_len;
-  let found_slash: int = 0;
-  while p > 0 && found_slash == 0 {
-    if source_file_name_text[source_file_name_start[base_id] + p - 1] == 47 || source_file_name_text[source_file_name_start[base_id] + p - 1] == 92 then { prefix_len = p; found_slash = 1; }
-    else p = p - 1;
+func ensure_source_deps(need: int): void {
+  if need < source_dep_cap then return;
+  let n: int = next_capacity(source_dep_cap, need);
+  source_dep_from = grow_ints(source_dep_from, source_dep_cap, n);
+  source_dep_to = grow_ints(source_dep_to, source_dep_cap, n);
+  source_dep_cap = n;
+}
+
+func source_dep_add(from_id: int, to_id: int): void {
+  if from_id < 1 || to_id < 1 then return;
+  let i: int = 0;
+  while i < source_dep_count {
+    if source_dep_from[i] == from_id && source_dep_to[i] == to_id then return;
+    i = i + 1;
   }
-  let raw_len: int = b - a;
-  let total: int = prefix_len + raw_len;
-  let id: int = 1;
-  while id < source_file_count {
-    if source_file_name_len[id] == total then {
+  ensure_source_deps(source_dep_count);
+  source_dep_from[source_dep_count] = from_id;
+  source_dep_to[source_dep_count] = to_id;
+  source_dep_count = source_dep_count + 1;
+}
+
+func source_dep_reaches(current: int, target: int): int {
+  let capacity: int = source_file_count + 1;
+  let work: int* = alloc_ints(capacity);
+  let seen: int* = alloc_ints(capacity);
+  let work_count: int = 1;
+  let found: int = 0;
+  work[0] = current;
+  if current >= 0 && current < capacity then seen[current] = 1;
+  while work_count > 0 && found == 0 {
+    work_count = work_count - 1;
+    let item: int = work[work_count];
+    if item == target then found = 1;
+    else {
       let i: int = 0;
-      let same: int = 1;
-      while i < prefix_len { if source_file_name_text[source_file_name_start[id] + i] != source_file_name_text[source_file_name_start[base_id] + i] then same = 0; i = i + 1; }
-      i = 0;
-      while i < raw_len { if source_file_name_text[source_file_name_start[id] + prefix_len + i] != line[a + i] then same = 0; i = i + 1; }
-      if same == 1 then return id;
+      while i < source_dep_count {
+        if source_dep_from[i] == item then {
+          let next: int = source_dep_to[i];
+          if next >= 0 && next < capacity && seen[next] == 0 then {
+            seen[next] = 1;
+            work[work_count] = next;
+            work_count = work_count + 1;
+          }
+        }
+        i = i + 1;
+      }
     }
-    id = id + 1;
   }
-  id = source_file_count;
-  ensure_source_file_names(id);
-  ensure_source_file_text(source_file_name_text_len + total);
-  source_file_name_start[id] = source_file_name_text_len;
-  source_file_name_len[id] = total;
-  let j: int = 0;
-  while j < prefix_len { source_file_name_text[source_file_name_text_len + j] = source_file_name_text[source_file_name_start[base_id] + j]; j = j + 1; }
-  j = 0;
-  while j < raw_len { source_file_name_text[source_file_name_text_len + prefix_len + j] = line[a + j]; j = j + 1; }
-  source_file_name_text_len = source_file_name_text_len + total;
-  source_file_count = source_file_count + 1;
-  return id;
+  free_ints(work);
+  free_ints(seen);
+  return found;
+}
+
+func source_import_fail(kind: int, file_id: int, target_id: int, line: int): void {
+  if include_ok == 0 then return;
+  include_ok = 0;
+  source_import_error_kind = kind;
+  source_import_error_file = file_id;
+  source_import_error_target = target_id;
+  source_import_error_line = line;
 }
 
 func source_reset(): void {
@@ -3663,6 +3705,11 @@ func source_reset(): void {
   source_file_name_text_len = 0;
   source_active_file = 0;
   source_active_line = 1;
+  source_dep_count = 0;
+  source_import_error_kind = 0;
+  source_import_error_file = 0;
+  source_import_error_target = 0;
+  source_import_error_line = 1;
 }
 
 func source_put(c: int): void {
@@ -3839,9 +3886,7 @@ func ast_decl_name(name: int): int {
 }
 
 func ast_type_name(name: int): int {
-  if ast_generic_param(name) == 1 then return name;
-  if ast_namespace_scope == 0 then return name;
-  return sym_qualified(ast_namespace_scope, name);
+  return name;
 }
 
 func sym_intern(start: int, length: int, kind: int, scope: int): int {
@@ -4273,26 +4318,58 @@ func include_process_line(line: int*, length: int): void {
     let i: int = 0;
     while i < length { source_put(line[i]); i = i + 1; }
     source_put(10);
-  } else {
-    let child_file: int = source_file_intern_include(line, length, source_active_file);
-    let child: int* = basalt_include_open_line(line, length, mode);
-    if child == 0 then {
-      if basalt_include_last_status() == 1 then include_ok = 0;
+  } else if mode == 1 then {
+    let parent_file: int = source_active_file;
+    let parent_line: int = source_active_line;
+    let child_module: int* = basalt_include_open_line(line, length, mode);
+    let status_module: int = basalt_include_last_status();
+    let target_path: string = basalt_inc_realpath("");
+    let target_file: int = 0;
+    if target_path[0] != '\0' then target_file = source_file_intern(target_path);
+    if target_file == 0 then {
+      source_import_fail(3, parent_file, 0, parent_line);
     } else {
-      if mode == 1 then {
-        let parent_file: int = source_active_file;
-        let parent_line: int = source_active_line;
-        source_active_file = child_file;
+      source_dep_add(parent_file, target_file);
+      if source_dep_reaches(target_file, parent_file) == 1 then source_import_fail(1, parent_file, target_file, parent_line);
+      else if child_module == 0 then {
+        if status_module == 2 then { }
+        else if status_module == 1 then source_import_fail(1, parent_file, target_file, parent_line);
+        else if status_module == 3 then source_import_fail(2, parent_file, target_file, parent_line);
+        else source_import_fail(3, parent_file, target_file, parent_line);
+      } else {
+        source_active_file = target_file;
         source_active_line = 1;
-        include_expand_handle(child);
+        include_expand_handle(child_module);
         source_active_file = parent_file;
         source_active_line = parent_line;
-      } else {
-        let c: int = read_char(child);
-        while c != (0 - 1) { c_source_put(c); c = read_char(child); }
+        close_file(child_module);
+        basalt_include_close();
       }
-      close_file(child);
-      basalt_include_close();
+    }
+  } else {
+    let parent_file: int = source_active_file;
+    let parent_line: int = source_active_line;
+    let child_c: int* = basalt_include_open_line(line, length, mode);
+    let status_c: int = basalt_include_last_status();
+    let target_path_c: string = basalt_inc_realpath("");
+    let target_file_c: int = 0;
+    if target_path_c[0] != '\0' then target_file_c = source_file_intern(target_path_c);
+    if target_file_c == 0 then {
+      source_import_fail(3, parent_file, 0, parent_line);
+    } else {
+      source_dep_add(parent_file, target_file_c);
+      if source_dep_reaches(target_file_c, parent_file) == 1 then source_import_fail(1, parent_file, target_file_c, parent_line);
+      else if child_c == 0 then {
+        if status_c == 2 then { }
+        else if status_c == 1 then source_import_fail(1, parent_file, target_file_c, parent_line);
+        else if status_c == 3 then source_import_fail(2, parent_file, target_file_c, parent_line);
+        else source_import_fail(3, parent_file, target_file_c, parent_line);
+      } else {
+        let c: int = read_char(child_c);
+        while c != (0 - 1) { c_source_put(c); c = read_char(child_c); }
+        close_file(child_c);
+        basalt_include_close();
+      }
     }
   }
 }
@@ -4306,7 +4383,7 @@ func include_expand_handle(handle: int*): void {
     if c == 10 then { include_process_line(line, length); length = 0; line_number = line_number + 1; source_active_line = line_number; }
     else {
       if length < include_line_cap then { line[length] = c; length = length + 1; }
-      else include_ok = 0;
+      else source_import_fail(3, source_active_file, 0, line_number);
     }
     c = read_char(handle);
   }
@@ -4436,10 +4513,13 @@ func load_tokens_from_file(path: string): void {
   c_source_reset();
   ffi_header_count = 0;
   include_ok = 1;
+  source_import_error_kind = 0;
   let handle: int* = basalt_include_open_root(path);
-  if handle == 0 then include_ok = 0;
-  else {
-    source_active_file = source_file_intern(path);
+  let root_id: int = source_file_intern(basalt_inc_realpath(path));
+  if handle == 0 then {
+    source_import_fail(2, 0, root_id, 1);
+  } else {
+    source_active_file = root_id;
     source_active_line = 1;
     include_expand_handle(handle);
     close_file(handle);
@@ -4497,8 +4577,11 @@ let tc_var_param: int* = 0;
 let tc_var_mode: int* = 0;
 let tc_var_closure_caps: int* = 0;
 let tc_var_closure_moved: int* = 0;
+let tc_var_ffi_borrowed: int* = 0;
 let tc_last_var_type: int = 0;
 let tc_last_var_owned: int = 0;
+let tc_last_var_ffi_borrowed: int = 0;
+let tc_expr_ffi_borrowed: int = 0;
 let tc_last_var_moved: int = 0;
 let tc_last_var_index: int = 0;
 let tc_expr_borrow_source: int = 0 - 1;
@@ -4540,6 +4623,7 @@ func ensure_tc_vars(need: int): void {
   tc_var_mode = grow_ints(tc_var_mode, tc_var_cap, n);
   tc_var_closure_caps = grow_ints(tc_var_closure_caps, tc_var_cap, n);
   tc_var_closure_moved = grow_ints(tc_var_closure_moved, tc_var_cap, n);
+  tc_var_ffi_borrowed = grow_ints(tc_var_ffi_borrowed, tc_var_cap, n);
   tc_var_cap = n;
 }
 
@@ -4788,6 +4872,8 @@ func tc_match_generic(formal: int, actual: int): void {
   if formal == 0 || actual == 0 then { tc_fail_types(12, 0, 0); return; }
   if node_kind[formal] == TY_PARAM then { if tc_bind_add(node_value[formal], actual) == 0 then return; return; }
   if node_kind[formal] == TY_GENERIC then {
+    tc_check_type(formal);
+    tc_check_type(actual);
     if node_kind[actual] != TY_GENERIC || node_value[formal] != node_value[actual] then { tc_fail_types(12, node_kind[formal], node_kind[actual]); return; }
     let f: int = node_a[formal]; let a: int = node_a[actual];
     while f != 0 && a != 0 { tc_match_generic(f, a); f = node_next[f]; a = node_next[a]; }
@@ -4905,18 +4991,6 @@ func tc_ptr_diff_ok(a_kind: int, a_elem_kind: int, a_elem_name: int, b_kind: int
   return 1;
 }
 
-func sym_suffix_equal(full: int, base: int): int {
-  if sym_len[full] == sym_len[base] then {
-    let i: int = 0; while i < sym_len[base] { if source[sym_start[full] + i] != source[sym_start[base] + i] then return 0; i = i + 1; }
-    return 1;
-  }
-  if sym_len[full] < sym_len[base] + 3 then return 0;
-  let start: int = sym_start[full] + sym_len[full] - sym_len[base];
-  if source[start - 1] != 58 || source[start - 2] != 58 then return 0;
-  let j: int = 0; while j < sym_len[base] { if source[start + j] != source[sym_start[base] + j] then return 0; j = j + 1; }
-  return 1;
-}
-
 func tc_find_struct(name: int): int {
   let item: int = node_a[tc_root];
   while item != 0 {
@@ -4929,18 +5003,15 @@ func tc_find_struct(name: int): int {
 func tc_find_struct_ctx(name: int, ns: int): int {
   let exact: int = tc_find_struct(name);
   if exact != 0 then return exact;
-  if ns == 0 then {
-    let broad: int = node_a[tc_root];
-    while broad != 0 {
-      if (node_kind[broad] == N_STRUCT || node_kind[broad] == N_GENERIC_STRUCT) && sym_suffix_equal(node_value[broad], name) == 1 then return broad;
-      broad = node_next[broad];
-    }
-    return 0;
-  }
-  let item: int = node_a[tc_root];
-  while item != 0 {
-    if (node_kind[item] == N_STRUCT || node_kind[item] == N_GENERIC_STRUCT) && node_scope[item] == ns && sym_suffix_equal(node_value[item], name) == 1 then return item;
-    item = node_next[item];
+  if ns == 0 then return 0;
+  let scope: int = ns;
+  while scope != 0 {
+    let candidate: int = sym_qualified(scope, name);
+    let item: int = tc_find_struct(candidate);
+    if item != 0 then return item;
+    let split: int = sym_find_last_scope(scope);
+    if split == 0 then scope = 0;
+    else scope = sym_prefix_scope(scope, split);
   }
   return 0;
 }
@@ -4957,18 +5028,15 @@ func tc_find_enum(name: int): int {
 func tc_find_enum_ctx(name: int, ns: int): int {
   let exact: int = tc_find_enum(name);
   if exact != 0 then return exact;
-  if ns == 0 then {
-    let broad: int = node_a[tc_root];
-    while broad != 0 {
-      if node_kind[broad] == N_ENUM && sym_suffix_equal(node_value[broad], name) == 1 then return broad;
-      broad = node_next[broad];
-    }
-    return 0;
-  }
-  let item: int = node_a[tc_root];
-  while item != 0 {
-    if node_kind[item] == N_ENUM && node_scope[item] == ns && sym_suffix_equal(node_value[item], name) == 1 then return item;
-    item = node_next[item];
+  if ns == 0 then return 0;
+  let scope: int = ns;
+  while scope != 0 {
+    let candidate: int = sym_qualified(scope, name);
+    let item: int = tc_find_enum(candidate);
+    if item != 0 then return item;
+    let split: int = sym_find_last_scope(scope);
+    if split == 0 then scope = 0;
+    else scope = sym_prefix_scope(scope, split);
   }
   return 0;
 }
@@ -5003,11 +5071,16 @@ func tc_check_type(ty: int): void {
   if ty == 0 then { tc_fail(1); return; }
   let k: int = node_kind[ty];
   if k == TY_NAMED then {
-    if tc_named_exists_ctx(node_value[ty], node_scope[ty]) == 0 then tc_fail(2);
+    let resolved_struct: int = tc_find_struct_ctx(node_value[ty], node_scope[ty]);
+    let resolved_enum: int = tc_find_enum_ctx(node_value[ty], node_scope[ty]);
+    if resolved_struct != 0 then node_value[ty] = node_value[resolved_struct];
+    else if resolved_enum != 0 then node_value[ty] = node_value[resolved_enum];
+    else tc_fail(2);
   } else if k == TY_GENERIC then {
     let s: int = tc_find_struct_ctx(node_value[ty], node_scope[ty]);
     if s == 0 || node_kind[s] != N_GENERIC_STRUCT then tc_fail(2);
     else {
+      node_value[ty] = node_value[s];
       if tc_generic_arity(s) != tc_generic_arg_count(ty) then tc_fail(37);
       let a: int = node_a[ty]; while a != 0 { tc_check_type(a); a = node_next[a]; }
     }
@@ -5205,6 +5278,7 @@ func tc_add_var(name: int, kind: int, named: int, elem_kind: int, elem_name: int
   tc_var_mode[tc_var_count] = 0;
   tc_var_closure_caps[tc_var_count] = 0;
   tc_var_closure_moved[tc_var_count] = 0;
+  tc_var_ffi_borrowed[tc_var_count] = 0;
   tc_last_var_index = tc_var_count;
   sym_type[name] = kind;
   sym_elem_kind[name] = elem_kind;
@@ -5216,6 +5290,7 @@ func tc_lookup_var(name: int): int {
   tc_last_var_type = 0;
   tc_last_var_owned = 0;
   tc_last_var_moved = 0;
+  tc_last_var_ffi_borrowed = 0;
   tc_expr_borrow_source = 0 - 1;
   tc_expr_owner_source = 0 - 1;
   tc_expr_is_owned = 0;
@@ -5236,6 +5311,7 @@ func tc_lookup_var(name: int): int {
       }
       tc_last_var_owned = tc_var_owned[i];
       tc_last_var_moved = tc_var_moved[i];
+      tc_last_var_ffi_borrowed = tc_var_ffi_borrowed[i];
       tc_expr_borrow_source = tc_var_borrow_source[i];
       tc_last_var_index = i;
       return 1;
@@ -5364,7 +5440,7 @@ func tc_attach_closure_caps(destination: int, caps: int): void {
 }
 
 func tc_expr(id: int): void {
-  tc_kind = TY_INT; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0; tc_result_type = 0; tc_expr_borrow_source = 0 - 1; tc_expr_owner_source = 0 - 1; tc_expr_is_owned = 0;
+  tc_kind = TY_INT; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0; tc_result_type = 0; tc_expr_borrow_source = 0 - 1; tc_expr_owner_source = 0 - 1; tc_expr_is_owned = 0; tc_expr_ffi_borrowed = 0;
   if id != 0 && tc_ok == 1 then tc_error_pos = node_pos[id];
   if id == 0 then { tc_fail(4); return; }
   let k: int = node_kind[id];
@@ -5496,7 +5572,7 @@ func tc_expr(id: int): void {
     return;
   }
   if k == N_VAR then {
-    if tc_lookup_var(node_value[id]) == 1 then { if tc_last_var_moved == 1 then { if tc_var_closure_moved[tc_last_var_index] == 1 then tc_fail(61); else tc_fail(33); } tc_expr_borrow_source = tc_var_borrow_source[tc_last_var_index]; if tc_last_var_owned == 1 then tc_expr_owner_source = tc_last_var_index; tc_expr_is_owned = 0; tc_result_type = tc_last_var_type; if node_type[id] == 0 then node_type[id] = tc_last_var_type; node_aux[id] = tc_last_var_type; return; }
+    if tc_lookup_var(node_value[id]) == 1 then { if tc_last_var_moved == 1 then { if tc_var_closure_moved[tc_last_var_index] == 1 then tc_fail(61); else tc_fail(33); } tc_expr_borrow_source = tc_var_borrow_source[tc_last_var_index]; tc_expr_ffi_borrowed = tc_last_var_ffi_borrowed; if tc_last_var_owned == 1 then tc_expr_owner_source = tc_last_var_index; tc_expr_is_owned = 0; tc_result_type = tc_last_var_type; if node_type[id] == 0 then node_type[id] = tc_last_var_type; node_aux[id] = tc_last_var_type; return; }
     let e: int = tc_find_enum_value(node_value[id]);
     if e != 0 then { tc_kind = TY_NAMED; tc_name = e; tc_result_type = ast_node(TY_NAMED, 0, 0, 0, e, 0); node_aux[id] = tc_result_type; return; }
     tc_error_symbol = node_value[id]; tc_fail(5); return;
@@ -5655,6 +5731,7 @@ func tc_expr(id: int): void {
       if aa == 0 || node_next[aa] != 0 then { tc_fail(13); return; }
       tc_expr(aa);
       if tc_kind != TY_PTR then { tc_fail(8); return; }
+      if tc_expr_ffi_borrowed == 1 then { tc_fail(67); return; }
       tc_kind = TY_VOID; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0; tc_result_type = 0; return;
     }
     if btag == BI_TC_SYS_COMPILE then {
@@ -5891,7 +5968,9 @@ func tc_expr(id: int): void {
       arg = node_next[arg]; p = node_next[p];
     }
     if arg != 0 || p != 0 then tc_fail(13);
-    tc_type_node(node_b[fun_node]); return;
+    tc_type_node(node_b[fun_node]);
+    if node_kind[fun_node] == N_EXTERN && (tc_kind == TY_PTR || tc_kind == TY_STRING) then tc_expr_ffi_borrowed = 1;
+    return;
   }
   if k == N_INDIRECT_CALL then {
     tc_expr(node_a[id]);
@@ -5961,14 +6040,37 @@ func tc_find_function(name: int): int {
   return 0;
 }
 
+func sym_find_last_scope(name: int): int {
+  let i: int = sym_len[name] - 1;
+  while i > 1 {
+    if source[sym_start[name] + i] == 58 && source[sym_start[name] + i - 1] == 58 then return i - 1;
+    i = i - 1;
+  }
+  return 0;
+}
+
+func sym_prefix_scope(name: int, length: int): int {
+  if length <= 0 then return 0;
+  let start: int = source_len + sym_text_len;
+  let i: int = 0;
+  while i < length { ensure_source(start + i); source[start + i] = source[sym_start[name] + i]; i = i + 1; }
+  let id: int = sym_intern(start, length, L_ID, 0);
+  sym_text_len = sym_text_len + length;
+  return id;
+}
+
 func tc_find_function_ctx(name: int, ns: int): int {
   let exact: int = tc_find_function(name);
   if exact != 0 then return exact;
   if ns == 0 then return 0;
-  let item: int = node_a[tc_root];
-  while item != 0 {
-    if (node_kind[item] == N_FUNC || node_kind[item] == N_GENERIC_FUNC || node_kind[item] == N_EXTERN) && node_scope[item] == ns && sym_suffix_equal(node_value[item], name) == 1 then return item;
-    item = node_next[item];
+  let scope: int = ns;
+  while scope != 0 {
+    let candidate: int = sym_qualified(scope, name);
+    let item: int = tc_find_function(candidate);
+    if item != 0 then return item;
+    let split: int = sym_find_last_scope(scope);
+    if split == 0 then scope = 0;
+    else scope = sym_prefix_scope(scope, split);
   }
   return 0;
 }
@@ -6016,7 +6118,7 @@ func tc_match_variant_member(decl: int, name: int): int {
   while field != 0 {
     if node_a[field] == name then return field;
     let qualified: int = sym_qualified(node_value[decl], node_a[field]);
-    if qualified == name || sym_suffix_equal(qualified, name) == 1 then return field;
+    if qualified == name then return field;
     field = node_next[field];
   }
   return 0;
@@ -6194,14 +6296,16 @@ func tc_stmt(id: int, expected_kind: int, expected_name: int): void {
     tc_type_node(node_b[id]); let ck: int = tc_kind; let cn: int = tc_name; let ce: int = tc_elem_kind; let cen: int = tc_elem_name;
     tc_mark_float_expr(node_c[id], ck);
     tc_expr(node_c[id]);
+    let const_ffi_borrowed: int = tc_expr_ffi_borrowed;
     if tc_literal_fits(node_c[id], ck) == 0 then tc_fail(54);
     if tc_same_full(ck, cn, ce, cen, tc_kind, tc_name, tc_elem_kind, tc_elem_name) == 0 then { if node_kind[node_c[id]] != N_INT || node_value[node_c[id]] != 0 then if node_kind[node_c[id]] != N_NULL then tc_fail(30); }
     tc_add_var(node_a[id], ck, cn, ce, cen, node_b[id]); sym_type[node_a[id]] = ck + 100;
+    tc_var_ffi_borrowed[tc_last_var_index] = const_ffi_borrowed;
   } else   if k == N_LET then {
     tc_type_node(node_b[id]); let dk: int = tc_kind; let dn: int = tc_name; let de: int = tc_elem_kind; let den: int = tc_elem_name;
     tc_mark_float_expr(node_c[id], dk);
     tc_expr(node_c[id]);
-    let ek: int = tc_kind; let en: int = tc_name; let ee: int = tc_elem_kind; let een: int = tc_elem_name; let rhs_borrow: int = tc_expr_borrow_source;
+    let ek: int = tc_kind; let en: int = tc_name; let ee: int = tc_elem_kind; let een: int = tc_elem_name; let rhs_borrow: int = tc_expr_borrow_source; let rhs_ffi_borrowed: int = tc_expr_ffi_borrowed;
     if tc_is_owner_kind(dk) == 1 && node_kind[node_c[id]] == N_VAR then tc_fail(40);
 
     if tc_literal_fits(node_c[id], dk) == 0 then tc_fail(54);
@@ -6210,6 +6314,7 @@ func tc_stmt(id: int, expected_kind: int, expected_name: int): void {
     }
     if dk == TY_DYN_ARRAY && node_kind[node_c[id]] == N_VAR then tc_move_value(node_c[id]);
     tc_add_var(node_a[id], dk, dn, de, den, node_b[id]);
+    tc_var_ffi_borrowed[tc_last_var_index] = rhs_ffi_borrowed;
     if tc_is_owner_kind(dk) == 1 || tc_owned_initializer(node_c[id]) == 1 then tc_var_owned[tc_last_var_index] = 1;
     if dk == TY_CLOSURE && node_kind[node_c[id]] == N_CLOSURE then tc_attach_closure_caps(tc_last_var_index, node_a[node_c[id]]);
     if dk == TY_PTR then { if rhs_borrow < 0 then { } else tc_record_borrow(tc_last_var_index, rhs_borrow); }
@@ -6220,6 +6325,7 @@ func tc_stmt(id: int, expected_kind: int, expected_name: int): void {
     tc_mark_float_expr(node_b[id], lk);
     tc_expr(node_b[id]);
     let rhs_borrow_assign: int = tc_expr_borrow_source;
+    let rhs_ffi_borrowed_assign: int = tc_expr_ffi_borrowed;
     if k == N_COMPOUND_ASSIGN then {
       let combined: int = ast_node(N_BINOP, node_a[id], node_b[id], 0, node_value[id], 0);
       tc_expr(combined);
@@ -6234,6 +6340,7 @@ func tc_stmt(id: int, expected_kind: int, expected_name: int): void {
     if tc_ok == 1 && node_kind[node_a[id]] == N_VAR && lk == TY_PTR then {
       if lhs_borrow < 0 then { } else if lhs_borrow < tc_var_count then { if tc_var_borrow_mut[lhs_borrow] > 0 then tc_var_borrow_mut[lhs_borrow] = tc_var_borrow_mut[lhs_borrow] - 1; else if tc_var_borrow_count[lhs_borrow] > 0 then tc_var_borrow_count[lhs_borrow] = tc_var_borrow_count[lhs_borrow] - 1; }
       tc_var_borrow_source[lhs_index] = 0 - 1;
+      tc_var_ffi_borrowed[lhs_index] = rhs_ffi_borrowed_assign;
       if rhs_borrow_assign < 0 then { } else tc_record_borrow(lhs_index, rhs_borrow_assign);
     }
   } else if k == N_DEFER then {
@@ -6410,6 +6517,9 @@ func tc_print_hint(code: int): void {
   else if code == 55 then runtime_write_string("use only scalar, pointer, fixed-array, or named struct types in extern parameters");
   else if code == 56 then runtime_write_string("use only scalar, pointer, fixed-array, or named struct types in extern return type");
   else if code == 57 then runtime_write_string("header path must contain only alphanumeric characters, '.', '/', '_', '-'");
+  else if code == 65 then runtime_write_string("use the default borrowed C parameter or borrow/borrow_mut with a pointer-compatible type");
+  else if code == 66 then runtime_write_string("use borrow or borrow_mut only with string or pointer parameters");
+  else if code == 67 then runtime_write_string("do not pass an extern-returned pointer or string to memory_free; call the matching C release API instead");
   else if code == 58 then runtime_write_string("move only an owned binding or an owned container result");
   else if code == 59 then runtime_write_string("pass a tracked variable or address expression to a borrow parameter");
   else if code == 60 then runtime_write_string("keep a borrowed capture within the source binding's lexical lifetime");
@@ -6453,6 +6563,9 @@ func tc_diag(): void {
   else if tc_error_code == 55 then runtime_write_string("type error: extern parameter type is not FFI-safe");
   else if tc_error_code == 56 then runtime_write_string("type error: extern return type is not FFI-safe");
   else if tc_error_code == 57 then runtime_write_string("type error: extern header path contains invalid characters");
+  else if tc_error_code == 65 then runtime_write_string("type error: extern move ownership is unsupported");
+  else if tc_error_code == 66 then runtime_write_string("type error: extern borrow mode requires a pointer-compatible type");
+  else if tc_error_code == 67 then runtime_write_string("type error: cannot release a borrowed extern return");
   else if tc_error_code == 58 then runtime_write_string("type error: explicit move requires an owned value");
   else if tc_error_code == 59 then runtime_write_string("type error: borrow parameter requires a tracked source");
   else if tc_error_code == 60 then runtime_write_string("type error: closure capture escapes its source lifetime");
@@ -6487,6 +6600,35 @@ func tc_diag(): void {
   tc_print_source_excerpt(tc_error_pos);
   runtime_write_char('\n');
 }
+func source_import_diag(): void {
+  let code: int = 64;
+  if source_import_error_kind == 1 then code = 62;
+  else if source_import_error_kind == 2 then code = 63;
+  if source_import_error_kind == 1 then runtime_write_string("import error: dependency cycle detected");
+  else if source_import_error_kind == 2 then runtime_write_string("import error: module file could not be opened");
+  else runtime_write_string("import error: malformed or invalid include directive");
+  runtime_write_char('\n');
+  runtime_write_string("diagnostic.code=");
+  runtime_write_int(code);
+  runtime_write_char('\n');
+  runtime_write_string("diagnostic.file=");
+  tc_print_source_file(source_import_error_file);
+  runtime_write_char('\n');
+  runtime_write_string("diagnostic.line=");
+  runtime_write_int(source_import_error_line);
+  runtime_write_char('\n');
+  runtime_write_string("diagnostic.column=1\n");
+  runtime_write_string("diagnostic.hint=");
+  if source_import_error_kind == 1 then runtime_write_string("remove the import edge that closes the dependency cycle");
+  else if source_import_error_kind == 2 then runtime_write_string("check the canonical path and ensure the module exists");
+  else runtime_write_string("use include or includec followed by a quoted path and optional semicolon");
+  runtime_write_char('\n');
+  runtime_write_string("diagnostic.target=");
+  tc_print_source_file(source_import_error_target);
+  runtime_write_char('\n');
+  runtime_write_string("diagnostic.excerpt=include directive\n");
+}
+
 func tc_check_function_symbols(root: int): int {
   let a: int = node_a[root];
   while a != 0 {
@@ -6509,17 +6651,66 @@ func tc_reserved_function(name: int): int {
   if bi_has_flag(name, BI_FLAG_RESERVED) == 1 then return 1;
   return 0;
 }
+func tc_ffi_struct_safe(name: int): int {
+  let i: int = 0;
+  while i < tc_path_count { if tc_path_name[i] == name then return 0; i = i + 1; }
+  let decl: int = tc_find_struct(name);
+  if decl == 0 || node_kind[decl] != N_STRUCT then return 0;
+  ensure_tc_path(tc_path_count);
+  tc_path_name[tc_path_count] = name;
+  tc_path_count = tc_path_count + 1;
+  let field: int = node_a[decl];
+  let safe: int = 1;
+  while field != 0 {
+    if tc_check_ffi_type(node_b[field]) == 0 then safe = 0;
+    field = node_next[field];
+  }
+  tc_path_count = tc_path_count - 1;
+  return safe;
+}
+
+func tc_ffi_enum_safe(name: int): int {
+  let decl: int = tc_find_enum(name);
+  if decl == 0 then return 0;
+  let member: int = node_a[decl];
+  while member != 0 { if node_b[member] != 0 then return 0; member = node_next[member]; }
+  return 1;
+}
+
 func tc_check_ffi_type(ty: int): int {
-  if ty == 0 then return 1;
+  if ty == 0 then return 0;
   let k: int = node_kind[ty];
   if k == TY_INT || k == TY_BOOL || k == TY_CHAR || k == TY_STRING then return 1;
   if k == TY_VOID || k == TY_FLOAT || k == TY_DOUBLE then return 1;
   if k == TY_LONG || k == TY_LLONG then return 1;
   if tc_is_fixed_integer_kind(k) == 1 then return 1;
-  if k == TY_PTR then return 1;
-  if k == TY_ARRAY then return 1;
-  if k == TY_NAMED then return 1;
+  if k == TY_PTR then {
+    if node_a[ty] == 0 then return 0;
+    return tc_check_ffi_type(node_a[ty]);
+  }
+  if k == TY_ARRAY then {
+    if node_a[ty] == 0 || node_value[ty] < 1 then return 0;
+    return tc_check_ffi_type(node_a[ty]);
+  }
+  if k == TY_NAMED then {
+    let resolved_struct: int = tc_find_struct_ctx(node_value[ty], node_scope[ty]);
+    let resolved_enum: int = tc_find_enum_ctx(node_value[ty], node_scope[ty]);
+    if resolved_struct != 0 then { node_value[ty] = node_value[resolved_struct]; return tc_ffi_struct_safe(node_value[ty]); }
+    if resolved_enum != 0 then { node_value[ty] = node_value[resolved_enum]; return tc_ffi_enum_safe(node_value[ty]); }
+    return 0;
+  }
   return 0;
+}
+
+func tc_ffi_pointer_compatible(ty: int): int {
+  if ty == 0 then return 0;
+  if node_kind[ty] == TY_PTR || node_kind[ty] == TY_STRING then return 1;
+  return 0;
+}
+
+func tc_check_ffi_return_type(ty: int): int {
+  if ty == 0 || node_kind[ty] == TY_ARRAY then return 0;
+  return tc_check_ffi_type(ty);
 }
 func tc_program(root: int): int {
   tc_root = root; tc_ok = 1; tc_error_code = 0; tc_error_pos = 0 - 1; tc_error_expected_kind = 0; tc_error_found_kind = 0; tc_var_count = 0; tc_scope_count = 0; tc_path_count = 0; tc_loop_depth = 0;
@@ -6543,12 +6734,19 @@ func tc_program(root: int): int {
       }
       let ffi_param: int = node_c[item];
       while ffi_param != 0 {
+        let ffi_mode: int = node_aux[ffi_param];
+        if ffi_mode == 1 then {
+          if tc_ok == 1 then { tc_error_pos = node_pos[ffi_param]; tc_fail(65); }
+        } else if (ffi_mode == 2 || ffi_mode == 3) && tc_ffi_pointer_compatible(node_b[ffi_param]) == 0 then {
+          if tc_ok == 1 then { tc_error_pos = node_pos[ffi_param]; tc_fail(66); }
+        }
         if tc_check_ffi_type(node_b[ffi_param]) == 0 then {
           if tc_ok == 1 then { tc_error_pos = node_pos[ffi_param]; tc_fail(55); }
         }
         ffi_param = node_next[ffi_param];
       }
-      if tc_check_ffi_type(node_b[item]) == 0 then {
+      tc_path_count = 0;
+      if tc_check_ffi_return_type(node_b[item]) == 0 then {
         if tc_ok == 1 then { tc_error_pos = node_pos[item]; tc_fail(56); }
       }
     }
@@ -6593,7 +6791,8 @@ func pipeline_main(path: string): int {
     if code_count != stable_count then parsed = 0;
   }
   if parsed == 0 then {
-    if tc_error_code == 0 then {
+    if source_import_error_kind != 0 then source_import_diag();
+    else if tc_error_code == 0 then {
       runtime_write_string("parse error\n");
       runtime_write_string("diagnostic.code=0\n");
       runtime_write_string("diagnostic.file=");
@@ -6824,20 +7023,20 @@ func emit_c_token(out: int*, kind: int, value: int): void {
 func emit_runtime(out: int*): void {
   write_string(out, "#if defined(_WIN32)\n#include <direct.h>\n#else\n#define _POSIX_C_SOURCE 200809L\n#define _XOPEN_SOURCE 700\n#endif\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n#include <stdint.h>\n#include <stddef.h>\n#include <limits.h>\n#include <errno.h>\n#include <stdatomic.h>\n#if defined(_WIN32)\n#include <windows.h>\n#include <process.h>\n#else\n#include <unistd.h>\n#include <fcntl.h>\n#include <poll.h>\n#include <sys/types.h>\n#include <sys/wait.h>\n#endif\n#if defined(_WIN32) && defined(__MINGW32__) && !defined(BASALT_USE_NATIVE_C11_THREADS)\n#include <pthread.h>\n#include <sched.h>\ntypedef pthread_t thrd_t;\ntypedef int (*basalt_thrd_start_t)(void*);\ntypedef struct basalt_thrd_start_context { basalt_thrd_start_t entry; void* argument; int result; } basalt_thrd_start_context;\nstatic void* basalt_thrd_start(void* raw){basalt_thrd_start_context* context=(basalt_thrd_start_context*)raw;context->result=context->entry(context->argument);return raw;}\nstatic int basalt_thrd_create(thrd_t* thread,basalt_thrd_start_t entry,void* argument){basalt_thrd_start_context* context;int status;context=(basalt_thrd_start_context*)malloc(sizeof(*context));if(!context)return 1;context->entry=entry;context->argument=argument;context->result=0;status=pthread_create(thread,NULL,basalt_thrd_start,context);if(status!=0)free(context);return status;}\nstatic int basalt_thrd_join(thrd_t thread,int* result){void* raw=NULL;int status=pthread_join(thread,&raw);if(status==0){basalt_thrd_start_context* context=(basalt_thrd_start_context*)raw;if(result)*result=context->result;free(context);}return status;}\n#define thrd_success 0\n#define thrd_create(thread,entry,argument) basalt_thrd_create((thread),(entry),(argument))\n#define thrd_join(thread,result) basalt_thrd_join((thread),(result))\n#define thrd_yield() sched_yield()\n#else\n#include <threads.h>\n#endif\n#if defined(_WIN32) && defined(__MINGW32__)\n#ifndef BASALT_ALIGNED_ALLOC_DECLARED\n#define BASALT_ALIGNED_ALLOC_DECLARED 1\nvoid *aligned_alloc(size_t alignment,size_t size);\n#endif\n#endif\n#if defined(__GNUC__) || defined(__clang__)\n#define BASALT_UNUSED __attribute__((unused))\n#else\n#define BASALT_UNUSED\n#endif\nstatic void basalt_panic(int code){(void)code;exit(2);}\nstatic size_t basalt_checked_bytes(int count,size_t elem_size){if(count<0)basalt_panic(1);if(elem_size!=0&&(size_t)count>(size_t)-1/elem_size)basalt_panic(1);return(size_t)count*elem_size;}\nstatic void* basalt_track(void*);static void basalt_release(void*);\n");
   write_string(out, "typedef struct basalt_atomic_int { atomic_int value; } basalt_atomic_int;\nstatic BASALT_UNUSED void* basalt_atomic_make(int initial){basalt_atomic_int*a=(basalt_atomic_int*)calloc(1,sizeof(*a));if(!a)basalt_panic(5);atomic_init(&a->value,initial);return basalt_track(a);}\nstatic BASALT_UNUSED int basalt_atomic_load(void*p){basalt_atomic_int*a=(basalt_atomic_int*)p;if(!a)basalt_panic(4);return atomic_load_explicit(&a->value,memory_order_acquire);}\nstatic BASALT_UNUSED void basalt_atomic_store(void*p,int value){basalt_atomic_int*a=(basalt_atomic_int*)p;if(!a)basalt_panic(4);atomic_store_explicit(&a->value,value,memory_order_release);}\nstatic BASALT_UNUSED int basalt_atomic_fetch_add(void*p,int delta){basalt_atomic_int*a=(basalt_atomic_int*)p;if(!a)basalt_panic(4);return atomic_fetch_add_explicit(&a->value,delta,memory_order_acq_rel);}\nstatic BASALT_UNUSED int basalt_atomic_compare_exchange(void*p,int expected,int desired){basalt_atomic_int*a=(basalt_atomic_int*)p;int old;if(!a)basalt_panic(4);old=expected;return atomic_compare_exchange_strong_explicit(&a->value,&old,desired,memory_order_acq_rel,memory_order_acquire);}\nstatic BASALT_UNUSED void basalt_atomic_free(void*p){basalt_release(p);}\ntypedef struct basalt_channel { _Atomic size_t head; _Atomic size_t tail; atomic_int closed; size_t capacity; int data[]; } basalt_channel;\nstatic BASALT_UNUSED void* basalt_channel_make(int requested){size_t cap=2;size_t bytes;basalt_channel*c;if(requested<1||requested>1073741824)basalt_panic(7);while(cap<(size_t)requested){if(cap>(size_t)-1/2)basalt_panic(1);cap*=2;}if(cap>(size_t)-1/sizeof(int))basalt_panic(1);bytes=sizeof(*c)+cap*sizeof(int);if(bytes<sizeof(*c))basalt_panic(1);c=(basalt_channel*)calloc(1,bytes);if(!c)basalt_panic(5);c->capacity=cap;atomic_init(&c->head,0);atomic_init(&c->tail,0);atomic_init(&c->closed,0);return basalt_track(c);}\nstatic BASALT_UNUSED int basalt_channel_send(void*p,int value){basalt_channel*c=(basalt_channel*)p;size_t head,tail;if(!c)basalt_panic(4);if(atomic_load_explicit(&c->closed,memory_order_acquire)!=0)return -1;head=atomic_load_explicit(&c->head,memory_order_relaxed);tail=atomic_load_explicit(&c->tail,memory_order_acquire);if(head-tail>=c->capacity)return 0;c->data[head&(c->capacity-1)]=value;atomic_store_explicit(&c->head,head+1,memory_order_release);return 1;}\nstatic BASALT_UNUSED int basalt_channel_recv(void*p,int*out){basalt_channel*c=(basalt_channel*)p;size_t head,tail;if(!c||!out)basalt_panic(4);tail=atomic_load_explicit(&c->tail,memory_order_relaxed);head=atomic_load_explicit(&c->head,memory_order_acquire);if(tail==head){if(atomic_load_explicit(&c->closed,memory_order_acquire)!=0)return -1;return 0;}*out=c->data[tail&(c->capacity-1)];atomic_store_explicit(&c->tail,tail+1,memory_order_release);return 1;}\nstatic BASALT_UNUSED void basalt_channel_close(void*p){basalt_channel*c=(basalt_channel*)p;if(!c)basalt_panic(4);atomic_store_explicit(&c->closed,1,memory_order_release);}\nstatic BASALT_UNUSED void basalt_channel_free(void*p){basalt_release(p);}\ntypedef struct basalt_thread_handle { thrd_t thread; } basalt_thread_handle;\nstatic BASALT_UNUSED void* basalt_thread_spawn(int(*entry)(void*),void*arg){basalt_thread_handle*h=(basalt_thread_handle*)calloc(1,sizeof(*h));if(!h)basalt_panic(5);if(thrd_create(&h->thread,entry,arg)!=thrd_success){free(h);return NULL;}return basalt_track(h);}\nstatic BASALT_UNUSED int basalt_thread_join(void*p){basalt_thread_handle*h=(basalt_thread_handle*)p;int result;if(!h)basalt_panic(4);if(thrd_join(h->thread,&result)!=thrd_success)basalt_panic(8);basalt_release(h);return result;}\nstatic BASALT_UNUSED void basalt_thread_yield(void){thrd_yield();}\n");
-  write_string(out, "static char** basalt_inc_active=NULL;static size_t basalt_inc_active_n=0,basalt_inc_active_cap=0;static char** basalt_inc_loaded=NULL;static size_t basalt_inc_loaded_n=0,basalt_inc_loaded_cap=0;static int basalt_inc_status=0;\n");
+  write_string(out, "static char** basalt_inc_active=NULL;static size_t basalt_inc_active_n=0,basalt_inc_active_cap=0;static char** basalt_inc_loaded=NULL;static size_t basalt_inc_loaded_n=0,basalt_inc_loaded_cap=0;static char* basalt_inc_last_path=NULL;static int basalt_inc_status=0;\n");
   write_string(out, "static BASALT_UNUSED int basalt_inc_eq(const char*a,const char*b){return strcmp(a,b)==0;}\n");
   write_string(out, "static BASALT_UNUSED size_t basalt_inc_find(char**v,size_t n,const char*p){size_t i;for(i=0;i<n;i++)if(basalt_inc_eq(v[i],p))return i;return (size_t)-1;}\n");
   write_string(out, "static BASALT_UNUSED void basalt_inc_add(char***vp,size_t*np,size_t*cp,char*p){size_t c;char**q;if(*np==*cp){c=*cp?*cp*2:16;q=(char**)realloc(*vp,c*sizeof(char*));if(!q)exit(2);*vp=q;*cp=c;}(*vp)[(*np)++]=p;}\n");
   write_string(out, "static BASALT_UNUSED char* basalt_inc_strdup(const char*p){size_t n=strlen(p);char*q=(char*)malloc(n+1);if(!q)exit(2);memcpy(q,p,n+1);return(char*)basalt_track(q);}\n");
-  write_string(out, "static BASALT_UNUSED char* basalt_inc_realpath(const char*p){if(p&&p[0]==0&&basalt_inc_active_n)return basalt_inc_active[basalt_inc_active_n-1];\n#if defined(_WIN32)\nchar*q=_fullpath(NULL,p,0);if(q)return(char*)basalt_track(q);\n#else\nchar*q=realpath(p,NULL);if(q)return(char*)basalt_track(q);\n#endif\nreturn basalt_inc_strdup(p);}\n");
+  write_string(out, "static BASALT_UNUSED char* basalt_inc_realpath(const char*p){if(p&&p[0]==0){if(basalt_inc_last_path)return basalt_inc_last_path;if(basalt_inc_active_n)return basalt_inc_active[basalt_inc_active_n-1];return basalt_inc_strdup(\"\");}\n#if defined(_WIN32)\nchar*q=_fullpath(NULL,p,0);if(q)return(char*)basalt_track(q);\n#else\nchar*q=realpath(p,NULL);if(q)return(char*)basalt_track(q);\n#endif\nreturn basalt_inc_strdup(p);}\n");
   write_string(out, "static BASALT_UNUSED int basalt_inc_begin(char*p){if(basalt_inc_find(basalt_inc_active,basalt_inc_active_n,p)!=(size_t)-1){basalt_inc_status=1;return 0;}if(basalt_inc_find(basalt_inc_loaded,basalt_inc_loaded_n,p)!=(size_t)-1){basalt_inc_status=2;return 0;}basalt_inc_add(&basalt_inc_active,&basalt_inc_active_n,&basalt_inc_active_cap,p);basalt_inc_status=0;return 1;}\n");
   write_string(out, "static BASALT_UNUSED void basalt_include_close(void){if(basalt_inc_active_n){char*p=basalt_inc_active[--basalt_inc_active_n];if(basalt_inc_find(basalt_inc_loaded,basalt_inc_loaded_n,p)==(size_t)-1)basalt_inc_add(&basalt_inc_loaded,&basalt_inc_loaded_n,&basalt_inc_loaded_cap,p);}}\n");
   write_string(out, "static BASALT_UNUSED char* basalt_inc_join(const char*base,const char*raw){const char*s=strrchr(base,'/');size_t n=s?(size_t)(s-base+1):0;size_t m=strlen(raw);char*q=(char*)malloc(n+m+1);if(!q)exit(2);if(n)memcpy(q,base,n);memcpy(q+n,raw,m+1);return(char*)basalt_track(q);}\n");
   write_string(out, "static BASALT_UNUSED int basalt_include_line_mode(int*line,int n){int i=0,j;while(i<n&&(line[i]==' '||line[i]==9))i++;if(i+7<=n&&line[i]=='i'&&line[i+1]=='n'&&line[i+2]=='c'&&line[i+3]=='l'&&line[i+4]=='u'&&line[i+5]=='d'&&line[i+6]=='e'){j=i+7;while(j<n&&(line[j]==' '||line[j]==9))j++;if(j<n&&line[j]==34)return 1;}if(i+8<=n&&line[i]=='i'&&line[i+1]=='n'&&line[i+2]=='c'&&line[i+3]=='l'&&line[i+4]=='u'&&line[i+5]=='d'&&line[i+6]=='e'&&line[i+7]=='c'){j=i+8;while(j<n&&(line[j]==' '||line[j]==9))j++;if(j<n&&line[j]==34)return 2;}return 0;}\n");
-  write_string(out, "static BASALT_UNUSED void* basalt_include_open_root(const char*path){char*p=basalt_inc_realpath(path);FILE*f;if(!basalt_inc_begin(p))return NULL;f=fopen(p,(const char[]){114,0});if(!f){basalt_inc_status=3;basalt_include_close();return NULL;}return(void*)f;}\n");
-  write_string(out, "static BASALT_UNUSED void* basalt_include_open_line(int*line,int n,int mode){int i=0,a,b,j;char*raw,*joined,*canon;FILE*f;(void)mode;while(i<n&&line[i]!=34)i++;if(i>=n)return NULL;a=++i;while(i<n&&line[i]!=34)i++;if(i>=n)return NULL;b=i;raw=(char*)malloc((size_t)(b-a)+1);if(!raw)exit(2);{int k;for(k=0;k<b-a;k++)raw[k]=(char)line[a+k];}raw[b-a]=0;raw=(char*)basalt_track(raw);j=i+1;while(j<n&&(line[j]==32||line[j]==9))j++;if(j<n&&line[j]==59)j++;while(j<n&&(line[j]==32||line[j]==9))j++;if(j!=n)return NULL;joined=basalt_inc_join(basalt_inc_active[basalt_inc_active_n-1],raw);canon=basalt_inc_realpath(joined);if(!basalt_inc_begin(canon))return NULL;f=fopen(canon,(const char[]){114,0});if(!f){basalt_inc_status=3;basalt_include_close();return NULL;}return(void*)f;}\n");
+  write_string(out, "static BASALT_UNUSED void* basalt_include_open_root(const char*path){char*p=basalt_inc_realpath(path);FILE*f;basalt_inc_last_path=p;if(!basalt_inc_begin(p))return NULL;f=fopen(p,(const char[]){114,0});if(!f){basalt_inc_status=3;if(basalt_inc_active_n)basalt_inc_active_n--;return NULL;}return(void*)f;}\n");
+  write_string(out, "static BASALT_UNUSED void* basalt_include_open_line(int*line,int n,int mode){int i=0,a,b,j;char*raw,*joined,*canon;FILE*f;(void)mode;basalt_inc_last_path=basalt_inc_strdup(\"\");while(i<n&&line[i]!=34)i++;if(i>=n)return NULL;a=++i;while(i<n&&line[i]!=34)i++;if(i>=n)return NULL;b=i;raw=(char*)malloc((size_t)(b-a)+1);if(!raw)exit(2);{int k;for(k=0;k<b-a;k++)raw[k]=(char)line[a+k];}raw[b-a]=0;raw=(char*)basalt_track(raw);j=i+1;while(j<n&&(line[j]==32||line[j]==9))j++;if(j<n&&line[j]==59)j++;while(j<n&&(line[j]==32||line[j]==9))j++;if(j!=n)return NULL;joined=basalt_inc_join(basalt_inc_active[basalt_inc_active_n-1],raw);canon=basalt_inc_realpath(joined);basalt_inc_last_path=canon;if(!basalt_inc_begin(canon))return NULL;f=fopen(canon,(const char[]){114,0});if(!f){basalt_inc_status=3;if(basalt_inc_active_n)basalt_inc_active_n--;return NULL;}return(void*)f;}\n");
   write_string(out, "static BASALT_UNUSED int basalt_include_last_status(void){return basalt_inc_status;}\n");
-  write_string(out, "static BASALT_UNUSED void basalt_include_reset_session(void){basalt_inc_active_n=0;basalt_inc_loaded_n=0;basalt_inc_status=0;}\n");
+  write_string(out, "static BASALT_UNUSED void basalt_include_reset_session(void){basalt_inc_active_n=0;basalt_inc_loaded_n=0;basalt_inc_last_path=NULL;basalt_inc_status=0;}\n");
   write_string(out, "static BASALT_UNUSED void* open_file(const char* p,const char* m){return (void*)fopen(p,m);}\n");
   write_string(out, "static BASALT_UNUSED int read_char(void* h){int c=fgetc((FILE*)h);return c==EOF?-1:c;}\n");
   write_string(out, "static BASALT_UNUSED int close_file(void* h){return fclose((FILE*)h);}\n");

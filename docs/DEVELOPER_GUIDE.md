@@ -33,11 +33,15 @@ The active implementation keeps lexer, parser, type checker, generator, and diag
 
 ### Controlled C FFI
 
-Controlled FFI is intentionally narrower than raw C injection. `extern func name(...): type;` remains backward-compatible, while `extern "header.h" func name(...): type;` records one validated header path for the generated C file. Header literals are non-empty and limited to ASCII letters, digits, `.`, `/`, `_`, and `-`; the emitter deduplicates identical controlled headers and writes quoted includes after the runtime prologue and before `includec` bytes.
+Controlled FFI is intentionally narrower than raw C injection. `extern func name(...): type;` remains backward-compatible, while `extern "header.h" func name(...): type;` records one validated header path for the generated C file. Header literals are non-empty and limited to ASCII letters, digits, `.`, `/`, `_`, and `-`; the emitter deduplicates identical controlled headers and writes quoted includes after the runtime prologue and before `includec` bytes. Header validation protects the generated preprocessor boundary, but the selected C compiler still decides whether the path resolves.
 
-The Bootstrap type checker rejects compiler-only representations at an extern boundary. Scalar types, pointers, fixed arrays, and named structs are accepted; dynamic arrays, tuples, variants, generic types, and other unsupported forms are rejected with stable diagnostic codes 55 (parameter), 56 (return), and 57 (header path). The compiler validates the Basalt declaration and generated C spelling, but the final C linker and platform ABI remain responsible for symbol availability and calling-convention compatibility.
+The supported convention is exactly the platform C ABI with the compiler's default calling convention. Basalt has no accepted annotation for `stdcall`, `fastcall`, `vectorcall`, `sysv`, or another convention. Do not add a token that is ignored or silently lowered to the default: unsupported convention syntax must be rejected by the parser until a complete cross-platform ABI contract exists. The declaration checker cannot prove symbol availability, C struct packing, or agreement with a third-party prototype, so every real FFI integration must compile and link against its actual header and implementation.
 
-The required implementation order is parser metadata, ABI validation, header registration, C emission, structured diagnostics, specification fixtures, regression registration, and fixed-point synchronization. Raw `includec` remains available for explicit C helper implementations and is not type-checked by Basalt.
+The Bootstrap type checker recursively validates the controlled ABI boundary. It accepts the scalar mappings emitted by the runtime, pointers whose pointees are recursively safe, fixed arrays whose elements are recursively safe, plain non-generic structs with safe fields, and payload-free plain enums. It rejects dynamic arrays, generic/type-parameter nodes, tuples, closures, function types, tagged variants, and unsafe nested fields even when hidden behind a pointer or fixed array. Recursive pointer references are allowed only when the C layout remains finite; unbounded by-value recursion is rejected. Stable diagnostics are 55 for an unsafe parameter, 56 for an unsafe return, and 57 for a malformed header path.
+
+Extern ownership is a deliberate boundary. `move` is rejected because a C prototype does not define a portable transfer contract. Unannotated pointer and string inputs are borrowed for the duration of the call. `borrow` and `borrow_mut` are accepted only for pointer-compatible or string inputs and use the ordinary tracked-source conflict and lifetime checks; scalar borrows are rejected. Pointer and string returns are always marked non-owning and that provenance follows local and `const` bindings. Passing such a value to `memory_free` is rejected with diagnostic 67 because the C provider owns its lifetime. Diagnostics 65 and 66 cover unsupported move and invalid borrow/type combinations respectively. A future owned-return or transfer ABI must add explicit syntax and a corresponding runtime contract rather than weakening these checks.
+
+The required implementation order is parser metadata, recursive ABI validation, ownership/provenance validation, header registration, C emission, structured diagnostics, specification fixtures, regression registration, portability checks, and fixed-point synchronization. Raw `includec` remains available for explicit C helper implementations and is not type-checked by Basalt; its code cannot grant an unsafe declaration a different ownership or calling-convention meaning.
 
 ### Ownership, borrowing, and lifetime analysis
 
@@ -308,32 +312,27 @@ The lesson: **every new fixture is also a compiler test** — the first run of a
 
 ## 6. Adding a compiler feature
 
-The typical workflow for a language-level change, demonstrated by the compile-time bounds check for fixed arrays:
+The active workflow is Bootstrap-only. For a language-level change, such as a fixed-array bounds check or a controlled FFI rule:
 
-1. **Host typechecker** (`typechecker.ml`): add the rule. A `const_int` helper recognizes both `5` and the `0 - 1` form of `-1`; indexing `TArray (t, n)` with a constant outside `[0, n)` yields `array index K out of bounds for length N`. Also relax the initializer rules so `let a: int[3] = 0;` is legal (local and global) — previously no fixed array could be declared at all.
-2. **Host emitter** (`compiler.ml`): emit `= {0}` for fixed-array initializers (previously the initializer was dropped, diverging from the Bootstrap, which emitted `= 0`).
-3. **Bootstrap** (`basaltc.basalt`): mirror the check in `tc_expr` using `node_value[tc_result_type]` as the array size, with `tc_fail(45)` and a message. Native `<=` and `>=` comparisons are supported by the Bootstrap lexer, parser, type checker, and emitter; unary `!` is represented as `N_UNARY` and produces a boolean result. Mirror the initializer emission in `gen_initializer` (`{0}`).
-4. **Fixtures**: `fixed_array_valid` (boundary indexes), `fixed_array_oob_literal`, `fixed_array_oob_negative`, `fixed_array_oob_struct_field`; register the valid one with `compile_run` and the others with `expect_reject`.
-5. **Verify**: full suite, then regenerate the bootstrap artifact + checksum, then the suite again.
-
-### Example of a Host-only bug found while writing documentation
-
-The enum fixture `tests/regression/enum_typechecker_valid.basalt` existed but was **not registered** in any suite — and it failed on the Host compiler with `internal: unknown variable or function Green` while the Bootstrap accepted it. Two Host defects surfaced:
-
-1. `emit_expr_type` (used during codegen) looked up `Var` in `vars` and `funcs` but not in **enum values**, although the type checker already resolved them. Fix: add `enum_values : typ SMap.t` to the emit environment, populate it from `program.enums`, and fall back to it in `emit_expr_type`.
-2. The Host emitted `typedef enum Color Color;` as a *forward declaration* before the definition. ISO C11 forbids forward references to `enum` types (unlike `struct`/`union`), which failed under `-Wpedantic -Werror`. Fix: emit `typedef enum Color Color;` immediately **after** each enum definition instead.
-
-The fixtures were then registered in `run_regression.sh` so the gap cannot silently reopen.
+1. **Specify the rule** in `docs/LANGUAGE_SPEC.md`, including accepted syntax, rejection behavior, stable diagnostic codes, source-location fields, and any platform limitation.
+2. **Implement the rule only in `src/bootstrap/basaltc.basalt`**. Keep parser, AST, type checker, emitter, and diagnostics changes in the same self-hosted source. Do not modify, build, or use the frozen implementation under `src/compiler/`.
+3. **Build through the shared current-generation path**: the seed binary produces stage 2, stage 2 translates the current Bootstrap source, and the resulting n3 compiler is used for fixtures. This avoids validating new runtime helpers with an older n2 compiler.
+4. **Add fixtures**: at least one valid behavior case, one boundary or portability case, and one invalid case that must be rejected before C emission. For FFI, include a real header/implementation fixture, recursive nested-type failures, ownership-mode failures, and any available compiler-specific object check.
+5. **Register and verify** with `scripts/run_regression.sh`, `scripts/run_ffi_portability.sh` when relevant, strict GCC and Clang, sanitizers where applicable, and `scripts/fixed_point.sh`.
+6. **Promote only after review**: run `scripts/promote_seed.sh` on the byte-identical stable candidate, refresh the production checksum, rerun all release gates, and inspect the final diff.
 
 **Checklist for any compiler change:**
 
-- [ ] Both compilers updated (or a deliberate, documented divergence)
-- [ ] Valid fixture that exercises the feature positively
-- [ ] Negative fixture that must be rejected by **both** compilers
+- [ ] Rule and stable diagnostics documented in `docs/LANGUAGE_SPEC.md`
+- [ ] Only `src/bootstrap/basaltc.basalt` changed for compiler behavior
+- [ ] Shared seed→stage2→current (n3) builder used by every validation path
+- [ ] Valid, boundary, invalid, and ownership fixtures where applicable
 - [ ] Fixtures registered in `scripts/run_regression.sh`
+- [ ] Strict GCC and Clang checks passed; MinGW reported only when available
 - [ ] `./scripts/run_ownership_stress.sh` fully green
-- [ ] Bootstrap artifact + checksum regenerated if `basaltc.basalt` changed
-- [ ] Documentation updated (`docs/`, `README.md`)
+- [ ] `./scripts/fixed_point.sh` passed before and after seed promotion
+- [ ] Bootstrap artifact + checksum regenerated only through `scripts/promote_seed.sh`
+- [ ] Documentation and generated-artifact cleanliness reviewed
 
 ---
 
@@ -343,7 +342,7 @@ The fixtures were then registered in `run_regression.sh` so the gap cannot silen
   - `Compile-time bounds checks for fixed arrays; allow int[n] = 0 initializers`
   - `Data-driven builtin registry in bootstrap; replace hardcoded name hashes with a runtime table; expose basalt_inc_join`
   - `Add option.basalt null-safety stdlib; fix bootstrap generic call collection for nested calls in arguments`
-- **Diagnostics**: the Host prints `Type Error: <message>`; the Bootstrap prints `type error: <code>` (with a message for most codes). Codes are shared and must stay in sync.
+- **Diagnostics**: the Bootstrap formatter prints one concise label/message line followed by stable fields such as `diagnostic.code`, `diagnostic.file`, `diagnostic.line`, `diagnostic.column`, `diagnostic.target`, `diagnostic.expected`, `diagnostic.found`, `diagnostic.hint`, and `diagnostic.excerpt`. Codes are part of the compatibility contract.
 - **Files**: sources are `.basalt`; generated C is `*.basalt.c` (gitignored except the bootstrap artifact); fixtures with a runtime component carry a tracked `.c` partner used through `includec`.
 - **Artifacts**: everything generated during verification lives under `.tmp/`; `tests/` must never contain executables.
 
@@ -358,7 +357,9 @@ The fixtures were then registered in `run_regression.sh` so the gap cannot silen
 | `unknown function` / `invalid expression` on long programs | Symbol-text region overwritten (registry-era bug) or missing nested generic collection | Check `bi_register` region usage; check `gen_collect_expr` recursion |
 | `cc1: ... error:` after `-Werror` | Emitted C violates strict C11 (e.g. enum forward typedef) | Fix the emitter; run the emitted C through the strict profile |
 | `FAIL: stray ELF binaries under tests/` | A build wrote an executable into `tests/` | Move outputs to `.tmp/`; remove the binary |
-| Host and Bootstrap disagree on a fixture | Divergence introduced by the change | Mirror the fix in the other compiler; both must reject/accept identically |
+| A stale runtime helper appears during validation | A manual one-stage seed path was used | Use `scripts/bootstrap_stage.sh`, `scripts/run_code_buffer_v3.py`, or the relevant shared runner so the fixture uses the current n3 compiler |
+| FFI fixture links but does not match the declared C ABI | Basalt cannot prove third-party symbol/prototype/packing agreement | Compile and link the real header and implementation; keep the declaration to the documented default C ABI and mapping |
+| `extern` ownership diagnostic 65/66/67 | Move, scalar borrow, or release of a non-owning pointer/string return | Use compatibility mode or pointer-compatible borrow; copy external data into owned storage before `memory_free` |
 
 ---
 

@@ -1,0 +1,23 @@
+namespace app {
+  struct Box {
+    value: int;
+  }
+
+  func value(): int {
+    return 7;
+  }
+
+  namespace inner {
+    func read(): int {
+      let box: Box = 0;
+      box.value = value();
+      return box.value;
+    }
+  }
+}
+
+func main(): int {
+  let result: int = app::inner::read();
+  print result;
+  return 0;
+}
