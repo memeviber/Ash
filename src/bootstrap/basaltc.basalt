@@ -1411,6 +1411,13 @@ func gen_expr(id: int): void {
   }
 }
 
+func gen_expr_condition_inner(id: int): void {
+  if node_kind[id] != N_BINOP then { gen_expr(id); return; }
+  if node_value[id] == OP_CONCAT then { code_emit(C_IDENT, -1002); code_emit(C_PUNCT, 6); gen_expr(node_a[id]); code_emit(C_PUNCT, 7); gen_expr(node_b[id]); code_emit(C_PUNCT, 8); return; }
+  if node_value[id] == OP_SUB && gen_expr_kind(node_a[id]) == TY_PTR && gen_expr_kind(node_b[id]) == TY_PTR then { code_emit(C_PUNCT, 4); code_emit(C_KW, 1); code_emit(C_PUNCT, 5); code_emit(C_PUNCT, 4); gen_expr(node_a[id]); code_emit(C_OP, node_value[id]); gen_expr(node_b[id]); code_emit(C_PUNCT, 5); return; }
+  gen_expr(node_a[id]); code_emit(C_OP, node_value[id]); gen_expr(node_b[id]);
+}
+
 func gen_expr_kind(id: int): int {
   let k: int = node_kind[id];
   if k == N_INT || k == N_BOOL then return TY_INT;
@@ -1632,7 +1639,12 @@ func gen_stmt(id: int): void {
   } else if k == N_MATCH then {
     gen_match_stmt(id);
   } else if k == N_EXPR then {
+    code_emit(C_PUNCT, 4);
+    code_emit(C_KW, 4);
+    code_emit(C_PUNCT, 5);
+    code_emit(C_PUNCT, 4);
     gen_expr(node_a[id]);
+    code_emit(C_PUNCT, 5);
     code_emit(C_PUNCT, 12);
     code_emit(C_NEWLINE, 0);
   } else if k == N_RETURN then {
@@ -1669,7 +1681,7 @@ func gen_stmt(id: int): void {
   } else if k == N_IF then {
     code_emit(C_KW, 6);
     code_emit(C_PUNCT, 6);
-    gen_expr(node_a[id]);
+    gen_expr_condition_inner(node_a[id]);
     code_emit(C_PUNCT, 8);
     gen_stmt(node_b[id]);
     code_emit(C_KW, 7);
@@ -1679,7 +1691,7 @@ func gen_stmt(id: int): void {
     code_emit(C_PUNCT, 4);
     gen_for_clause(node_a[id]);
     code_emit(C_PUNCT, 12);
-    gen_expr(node_b[id]);
+    gen_expr_condition_inner(node_b[id]);
     code_emit(C_PUNCT, 12);
     gen_for_clause(node_value[id]);
     code_emit(C_PUNCT, 5);
@@ -1694,7 +1706,7 @@ func gen_stmt(id: int): void {
   } else if k == N_WHILE then {
     code_emit(C_KW, 8);
     code_emit(C_PUNCT, 4);
-    gen_expr(node_a[id]);
+    gen_expr_condition_inner(node_a[id]);
     code_emit(C_PUNCT, 5);
     ensure_emit_loop(emit_loop_depth);
     emit_loop_base[emit_loop_depth] = emit_defer_count;
@@ -1754,7 +1766,10 @@ func gen_function_specialized(decl: int, inst: int, cname: int): void {
   let ret: int = gen_substitute_type(node_b[decl]);
   gen_type(node_kind[ret], ret, node_value[ret]); code_emit(C_IDENT, cname); code_emit(C_PUNCT, 6);
   let p: int = node_c[decl];
-  while p != 0 { let pt: int = gen_substitute_type(node_b[p]); gen_decl(pt, node_a[p]); if node_next[p] != 0 then code_emit(C_PUNCT, 7); p = node_next[p]; }
+  if p == 0 then code_emit(C_KW, 4);
+  else {
+    while p != 0 { let pt: int = gen_substitute_type(node_b[p]); gen_decl(pt, node_a[p]); if node_next[p] != 0 then code_emit(C_PUNCT, 7); p = node_next[p]; }
+  }
   code_emit(C_PUNCT, 8);
   let old_active_function: int = gen_active_function;
   gen_active_function = decl;
@@ -2037,11 +2052,14 @@ func gen_function_signature(id: int): void {
   code_emit(C_IDENT, sym_c_symbol(node_value[id]));
   code_emit(C_PUNCT, 6);
   let param: int = node_c[id];
-  while param != 0 {
-    if node_kind[id] == N_EXTERN then gen_extern_param(node_b[param], node_a[param]);
-    else gen_decl(node_b[param], node_a[param]);
-    if node_next[param] != 0 then code_emit(C_PUNCT, 7);
-    param = node_next[param];
+  if param == 0 then code_emit(C_KW, 4);
+  else {
+    while param != 0 {
+      if node_kind[id] == N_EXTERN then gen_extern_param(node_b[param], node_a[param]);
+      else gen_decl(node_b[param], node_a[param]);
+      if node_next[param] != 0 then code_emit(C_PUNCT, 7);
+      param = node_next[param];
+    }
   }
   code_emit(C_PUNCT, 8);
 }
@@ -2168,14 +2186,17 @@ func gen_closure_emit_factory(serial: int, closure_id: int): void {
   let value_factory: int = gen_mangled_type_symbol(sig_factory);
   gen_type(TY_CLOSURE, sig_factory, 0); code_emit(C_IDENT, gen_closure_factory_name(serial)); code_emit(C_PUNCT, 6);
   let cap_factory: int = node_a[closure_id];
-  while cap_factory != 0 {
-    let cap_ty_factory: int = node_b[cap_factory];
-    if node_aux[cap_factory] == 2 || node_aux[cap_factory] == 3 then {
-      let cap_ptr_factory: int = ast_node(TY_PTR, cap_ty_factory, 0, 0, 0, 0);
-      gen_decl(cap_ptr_factory, node_a[cap_factory]);
-    } else gen_decl(cap_ty_factory, node_a[cap_factory]);
-    if node_next[cap_factory] != 0 then code_emit(C_PUNCT, 7);
-    cap_factory = node_next[cap_factory];
+  if cap_factory == 0 then code_emit(C_KW, 4);
+  else {
+    while cap_factory != 0 {
+      let cap_ty_factory: int = node_b[cap_factory];
+      if node_aux[cap_factory] == 2 || node_aux[cap_factory] == 3 then {
+        let cap_ptr_factory: int = ast_node(TY_PTR, cap_ty_factory, 0, 0, 0, 0);
+        gen_decl(cap_ptr_factory, node_a[cap_factory]);
+      } else gen_decl(cap_ty_factory, node_a[cap_factory]);
+      if node_next[cap_factory] != 0 then code_emit(C_PUNCT, 7);
+      cap_factory = node_next[cap_factory];
+    }
   }
   code_emit(C_PUNCT, 8); code_emit(C_PUNCT, 13);
   code_emit(C_KW, 12); code_emit(C_IDENT, gen_closure_env_name(serial)); code_emit(C_PUNCT, 1); code_emit(C_IDENT, gen_closure_env_local_name(serial)); code_emit(C_PUNCT, 11);
@@ -2313,7 +2334,7 @@ func gen_program(id: int): void {
   // Prototypes for ordinary functions, externs and all generic specializations.
   item = node_a[id];
   while item != 0 { if node_kind[item] == N_FUNC || node_kind[item] == N_EXTERN then gen_prototype(item); item = node_next[item]; }
-  si = 0; while si < gen_spec_count { if gen_spec_kind[si] == 2 then { gen_bind_decl(gen_spec_decl[si], gen_spec_type[si]); let rr: int = gen_substitute_type(node_b[gen_spec_decl[si]]); gen_type(node_kind[rr], rr, node_value[rr]); code_emit(C_IDENT, gen_spec_name[si]); code_emit(C_PUNCT, 6); let pp: int = node_c[gen_spec_decl[si]]; while pp != 0 { let pt: int = gen_substitute_type(node_b[pp]); gen_decl(pt, node_a[pp]); if node_next[pp] != 0 then code_emit(C_PUNCT, 7); pp = node_next[pp]; } code_emit(C_PUNCT, 8); code_emit(C_PUNCT, 12); code_emit(C_NEWLINE, 0); gen_bind_clear(); } si = si + 1; }
+  si = 0; while si < gen_spec_count { if gen_spec_kind[si] == 2 then { gen_bind_decl(gen_spec_decl[si], gen_spec_type[si]); let rr: int = gen_substitute_type(node_b[gen_spec_decl[si]]); gen_type(node_kind[rr], rr, node_value[rr]); code_emit(C_IDENT, gen_spec_name[si]); code_emit(C_PUNCT, 6); let pp: int = node_c[gen_spec_decl[si]]; if pp == 0 then code_emit(C_KW, 4); else { while pp != 0 { let pt: int = gen_substitute_type(node_b[pp]); gen_decl(pt, node_a[pp]); if node_next[pp] != 0 then code_emit(C_PUNCT, 7); pp = node_next[pp]; } } code_emit(C_PUNCT, 8); code_emit(C_PUNCT, 12); code_emit(C_NEWLINE, 0); gen_bind_clear(); } si = si + 1; }
   item = node_a[id]; while item != 0 { if node_kind[item] == N_GLOBAL || node_kind[item] == N_CONST then gen_stmt(item); item = node_next[item]; }
   si = 0; while si < gen_spec_count { if gen_spec_kind[si] == 2 then gen_function_specialized(gen_spec_decl[si], gen_spec_type[si], gen_spec_name[si]); si = si + 1; }
   item = node_a[id]; while item != 0 { if node_kind[item] == N_FUNC then gen_function(item); item = node_next[item]; }
@@ -5358,7 +5379,6 @@ func tc_expr(id: int): void {
     if node_kind[node_a[id]] == N_VAR then tc_move_value(node_a[id]);
     else if tc_expr_borrow_source >= 0 then tc_fail(38);
     else if tc_is_owner_kind(moved_kind) == 0 then tc_fail(35);
-    tc_kind = tc_kind;
     tc_expr_borrow_source = 0 - 1;
     tc_expr_owner_source = 0 - 1;
     tc_expr_is_owned = 1;
