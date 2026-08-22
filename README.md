@@ -1,16 +1,9 @@
-<!--
-  Logo placeholder: Thay thế dòng <p align="center">...<img...>...</p> bên dưới
-  bằng logo chính thức của Basalt khi đã sẵn sàng (ví dụ: <p align="center">
-  <img src="docs/basalt-logo.svg" alt="Basalt Logo" width="200" /></p>).
--->
-
 <p align="center">
   <h1 align="center">Basalt Programming Language</h1>
   <p align="center">
     <img src="https://img.shields.io/badge/OCaml-Host%20Compiler-EC6813?style=for-the-badge&logo=ocaml" alt="OCaml Host Compiler" />
     <img src="https://img.shields.io/badge/Basalt-Self--Hosted-2C2C2C?style=for-the-badge&logo=lightning" alt="Self-Hosted Bootstrap" />
-    <img src="https://img.shields.io/badge/Basalt-5.0.5-2C2C2C?style=for-the-badge&logo=v" alt="Basalt 5.0.5" />
-    <img src="https://img.shields.io/badge/build-fixed--point%20verified-00cc88?style=for-the-badge&logo=githubactions" alt="Build Status" />
+    <img src="https://img.shields.io/badge/Basalt-2.0.1-2C2C2C?style=for-the-badge&logo=v" alt="Basalt" />
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2C2C2C?style=for-the-badge&logo=Open%20Source%20Initiative" alt="License" /></a>
   </p>
 </p>
