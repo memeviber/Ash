@@ -107,7 +107,7 @@ func main(): int {
 
 ```basalt
 func main(): int {
-  print "Hello, World!";
+  println "Hello, World!";
   return 0;
 }
 ```
@@ -123,25 +123,25 @@ func main(): int {
   let x: int = 10;
   let y: int = 20;
 
-  print x + y;
-  print x - y;
-  print x * y;
-  print x / y;
-  print x % y;
+  println x + y;
+  println x - y;
+  println x * y;
+  println x / y;
+  println x % y;
 
-  if x > y then print "X is greater";
-  elif x < y then print "Y is greater";
-  else print "X equals Y";
+  if x > y then println "X is greater";
+  elif x < y then println "Y is greater";
+  else println "X equals Y";
 
   for i = 1 to 10 {
-    print i;
+    println i;
   }
 
   let mut a: int = 1;
   while a < 100 {
     a = a + 1;
   }
-  print a;
+  println a;
 
   return add(5, 3);
 }
@@ -182,13 +182,13 @@ func main(): int {
   let present: option::Option<int> = option::some(42);
   let absent:  option::Option<int> = option::none(0);
 
-  print option::is_some(present);
-  print option::is_none(absent);
-  print option::unwrap_or(present, 7);
-  print option::unwrap_or(absent,  7);
+  println option::is_some(present);
+  println option::is_none(absent);
+  println option::unwrap_or(present, 7);
+  println option::unwrap_or(absent,  7);
 
   let s: option::Option<string> = option::some("hello");
-  print option::unwrap_or(s, "fallback");
+  println option::unwrap_or(s, "fallback");
   return 0;
 }
 ```
