@@ -114,6 +114,8 @@ The individual suites can be run directly:
 
 The regression suite compiles and executes every registered fixture through the Bootstrap compiler with strict GCC: valid programs must compile and run; `expect_reject` fixtures must be rejected. Selected stdlib fixtures are also compiled with strict Clang and sanitizer builds. The corpus covers collection growth and hashing, iterator callbacks, stable sorting, UTF-8/string boundaries, path normalization, text filesystem errors, time validation, secure argv process handling, mutex/cancellation, typed formatting, deterministic PRNG behavior, and ownership cleanup.
 
+The String contract is intentionally explicit: `str::byte_len`/`str::len` count encoded bytes, `str::byte_at` uses byte offsets, and `str::codepoint_len`/`str::codepoint_at` operate on decoded Unicode scalar values. `str::utf8_validate` rejects malformed, overlong, surrogate, truncated, and out-of-range encodings. `str::Utf8Iterator` reports yield, end-of-input, and malformed-input as separate statuses and borrows its source without extending its lifetime. Views and strings remain NUL-terminated byte storage rather than binary buffers; see [`docs/STDLIB_API.md`](docs/STDLIB_API.md) for the complete ownership and boundary contract.
+
 ## Guides
 
 - [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md) — how to build Basalt, write programs, and use the standard library, with verified examples

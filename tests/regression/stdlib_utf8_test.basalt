@@ -1,0 +1,73 @@
+includec "stdlib_utf8_runtime.c"
+include "../../src/stdlib/string.basalt"
+
+extern func utf8_fixture_bad_continuation(): string;
+extern func utf8_fixture_bad_overlong_two(): string;
+extern func utf8_fixture_bad_surrogate(): string;
+extern func utf8_fixture_bad_too_high(): string;
+extern func utf8_fixture_bad_truncated(): string;
+
+func main(): int {
+  let status: int = 0;
+
+  // byte_len and byte_at are deliberately byte-oriented.
+  let valid: string = "Aé€😀Z";
+  if str::byte_len(valid) != 11 then status = 1;
+  if str::len(valid) != 11 then status = 2;
+  if str::byte_at(valid, 0) != 65 then status = 3;
+  if str::byte_at(valid, 1) != 195 then status = 4;
+  if str::byte_at(valid, 2) != 169 then status = 5;
+  if str::byte_at(valid, 3) != 226 then status = 6;
+  if str::byte_at(valid, 6) != 240 then status = 7;
+  if str::byte_at(valid, 10) != 90 then status = 8;
+
+  // UTF-8 APIs count scalar values, not encoded bytes.
+  if str::utf8_validate(valid) == false then status = 9;
+  if str::codepoint_len(valid) != 5 then status = 10;
+  if str::codepoint_at(valid, 0) != 65 then status = 11;
+  if str::codepoint_at(valid, 1) != 233 then status = 12;
+  if str::codepoint_at(valid, 2) != 8364 then status = 13;
+  if str::codepoint_at(valid, 3) != 128512 then status = 14;
+  if str::codepoint_at(valid, 4) != 90 then status = 15;
+  if str::codepoint_byte_offset(valid, 0) != 0 then status = 16;
+  if str::codepoint_byte_offset(valid, 1) != 1 then status = 17;
+  if str::codepoint_byte_offset(valid, 2) != 3 then status = 18;
+  if str::codepoint_byte_offset(valid, 3) != 6 then status = 19;
+  if str::codepoint_byte_offset(valid, 4) != 10 then status = 20;
+  if str::codepoint_byte_offset(valid, 5) != 11 then status = 21;
+  if str::codepoint_at(valid, 5) != (0 - 1) then status = 22;
+
+  // The iterator advances by encoded byte width and distinguishes end from error.
+  let iterator: str::Utf8Iterator = str::utf8_iter(valid);
+  let step0: str::Utf8NextResult = str::utf8_iter_next(iterator);
+  if step0.status != 0 || step0.codepoint != 65 || step0.iterator.offset != 1 then status = 23;
+  let step1: str::Utf8NextResult = str::utf8_iter_next(step0.iterator);
+  if step1.status != 0 || step1.codepoint != 233 || step1.iterator.offset != 3 then status = 24;
+  let step2: str::Utf8NextResult = str::utf8_iter_next(step1.iterator);
+  if step2.status != 0 || step2.codepoint != 8364 || step2.iterator.offset != 6 then status = 25;
+  let step3: str::Utf8NextResult = str::utf8_iter_next(step2.iterator);
+  if step3.status != 0 || step3.codepoint != 128512 || step3.iterator.offset != 10 then status = 26;
+  let step4: str::Utf8NextResult = str::utf8_iter_next(step3.iterator);
+  if step4.status != 0 || step4.codepoint != 90 || step4.iterator.offset != 11 then status = 27;
+  let end_step: str::Utf8NextResult = str::utf8_iter_next(step4.iterator);
+  if end_step.status != 1 || end_step.iterator.offset != 11 then status = 28;
+
+  // Invalid sequences must be rejected, including each important boundary class.
+  let bad_continuation: string = utf8_fixture_bad_continuation();
+  let bad_overlong_two: string = utf8_fixture_bad_overlong_two();
+  let bad_surrogate: string = utf8_fixture_bad_surrogate();
+  let bad_too_high: string = utf8_fixture_bad_too_high();
+  let bad_truncated: string = utf8_fixture_bad_truncated();
+  if str::utf8_validate(bad_continuation) then status = 29;
+  if str::utf8_validate(bad_overlong_two) then status = 30;
+  if str::utf8_validate(bad_surrogate) then status = 31;
+  if str::utf8_validate(bad_too_high) then status = 32;
+  if str::utf8_validate(bad_truncated) then status = 33;
+  if str::codepoint_len(bad_overlong_two) != (0 - 1) then status = 34;
+  let bad_iter: str::Utf8Iterator = str::utf8_iter(bad_overlong_two);
+  let bad_step: str::Utf8NextResult = str::utf8_iter_next(bad_iter);
+  if bad_step.status != 2 then status = 35;
+
+  if str::self_test() != 1 then status = 36;
+  return status;
+}

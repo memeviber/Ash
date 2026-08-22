@@ -609,9 +609,29 @@ An iterator has the same explicit progression rule. Assign `step.iterator` after
 
 ### 6.2 Strings, views, builders, and paths
 
-The `string` module is **byte-oriented**. `byte_len`, `byte_at`, and `StringView` use UTF-8 storage offsets; `utf8_validate`, `codepoint_len`, and `codepoint_at` provide validation and basic code-point queries. A view is non-owning and is represented as `{source, offset, len}`, not as an independently allocated pointer. `view_to_string`, `substring`, `trim`, `replace`, `split`, and `concat` return owned strings or owned string arrays and must be released with the matching helper.
+The `string` module has a deliberately explicit UTF-8 model. `byte_len` and its compatibility alias `len` count encoded bytes up to the terminating NUL; `byte_at` accepts a byte offset and returns one value in `0..255`. These functions do not count or decode Unicode code points. `StringView` also uses byte offsets and byte lengths. Consequently, a multi-byte character occupies several byte positions, and indexing the middle of its encoding is legal only as a byte operation, not as a decoded character operation.
 
-`StringView` does not keep the source alive. It must not outlive or outlast the source string's ownership, and its offsets are byte offsets. This deliberate representation avoids unsupported string-pointer arithmetic in the Bootstrap type checker.
+The UTF-8-aware functions operate on decoded scalar values. `utf8_validate(s)` rejects malformed, truncated, overlong, surrogate, and out-of-range encodings. `codepoint_len(s)` returns the number of decoded code points or `-1` if validation fails. `codepoint_byte_offset(s, index)` converts a code-point index to its byte offset, and `codepoint_at(s, index)` returns the decoded scalar value; both return `-1` for invalid input or an invalid index. They never silently treat a byte offset as a code-point index.
+
+For sequential traversal, use the borrowed `Utf8Iterator` protocol:
+
+```basalt
+include "../../src/stdlib/string.basalt"
+
+func main(): int {
+  let text: string = "Aé€😀";
+  let cursor: str::Utf8Iterator = str::utf8_iter(text);
+  let step: str::Utf8NextResult = str::utf8_iter_next(cursor);
+  if step.status == 0 then { print step.codepoint; }
+  cursor = step.iterator;
+  // status 0 = yielded a code point, 1 = end, 2 = malformed UTF-8.
+  return 0;
+}
+```
+
+`utf8_iter_next` advances its cursor by the encoded width of the yielded code point. End-of-input and malformed input are distinct: end has status `1` and keeps the cursor at the end, while malformed input has status `2` and does not advance it. `Utf8Iterator` is borrowed; it owns neither the source nor a copy of its bytes. It must not outlive the source string or be used after the source is released or mutated.
+
+A view is likewise non-owning and is represented as `{source, offset, len}`, not as an independently allocated pointer. `view_to_string`, `substring`, `trim`, `replace`, `split`, and `concat` return owned strings or owned string arrays and must be released with the matching helper. Basalt strings are NUL-terminated, so they are not a binary-buffer abstraction and cannot faithfully carry an embedded NUL byte.
 
 `string_builder::finish` and `format::finish` return a result struct containing the produced owned string and a reset builder/formatter. The caller must assign the returned builder field before freeing it. This prevents a by-value struct copy from leaving two owners for the same buffer.
 

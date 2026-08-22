@@ -207,6 +207,7 @@ compile_run "$ROOT/tests/super/closure_generic_nested_valid.basalt" closure_gene
 compile_run_with_output "$ROOT/tests/super/print_stream_valid.basalt" print_stream_valid $'Basalt-2026\nline-two\n42\n'
 compile_run "$ROOT/tests/regression/string_builder_iter_test.basalt" string_builder_iter_test
 compile_run "$ROOT/tests/regression/stdlib_filesystem_path_string_test.basalt" stdlib_filesystem_path_string_test
+compile_run "$ROOT/tests/regression/stdlib_utf8_test.basalt" stdlib_utf8_test
 compile_run "$ROOT/tests/regression/stdlib_time_process_format_random_test.basalt" stdlib_time_process_format_random_test
 compile_run "$ROOT/tests/regression/numeric_compound_test.basalt" numeric_compound_test
 compile_run "$ROOT/tests/regression/f32_f64_test.basalt" f32_f64_test

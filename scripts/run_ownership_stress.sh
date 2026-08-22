@@ -101,6 +101,7 @@ printf '%s\n' '[2/3] Running ownership fixtures.'
 run_valid "$ROOT/tests/stress/move_borrow_valid.basalt"
 run_valid "$ROOT/tests/spec/valid/ownership_lifetime_valid.basalt"
 run_stdlib_valid "$ROOT/tests/regression/stdlib_filesystem_path_string_test.basalt"
+run_stdlib_valid "$ROOT/tests/regression/stdlib_utf8_test.basalt"
 run_stdlib_valid "$ROOT/tests/regression/stdlib_time_process_format_random_test.basalt"
 run_stdlib_valid "$ROOT/tests/regression/stdlib_concurrency_extended_test.basalt"
 run_stdlib_valid "$ROOT/tests/regression/string_builder_iter_test.basalt"
