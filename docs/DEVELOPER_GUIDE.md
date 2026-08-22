@@ -127,7 +127,7 @@ bash scripts/promote_seed.sh
 bash scripts/fixed_point.sh
 ```
 
-`promote_seed.sh` verifies that the default `.tmp/fixed-point/n3.c` and `n4.c` are identical, copies the stable candidate into `src/bootstrap/basaltc.seed.c`, runs `scripts/format_seed_c.sh`, and refreshes `src/bootstrap/fixed_point_production.sha256`. To format an existing generated C file without promotion, run `scripts/format_seed_c.sh [path]`; use `--check` for a non-mutating verification. Only after the synchronized fixed point passes may the full ownership-stress suite be run and the change committed. All generated binaries and intermediate C files remain under `.tmp/.`
+`promote_seed.sh` verifies that the default `.tmp/fixed-point/n3.c` and `n4.c` are identical, copies the stable candidate into `src/bootstrap/basaltc.seed.c`, runs `scripts/format_seed_c.sh`, and refreshes `src/bootstrap/fixed_point_production.sha256`. To format an existing generated C file without promotion, run `scripts/format_seed_c.sh [path]`; use `--check` for a non-mutating verification. Only after the synchronized fixed point passes may the full ownership-stress suite be run and the change committed. All generated binaries and intermediate C files remain under `.tmp/`.
 
 ### 3.3 The full suite
 
@@ -153,6 +153,21 @@ expect_reject "$ROOT/tests/regression/my_feature_invalid.basalt" my_feature_inva
 ```
 
 `compile_run` compiles the fixture with the current Bootstrap compiler from the fixture's directory (so relative `include` paths resolve), then requires strict-GCC acceptance and a successful run. `expect_reject` requires rejection before a generated C artifact is accepted. The frozen Host implementation is not invoked.
+
+### 3.4 Package-manager validation
+
+The package manager is a repository-side Python tool and must remain independent of `src/compiler/`. Its deterministic test suite uses only local registry fixtures, writes all temporary workspaces below `.tmp/`, and can be run directly:
+
+```sh
+python3 -m py_compile scripts/basalt_pkg.py tests/package_manager_test.py
+python3 tests/package_manager_test.py
+```
+
+The suite covers exact, caret, tilde, range, prerelease, lock pinning, compatible constraint intersection, path dependencies including normalized `../` paths, checksum repair/failure, offline cache-only operation, duplicate lock records, argv boundaries, and archive rejection for absolute paths, traversal, symlinks, wrong top-level directories, manifest identity, and dependency metadata mismatches. The regression harness invokes the same suite after the Bootstrap language corpus. For a real package build, `--compiler` selects the Bootstrap compiler and `--cc` selects the generated-C compiler; both are passed as argv values, never interpolated into a shell command.
+
+When changing package logic, preserve these invariants: requirements for one package are accumulated before selection; a lockfile is validated as a graph rather than trusted as text; registry archive references remain relative and non-URL; SHA-256 is checked before extraction and before build; extraction is staged and atomically promoted; and no package-provided script is executed. Normal fetch may read the selected registry, whereas `--offline` may use only `Basalt.lock` and the checksum-addressed cache.
+
+The current package tool materializes sources under `.basalt/vendor/` but does not add compiler-level import resolution. Do not modify `basaltc.basalt` or promote the seed for package-manager-only changes. If compiler integration is introduced later, it must follow the ordinary Bootstrap fixed-point, strict GCC/Clang, and ownership-stress gates.
 
 ---
 

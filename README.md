@@ -43,6 +43,29 @@ func main(): int {
 | `docs/` | Language specification, design notes, naming policy, and release notes |
 | `scripts/` | Build, test, and fixed-point commands |
 
+## Package manager
+
+The repository includes a deterministic, repository-side package manager at `scripts/basalt_pkg.py`. It reads `Basalt.toml`, resolves SemVer requirements against a read-only registry, writes `Basalt.lock`, verifies SHA-256 archives, and materializes verified source under `.basalt/vendor/`. The tool is independent of the frozen OCaml Host compiler and does not add package-import syntax to the Bootstrap compiler.
+
+| Concern | Initial implementation |
+| --- | --- |
+| Manifest | `Basalt.toml` with package metadata and dependency requirements |
+| Reproducibility | `Basalt.lock` with exact versions, sources, edges, and checksums |
+| Artifact storage | `$BASALT_HOME/cache`, content-addressed by SHA-256 |
+| Source materialization | `.basalt/vendor/<name>/<version>/`, promoted atomically after validation |
+| Offline operation | `fetch --offline` and `build --offline`, using only lockfile and cache |
+
+For a local registry or CI fixture, use the global options before the subcommand:
+
+```sh
+python3 scripts/basalt_pkg.py --root . --registry .tmp/registry fetch
+python3 scripts/basalt_pkg.py --root . --registry .tmp/registry update
+python3 scripts/basalt_pkg.py --root . fetch --offline
+python3 scripts/basalt_pkg.py --root . verify
+```
+
+The full contract, registry record format, lockfile invariants, archive safety policy, and current build boundary are documented in [`docs/PACKAGE_MANAGER.md`](docs/PACKAGE_MANAGER.md). Package archives are source input only: the initial tool never executes package-provided scripts, and native compiler package imports remain a later compatibility milestone. For a real build, `--compiler` selects the Bootstrap compiler and `--cc` selects the C compiler, for example `python3 scripts/basalt_pkg.py --root . build --compiler .tmp/bootstrap.bin --cc clang --compiler-arg=-std=c11 --compiler-arg=-Wall --compiler-arg=-Werror`.
+
 ## Building the Host compiler
 
 From the repository root, run:
@@ -94,7 +117,8 @@ The regression suite compiles and executes every registered fixture through **bo
 ## Guides
 
 - [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md) — how to build Basalt, write programs, and use the standard library, with verified examples
-- [`docs/DEVELOPER_GUIDE.md`](docs/DEVELOPER_GUIDE.md) — how the two compilers cooperate, the verification machinery, and worked examples of adding built-ins, stdlib modules, and compiler features
+- [`docs/DEVELOPER_GUIDE.md`](docs/DEVELOPER_GUIDE.md) — how the two compilers cooperate, the verification machinery, and worked examples of adding built-ins, stdlib modules, compiler features, and package-manager fixtures
+- [`docs/PACKAGE_MANAGER.md`](docs/PACKAGE_MANAGER.md) — manifest, SemVer, registry, lockfile, cache, vendor, security, and build-boundary contract
 
 ## Language documentation
 

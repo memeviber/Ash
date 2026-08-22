@@ -72,6 +72,42 @@ For a one-command build, use auto-compile mode. It keeps `#line` source mapping 
 
 `--compile` writes the intermediate C beside the requested input using the `.c` suffix unless an explicit output convention is selected by the implementation, and defaults the executable name to `.out` when `-o` is omitted. The legacy form `<input.basalt> [output.c]` remains a C-generation operation; it does not silently compile or execute the result. Arguments after `--` are passed in order before the generated C input and before the final `-o <binary>` pair. A failed compiler returns its nonzero status and forwards compiler stderr. The repository's Bootstrap and fixed-point scripts pass `--no-line` only while translating the compiler source itself, keeping the frozen seed artifact compact; this build policy does not change the compiler's default behavior for user programs.
 
+### 2.1 Manage dependencies
+
+The repository-side package manager is available as `python3 scripts/basalt_pkg.py`. It is intentionally separate from compiler syntax: it resolves and verifies source packages, while the Bootstrap compiler continues to resolve ordinary `include` paths relative to the including source file.
+
+Create a manifest, add a requirement, resolve it, and inspect the resulting graph:
+
+```sh
+python3 scripts/basalt_pkg.py --root . init
+python3 scripts/basalt_pkg.py --root . add text@^1.2.0
+python3 scripts/basalt_pkg.py --root . --registry .tmp/registry fetch
+python3 scripts/basalt_pkg.py --root . tree
+python3 scripts/basalt_pkg.py --root . verify
+```
+
+`fetch` writes `Basalt.lock`, verifies each registry archive against its SHA-256 checksum, validates the archive manifest and top-level directory, and atomically materializes source under `.basalt/vendor/<name>/<version>/`. The lockfile is authoritative for later `fetch`, `verify`, and `build` operations; run `update` explicitly when newer satisfying versions should be considered.
+
+The initial registry protocol supports a local directory or an HTTPS base with an index record and immutable archive. A local dependency can be declared without a registry:
+
+```toml
+[dependencies]
+local_math = { path = "../local_math" }
+```
+
+For reproducible CI or disconnected builds, set `BASALT_HOME` to a workspace directory and use the cache-only mode:
+
+```sh
+BASALT_HOME="$PWD/.tmp/package-manager-home" \\
+  python3 scripts/basalt_pkg.py --root . fetch --offline
+BASALT_HOME="$PWD/.tmp/package-manager-home" \\
+  python3 scripts/basalt_pkg.py --root . build --offline \\
+    --compiler .tmp/bootstrap.bin --cc gcc --output .tmp/app.bin \\
+    --compiler-arg=-std=c11 --compiler-arg=-Wall --compiler-arg=-Werror
+```
+
+Offline commands never contact a registry and fail if the lockfile or checksum-addressed archive is absent or corrupt. `build` uses `--compiler` for the Bootstrap compiler, `--cc` (or `CC`) for the C compiler, and accepts repeated `--compiler-arg` options; each value remains a separate compiler argv element, and package-provided scripts are never executed. Native package import syntax is deliberately deferred; consult [`PACKAGE_MANAGER.md`](PACKAGE_MANAGER.md) for the complete contract and security boundary.
+
 ---
 
 ## 3. Your first program
