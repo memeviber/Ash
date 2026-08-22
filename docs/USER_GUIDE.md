@@ -60,7 +60,7 @@ The compiler accepts `--line` and `--no-line` before the input path. Mapping is 
 "$current_bin" --no-line hello.basalt .tmp/hello-no-line.c
 ```
 
-For a one-command build, use auto-compile mode. It disables `#line` source mapping by default, keeping the generated C free of source directives for ordinary compiler builds. Add `--line` explicitly when debugger/source mapping records are wanted. It keeps compiler arguments as separate argv elements and never builds a shell command by string concatenation:
+For a one-command build, use auto-compile mode. It keeps `#line` source mapping enabled by default, so compiler diagnostics and debugger locations refer back to the `.basalt` source. Use `--no-line` explicitly when a generated C consumer requires no source directives; `--line` may be supplied explicitly as well. It keeps compiler arguments as separate argv elements and never builds a shell command by string concatenation:
 
 ```sh
 "$current_bin" --compile hello.basalt -o .tmp/hello.bin \
@@ -68,7 +68,7 @@ For a one-command build, use auto-compile mode. It disables `#line` source mappi
 .tmp/hello.bin
 ```
 
-`--compile` writes the intermediate C beside the requested input using the `.c` suffix unless an explicit output convention is selected by the implementation, and defaults the executable name to `.out` when `-o` is omitted. The legacy form `<input.basalt> [output.c]` remains a C-generation operation; it does not silently compile or execute the result. Arguments after `--` are passed in order before the generated C input and before the final `-o <binary>` pair. A failed compiler returns its nonzero status and forwards compiler stderr.
+`--compile` writes the intermediate C beside the requested input using the `.c` suffix unless an explicit output convention is selected by the implementation, and defaults the executable name to `.out` when `-o` is omitted. The legacy form `<input.basalt> [output.c]` remains a C-generation operation; it does not silently compile or execute the result. Arguments after `--` are passed in order before the generated C input and before the final `-o <binary>` pair. A failed compiler returns its nonzero status and forwards compiler stderr. The repository's Bootstrap and fixed-point scripts pass `--no-line` only while translating the compiler source itself, keeping the frozen seed artifact compact; this build policy does not change the compiler's default behavior for user programs.
 
 ---
 

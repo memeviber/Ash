@@ -121,14 +121,19 @@ auto_compile_cli() {
     return 1
   fi
   test -f "$generated"
-  if grep -q '^#line ' "$generated"; then
-    echo "FAIL auto-compile: #line is enabled by default" >&2
+  if ! grep -q '^#line ' "$generated"; then
+    echo "FAIL auto-compile: #line is not enabled by default" >&2
     return 1
   fi
   local line_source="$OUT/auto_compile_line_input.basalt"
   local line_binary="$OUT/auto_compile_line_input.bin"
   local line_generated="${line_source}.c"
   cp "$ROOT/tests/super/print_stream_valid.basalt" "$line_source"
+  "$BOOT_BIN" --compile --no-line "$line_source" -o "$line_binary" --cc gcc -- -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror >/dev/null
+  if grep -q '^#line ' "$line_generated"; then
+    echo "FAIL auto-compile --no-line: source mapping was not disabled" >&2
+    return 1
+  fi
   "$BOOT_BIN" --compile --line "$line_source" -o "$line_binary" --cc gcc -- -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror >/dev/null
   if ! grep -q '^#line ' "$line_generated"; then
     echo "FAIL auto-compile --line: source mapping was not enabled" >&2

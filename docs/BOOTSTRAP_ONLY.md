@@ -33,16 +33,16 @@ New language features must be implemented in `src/bootstrap/basaltc.basalt`, and
 `scripts/fixed_point.sh` uses the stored modern compiler and performs the contemporary self-hosting loop:
 
 1. The frozen `basaltc.seed.c` is compiled to a seed binary.
-2. The seed translates the current `basaltc.basalt` to `n2.c`; this may differ from the frozen seed because the source is allowed to evolve.
-3. `n2.c` is compiled to `n2.bin`, which translates the source to `n3.c`.
-4. `n3.c` is compiled to `n3.bin`, which translates the source to `n4.c`.
+2. The seed translates the current `basaltc.basalt` to `n2.c` with `--no-line`; this may differ from the frozen seed because the source is allowed to evolve.
+3. `n2.c` is compiled to `n2.bin`, which translates the source to `n3.c` with `--no-line`.
+4. `n3.c` is compiled to `n3.bin`, which translates the source to `n4.c` with `--no-line`.
 5. The runner requires `n3.c == n4.c`, checks the immutable seed SHA-256 value, and reports the current stable compiler SHA-256 separately.
 
 The stored C compiler is never regenerated or replaced by any runner. It is the deliberate compiler boundary between the previous generation and modern source development; generated current-generation compilers remain temporary unless explicitly promoted as a future seed.
 
 ## CLI and process safety
 
-The compatibility CLI is `basaltc [--line|--no-line] <input.basalt> [output.c]`. Source mapping is enabled by default for ordinary C generation; `--no-line` suppresses generated `#line` records without changing emitted program semantics. The explicit build form is `basaltc --compile <input.basalt> [-o <binary>] [--cc <compiler>] [-- <compiler-arguments...>]`. Auto-compile disables source mapping by default; `--line` is an explicit opt-in if the generated C must retain source directives, while `--no-line` explicitly keeps them disabled. The compiler arguments after `--` remain individual argv elements and are passed in order before the generated C path. Auto-compile MUST NOT concatenate user-provided options into a shell command.
+The compatibility CLI is `basaltc [--line|--no-line] <input.basalt> [output.c]`. Source mapping is enabled by default for ordinary C generation; `--no-line` suppresses generated `#line` records without changing emitted program semantics. The explicit build form is `basaltc --compile <input.basalt> [-o <binary>] [--cc <compiler>] [-- <compiler-arguments...>]`. Auto-compile also keeps source mapping enabled by default; `--no-line` is the explicit opt-out and `--line` explicitly keeps it enabled. Only the repository's Bootstrap and fixed-point scripts pass `--no-line` while translating `src/bootstrap/basaltc.basalt`, so the frozen seed/current compiler artifacts do not carry mapping directives. This build policy is separate from the CLI behavior of the compiler when compiling user programs. The compiler arguments after `--` remain individual argv elements and are passed in order before the generated C path. Auto-compile MUST NOT concatenate user-provided options into a shell command.
 
 The `sys::run` standard-library API applies the same rule to child processes. It receives an executable and `array::Array<string>` arguments, so spaces, quotes, and shell metacharacters remain data. It returns normalized status, success, bounded stdout/stderr, a truncation flag, and a spawn-error code. POSIX implementations use fork/exec, pipes, polling, and wait; the current Windows fallback provides status while leaving captured streams empty. There is no implicit shell mode.
 

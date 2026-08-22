@@ -6884,8 +6884,10 @@ func emit_c_file(path: string): void {
   emit_pending_space = 0;
   while i < code_count {
     if code_epoch[i] != last_epoch then {
-      emit_pending_space = 0;
-      if emit_line_directives == 1 then emit_source_line(out, code_pos[i]);
+      if emit_line_directives == 1 then {
+        emit_pending_space = 0;
+        emit_source_line(out, code_pos[i]);
+      }
       last_epoch = code_epoch[i];
     }
     emit_c_token(out, code_kind[i], code_value[i]);
@@ -6917,7 +6919,6 @@ func main(argc: int, argv: string*): void {
   let input_index: int = 0 - 1;
   let output_index: int = 0 - 1;
   let auto_compile: int = 0;
-  let line_explicit: int = 0;
   let compiler: string = "cc";
   let binary_path: string = "";
   let has_binary_path: int = 0;
@@ -6931,11 +6932,9 @@ func main(argc: int, argv: string*): void {
       i = argc;
     } else if cli_arg_eq(argv[i], "--line") == 1 then {
       emit_line_directives = 1;
-      line_explicit = 1;
       i = i + 1;
     } else if cli_arg_eq(argv[i], "--no-line") == 1 then {
       emit_line_directives = 0;
-      line_explicit = 1;
       i = i + 1;
     } else if cli_arg_eq(argv[i], "--compile") == 1 then {
       auto_compile = 1;
@@ -6960,9 +6959,6 @@ func main(argc: int, argv: string*): void {
     }
   }
   if input_index < 0 then return 1;
-  if auto_compile == 1 then {
-    if line_explicit == 0 then emit_line_directives = 0;
-  }
   let ok: int = pipeline_main(argv[input_index]);
   if ok != 0 then return ok;
   let c_path: string = "";

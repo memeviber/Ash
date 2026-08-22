@@ -12,14 +12,14 @@ STRICT_FLAGS=(-std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror)
 
 # The frozen previous-generation compiler translates the evolving source once.
 gcc "${STRICT_FLAGS[@]}" "$SEED_C" -o "$OUT/n1.bin"
-"$OUT/n1.bin" "$SRC" "$OUT/n2.c"
+"$OUT/n1.bin" --no-line "$SRC" "$OUT/n2.c"
 
 # The generated compiler is then iterated until the current source reaches a
 # stable self-hosted artifact. n2 may legitimately differ from the old seed.
 gcc "${STRICT_FLAGS[@]}" "$OUT/n2.c" -o "$OUT/n2.bin"
-"$OUT/n2.bin" "$SRC" "$OUT/n3.c"
+"$OUT/n2.bin" --no-line "$SRC" "$OUT/n3.c"
 gcc "${STRICT_FLAGS[@]}" "$OUT/n3.c" -o "$OUT/n3.bin"
-"$OUT/n3.bin" "$SRC" "$OUT/n4.c"
+"$OUT/n3.bin" --no-line "$SRC" "$OUT/n4.c"
 cmp -s "$OUT/n3.c" "$OUT/n4.c"
 
 SEED_ACTUAL=$(sha256sum "$SEED_C" | cut -d' ' -f1)
