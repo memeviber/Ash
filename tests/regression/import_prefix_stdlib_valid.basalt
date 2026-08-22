@@ -1,0 +1,7 @@
+include "@stdlib/string.basalt"
+
+func main(): int {
+  if str::eq("basalt", "basalt") == 0 then return 1;
+  if str::byte_len("rocks") != 5 then return 2;
+  return 0;
+}

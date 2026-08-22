@@ -26,7 +26,7 @@ bash scripts/run_ownership_stress.sh
 python3 scripts/run_memory_sanitizer.py
 ```
 
-New language features must be implemented in `src/bootstrap/basaltc.basalt`, and new tests must be compiled and run through the Bootstrap compiler produced from `basaltc.seed.c`. Generated C files and binaries belong only in `.tmp/` and must not be committed. The compiler's `--compile` mode follows the same rule for its intermediate C file and executable during development.
+New language features must be implemented in `src/bootstrap/basaltc.basalt`, and new tests must be compiled and run through the Bootstrap compiler produced from `basaltc.seed.c`. Generated C files and binaries belong only in `.tmp/` and must not be committed. The compiler's `--compile` mode follows the same rule for its intermediate C file and executable during development. Import-prefix tests invoke the compiler from a temporary project root: `@stdlib/<path>` maps to `src/stdlib/<path>`, while `@lib/<name>/<version>/<entry>` maps to `.basalt/vendor/<name>/<version>/<entry>`. Existing including-file-relative paths remain covered for compatibility.
 
 ## Fixed point
 
@@ -68,7 +68,8 @@ The `tests/super/` corpus is the pressure layer for changes that cross several c
 | Pointer arithmetic | Same-array addition and subtraction, valid dereference, one-past pointer formation without dereference | `integer_pointer_boundary_valid.basalt`, pointer-arithmetic regression and stress fixtures |
 | Generic specialization | Nested `Option`, `Result`, and dynamic `Array` instantiations; repeated calls with concrete element types | `stdlib_matrix_valid.basalt`, `closure_generic_nested_valid.basalt` |
 | Closures and callbacks | Borrowed captures, function pointers, generic callback return substitution, and lifecycle checks | `closure_generic_nested_valid.basalt`, closure ownership fixtures |
-| Standard library | Growth, indexing, higher-order operations, string helpers, map operations, and builder lifecycle | `stdlib_matrix_valid.basalt` and the existing standard-library matrix |
+| Standard library | Growth, indexing, higher-order operations, string helpers, map operations, builder lifecycle, and project-root prefix resolution | `stdlib_matrix_valid.basalt`, `import_prefix_stdlib_valid.basalt`, and `import_prefix_lib_valid.basalt` |
+| Testkit stress | 35,000 grouped assertions across integer, range, boolean, character, floating-point, and string paths | `basalt-registry/tests/testkit_stress.basalt` and `run_testkit_stress.py` |
 | Negative compilation | Generic element mismatch and incompatible generic callback signatures | `generic_element_mismatch_invalid.basalt`, `generic_callback_mismatch_invalid.basalt` |
 | Toolchain safety | Strict C11 warnings, ASan, UBSan, fixed-point reproduction, and no repository ELF artifacts | `run_regression.sh`, `run_ownership_stress.sh`, and `fixed_point.sh` |
 

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Basalt package manager MVP.
 
-The tool is intentionally a repository-side helper while package imports are
-still being specified in the Bootstrap compiler. It never executes package
-scripts and never builds the frozen Host compiler.
+The tool is intentionally a repository-side helper around the Bootstrap
+compiler. Verified packages are materialized under `.basalt/vendor/` and can be
+referenced by the compiler's explicit `@lib/<name>/<version>/<entry>` prefix.
+The tool never executes package scripts and never builds the frozen Host compiler.
 """
 
 from __future__ import annotations

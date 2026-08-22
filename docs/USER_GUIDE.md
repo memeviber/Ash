@@ -74,7 +74,7 @@ For a one-command build, use auto-compile mode. It keeps `#line` source mapping 
 
 ### 2.1 Manage dependencies
 
-The repository-side package manager is available as `python3 scripts/basalt_pkg.py`. It is intentionally separate from compiler syntax: it resolves and verifies source packages, while the Bootstrap compiler continues to resolve ordinary `include` paths relative to the including source file.
+The repository-side package manager is available as `python3 scripts/basalt_pkg.py`. It resolves and verifies source packages, while the Bootstrap compiler resolves ordinary relative `include` paths relative to the including source file and also supports explicit project-root prefixes for standard-library and installed-package sources.
 
 Create a manifest, add a requirement, resolve it, and inspect the resulting graph:
 
@@ -106,7 +106,31 @@ BASALT_HOME="$PWD/.tmp/package-manager-home" \\
     --compiler-arg=-std=c11 --compiler-arg=-Wall --compiler-arg=-Werror
 ```
 
-Offline commands never contact a registry and fail if the lockfile or checksum-addressed archive is absent or corrupt. `build` uses `--compiler` for the Bootstrap compiler, `--cc` (or `CC`) for the C compiler, and accepts repeated `--compiler-arg` options; each value remains a separate compiler argv element, and package-provided scripts are never executed. Native package import syntax is deliberately deferred; consult [`PACKAGE_MANAGER.md`](PACKAGE_MANAGER.md) for the complete contract and security boundary.
+Offline commands never contact a registry and fail if the lockfile or checksum-addressed archive is absent or corrupt. `build` uses `--compiler` for the Bootstrap compiler, `--cc` (or `CC`) for the C compiler, and accepts repeated `--compiler-arg` options; each value remains a separate compiler argv element, and package-provided scripts are never executed. After `fetch` or `build` materializes a package, invoke the compiler from the project root and use `@lib/<name>/<version>/<entry>` to import it. Consult [`PACKAGE_MANAGER.md`](PACKAGE_MANAGER.md) for the complete package and security contract.
+
+### 2.2 Short source imports
+
+Prefix imports are explicit aliases anchored at the compiler's working directory at translation start. They do not change legacy relative include behavior:
+
+```basalt
+include "@stdlib/array.basalt"
+include "@lib/testkit/0.1.0/src/testkit.basalt"
+```
+
+The first path means `<project-root>/src/stdlib/array.basalt`. The second means `<project-root>/.basalt/vendor/testkit/0.1.0/src/testkit.basalt`; the package must already be fetched and verified. The version is part of the path and is never inferred. Run the compiler from the project root so nested modules see the same stable prefix root.
+
+For a package workspace, a minimal flow is:
+
+```sh
+python3 scripts/basalt_pkg.py --root . --registry .tmp/registry fetch
+"$current_bin" --no-line tests/my_test.basalt .tmp/my_test.c
+```
+
+```basalt
+include "@lib/testkit/0.1.0/src/testkit.basalt"
+```
+
+A legacy path such as `include "../packages/testkit/0.1.0/src/testkit.basalt"` remains valid and continues to resolve relative to the including file.
 
 ---
 

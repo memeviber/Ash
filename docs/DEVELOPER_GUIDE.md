@@ -186,7 +186,7 @@ compile_run "$ROOT/tests/regression/my_feature.basalt" my_feature          # val
 expect_reject "$ROOT/tests/regression/my_feature_invalid.basalt" my_feature_invalid  # Bootstrap must reject before C emission
 ```
 
-`compile_run` compiles the fixture with the current Bootstrap compiler from the fixture's directory (so relative `include` paths resolve), then requires strict-GCC acceptance and a successful run. `expect_reject` requires rejection before a generated C artifact is accepted. The frozen Host implementation is not invoked.
+`compile_run` compiles the fixture with the current Bootstrap compiler from the fixture's directory (so relative `include` paths resolve), then requires strict-GCC acceptance and a successful run. `expect_reject` requires rejection before a generated C artifact is accepted. Prefix fixtures are the deliberate exception: the harness invokes the compiler from a temporary project root so `@stdlib/` and `.basalt/vendor/` are exercised with their documented project-root semantics. The frozen Host implementation is not invoked.
 
 ### 4.4 Package-manager validation
 
@@ -201,7 +201,7 @@ The suite covers exact, caret, tilde, range, prerelease, lock pinning, compatibl
 
 When changing package logic, preserve these invariants: requirements for one package are accumulated before selection; a lockfile is validated as a graph rather than trusted as text; registry archive references remain relative and non-URL; SHA-256 is checked before extraction and before build; extraction is staged and atomically promoted; and no package-provided script is executed. Normal fetch may read the selected registry, whereas `--offline` may use only `Basalt.lock` and the checksum-addressed cache.
 
-The current package tool materializes sources under `.basalt/vendor/` but does not add compiler-level import resolution. Do not modify `basaltc.basalt` or promote the seed for package-manager-only changes. If compiler integration is introduced later, it must follow the ordinary Bootstrap fixed-point, strict GCC/Clang, and ownership-stress gates.
+The package tool materializes sources under `.basalt/vendor/`, and the Bootstrap compiler resolves an installed entry through `@lib/<name>/<version>/<entry>`. `@stdlib/<entry>` resolves from the project root's `src/stdlib/` tree. Both prefixes are aliases expanded before canonical-path graph checks, and both require the compiler to be invoked from the project root captured at translation start; legacy including-file-relative paths remain unchanged. Prefix changes are compiler changes: implement them only in `src/bootstrap/basaltc.basalt`, rebuild from the frozen seed, and run the ordinary Bootstrap fixed-point, strict GCC/Clang, portability, and ownership-stress gates.
 
 ---
 

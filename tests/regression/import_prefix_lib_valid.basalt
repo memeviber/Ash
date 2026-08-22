@@ -1,0 +1,8 @@
+include "@lib/demo/0.1.0/src/prefix_installed_lib.basalt"
+
+func main(): int {
+  let failures: int = 0;
+  if demo::answer() != 42 then failures += 1;
+  if failures != 0 then return 1;
+  return 0;
+}

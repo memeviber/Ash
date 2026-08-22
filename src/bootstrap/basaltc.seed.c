@@ -236,6 +236,7 @@ static size_t basalt_inc_active_n = 0, basalt_inc_active_cap = 0;
 static char **basalt_inc_loaded = NULL;
 static size_t basalt_inc_loaded_n = 0, basalt_inc_loaded_cap = 0;
 static char *basalt_inc_last_path = NULL;
+static char *basalt_inc_project_root = NULL;
 static int basalt_inc_status = 0;
 static BASALT_UNUSED int basalt_inc_eq(const char *a, const char *b) {
   return strcmp(a, b) == 0;
@@ -267,6 +268,17 @@ static BASALT_UNUSED char *basalt_inc_strdup(const char *p) {
     exit(2);
   memcpy(q, p, n + 1);
   return (char *)basalt_track(q);
+}
+static BASALT_UNUSED char *basalt_inc_cwd(void) {
+  char buf[4096];
+#if defined(_WIN32)
+  if (_getcwd(buf, (int)sizeof(buf)))
+    return basalt_inc_strdup(buf);
+#else
+  if (getcwd(buf, sizeof(buf)))
+    return basalt_inc_strdup(buf);
+#endif
+  return basalt_inc_strdup("");
 }
 static BASALT_UNUSED char *basalt_inc_realpath(const char *p) {
   if (p && p[0] == 0) {
@@ -319,6 +331,67 @@ static BASALT_UNUSED char *basalt_inc_join(const char *base, const char *raw) {
   memcpy(q + n, raw, m + 1);
   return (char *)basalt_track(q);
 }
+static BASALT_UNUSED char *basalt_inc_dir_join(const char *base, const char *raw) {
+  size_t n = strlen(base);
+  size_t m = strlen(raw);
+  char *q;
+  if (n > (size_t)-1 - m - 2)
+    exit(2);
+  q = (char *)malloc(n + 1 + m + 1);
+  if (!q)
+    exit(2);
+  memcpy(q, base, n);
+  if (n && base[n - 1] != '/' && base[n - 1] != '\\')
+    q[n++] = '/';
+  memcpy(q + n, raw, m + 1);
+  return (char *)basalt_track(q);
+}
+static BASALT_UNUSED char *basalt_inc_expand_prefix(const char *raw) {
+  const char *base = NULL;
+  size_t skip = 0, n, m;
+  char *q;
+  if (strncmp(raw, "@stdlib/", 8) == 0) {
+    base = "src/stdlib/";
+    skip = 8;
+  } else if (strncmp(raw, "@lib/", 5) == 0) {
+    base = ".basalt/vendor/";
+    skip = 5;
+  } else
+    return NULL;
+  n = strlen(base);
+  m = strlen(raw + skip);
+  if (n > (size_t)-1 - m - 1)
+    exit(2);
+  q = (char *)malloc(n + m + 1);
+  if (!q)
+    exit(2);
+  memcpy(q, base, n);
+  memcpy(q + n, raw + skip, m + 1);
+  return (char *)basalt_track(q);
+}
+static BASALT_UNUSED int basalt_inc_prefix_safe(const char *raw) {
+  const char *p = raw;
+  const char *segment;
+  size_t len;
+  size_t skip = 0;
+  if (strncmp(raw, "@stdlib/", 8) == 0)
+    skip = 8;
+  else if (strncmp(raw, "@lib/", 5) == 0)
+    skip = 5;
+  else
+    return 1;
+  segment = raw + skip;
+  for (p = segment;; p++) {
+    if (*p == 47 || *p == 92 || *p == 0) {
+      len = (size_t)(p - segment);
+      if (len == 2 && segment[0] == 46 && segment[1] == 46)
+        return 0;
+      if (*p == 0)
+        return 1;
+      segment = p + 1;
+    }
+  }
+}
 static BASALT_UNUSED int basalt_include_line_mode(int *line, int n) {
   int i = 0, j;
   while (i < n && (line[i] == ' ' || line[i] == 9))
@@ -346,6 +419,7 @@ static BASALT_UNUSED void *basalt_include_open_root(const char *path) {
   char *p = basalt_inc_realpath(path);
   FILE *f;
   basalt_inc_last_path = p;
+  basalt_inc_project_root = basalt_inc_cwd();
   if (!basalt_inc_begin(p))
     return NULL;
   f = fopen(p, (const char[]){114, 0});
@@ -359,7 +433,7 @@ static BASALT_UNUSED void *basalt_include_open_root(const char *path) {
 }
 static BASALT_UNUSED void *basalt_include_open_line(int *line, int n, int mode) {
   int i = 0, a, b, j;
-  char *raw, *joined, *canon;
+  char *raw, *joined, *canon, *expanded;
   FILE *f;
   (void)mode;
   basalt_inc_last_path = basalt_inc_strdup("");
@@ -392,8 +466,18 @@ static BASALT_UNUSED void *basalt_include_open_line(int *line, int n, int mode) 
     j++;
   if (j != n)
     return NULL;
-  joined = basalt_inc_join(basalt_inc_active[basalt_inc_active_n - 1], raw);
-  canon = basalt_inc_realpath(joined);
+  expanded = basalt_inc_expand_prefix(raw);
+  if (expanded) {
+    if (!basalt_inc_prefix_safe(raw)) {
+      basalt_inc_status = 4;
+      return NULL;
+    }
+    joined = basalt_inc_dir_join(basalt_inc_project_root, expanded);
+    canon = basalt_inc_realpath(joined);
+  } else {
+    joined = basalt_inc_join(basalt_inc_active[basalt_inc_active_n - 1], raw);
+    canon = basalt_inc_realpath(joined);
+  }
   basalt_inc_last_path = canon;
   if (!basalt_inc_begin(canon))
     return NULL;
@@ -413,6 +497,7 @@ static BASALT_UNUSED void basalt_include_reset_session(void) {
   basalt_inc_active_n = 0;
   basalt_inc_loaded_n = 0;
   basalt_inc_last_path = NULL;
+  basalt_inc_project_root = NULL;
   basalt_inc_status = 0;
 }
 static BASALT_UNUSED void *open_file(const char *p, const char *m) {
@@ -15013,7 +15098,8 @@ void emit_runtime(int *out) {
       "static char** basalt_inc_active=NULL;static size_t "
       "basalt_inc_active_n=0,basalt_inc_active_cap=0;static char** basalt_inc_loaded=NULL;static "
       "size_t basalt_inc_loaded_n=0,basalt_inc_loaded_cap=0;static char* "
-      "basalt_inc_last_path=NULL;static int basalt_inc_status=0;\n"));
+      "basalt_inc_last_path=NULL;static char* basalt_inc_project_root=NULL;static int "
+      "basalt_inc_status=0;\n"));
   (void)(write_string(out, "static BASALT_UNUSED int basalt_inc_eq(const char*a,const "
                            "char*b){return strcmp(a,b)==0;}\n"));
   (void)(write_string(
@@ -15026,6 +15112,10 @@ void emit_runtime(int *out) {
   (void)(write_string(out, "static BASALT_UNUSED char* basalt_inc_strdup(const char*p){size_t "
                            "n=strlen(p);char*q=(char*)malloc(n+1);if(!q)exit(2);memcpy(q,p,n+1);"
                            "return(char*)basalt_track(q);}\n"));
+  (void)(write_string(out, "static BASALT_UNUSED char* basalt_inc_cwd(void){char buf[4096];\n#if "
+                           "defined(_WIN32)\nif(_getcwd(buf,(int)sizeof(buf)))return "
+                           "basalt_inc_strdup(buf);\n#else\nif(getcwd(buf,sizeof(buf)))return "
+                           "basalt_inc_strdup(buf);\n#endif\nreturn basalt_inc_strdup(\"\");}\n"));
   (void)(write_string(
       out, "static BASALT_UNUSED char* basalt_inc_realpath(const "
            "char*p){if(p&&p[0]==0){if(basalt_inc_last_path)return "
@@ -15053,6 +15143,27 @@ void emit_runtime(int *out) {
            "m=strlen(raw);char*q=(char*)malloc(n+m+1);if(!q)exit(2);if(n)memcpy(q,base,n);memcpy(q+"
            "n,raw,m+1);return(char*)basalt_track(q);}\n"));
   (void)(write_string(
+      out, "static BASALT_UNUSED char* basalt_inc_dir_join(const char*base,const char*raw){size_t "
+           "n=strlen(base);size_t "
+           "m=strlen(raw);char*q;if(n>(size_t)-1-m-2)exit(2);q=(char*)malloc(n+1+m+1);if(!q)exit(2)"
+           ";memcpy(q,base,n);if(n&&base[n-1]!='/'&&base[n-1]!='\\\\')q[n++]='/"
+           "';memcpy(q+n,raw,m+1);return(char*)basalt_track(q);}\n"));
+  (void)(write_string(
+      out,
+      "static BASALT_UNUSED char* basalt_inc_expand_prefix(const char*raw){const "
+      "char*base=NULL;size_t "
+      "skip=0,n,m;char*q;if(strncmp(raw,\"@stdlib/\",8)==0){base=\"src/stdlib/\";skip=8;}else "
+      "if(strncmp(raw,\"@lib/\",5)==0){base=\".basalt/vendor/\";skip=5;}else return "
+      "NULL;n=strlen(base);m=strlen(raw+skip);if(n>(size_t)-1-m-1)exit(2);q=(char*)malloc(n+m+1);"
+      "if(!q)exit(2);memcpy(q,base,n);memcpy(q+n,raw+skip,m+1);return(char*)basalt_track(q);}\n"));
+  (void)(write_string(
+      out,
+      "static BASALT_UNUSED int basalt_inc_prefix_safe(const char*raw){const char*p=raw;const "
+      "char*segment;size_t len;size_t skip=0;if(strncmp(raw,\"@stdlib/\",8)==0)skip=8;else "
+      "if(strncmp(raw,\"@lib/\",5)==0)skip=5;else return "
+      "1;segment=raw+skip;for(p=segment;;p++){if(*p==47||*p==92||*p==0){len=(size_t)(p-segment);if("
+      "len==2&&segment[0]==46&&segment[1]==46)return 0;if(*p==0)return 1;segment=p+1;}}}\n"));
+  (void)(write_string(
       out, "static BASALT_UNUSED int basalt_include_line_mode(int*line,int n){int "
            "i=0,j;while(i<n&&(line[i]==' "
            "'||line[i]==9))i++;if(i+7<=n&&line[i]=='i'&&line[i+1]=='n'&&line[i+2]=='c'&&line[i+3]=="
@@ -15061,31 +15172,36 @@ void emit_runtime(int *out) {
            "1;}if(i+8<=n&&line[i]=='i'&&line[i+1]=='n'&&line[i+2]=='c'&&line[i+3]=='l'&&line[i+4]=="
            "'u'&&line[i+5]=='d'&&line[i+6]=='e'&&line[i+7]=='c'){j=i+8;while(j<n&&(line[j]==' "
            "'||line[j]==9))j++;if(j<n&&line[j]==34)return 2;}return 0;}\n"));
-  (void)(write_string(out, "static BASALT_UNUSED void* basalt_include_open_root(const "
-                           "char*path){char*p=basalt_inc_realpath(path);FILE*f;basalt_inc_last_"
-                           "path=p;if(!basalt_inc_begin(p))return NULL;f=fopen(p,(const "
-                           "char[]){114,0});if(!f){basalt_inc_status=3;if(basalt_inc_active_n)"
-                           "basalt_inc_active_n--;return NULL;}return(void*)f;}\n"));
+  (void)(write_string(
+      out, "static BASALT_UNUSED void* basalt_include_open_root(const "
+           "char*path){char*p=basalt_inc_realpath(path);FILE*f;basalt_inc_last_path=p;basalt_inc_"
+           "project_root=basalt_inc_cwd();if(!basalt_inc_begin(p))return NULL;f=fopen(p,(const "
+           "char[]){114,0});if(!f){basalt_inc_status=3;if(basalt_inc_active_n)basalt_inc_active_n--"
+           ";return NULL;}return(void*)f;}\n"));
   (void)(write_string(
       out, "static BASALT_UNUSED void* basalt_include_open_line(int*line,int n,int mode){int "
-           "i=0,a,b,j;char*raw,*joined,*canon;FILE*f;(void)mode;basalt_inc_last_path=basalt_inc_"
-           "strdup(\"\");while(i<n&&line[i]!=34)i++;if(i>=n)return "
+           "i=0,a,b,j;char*raw,*joined,*canon,*expanded;FILE*f;(void)mode;basalt_inc_last_path="
+           "basalt_inc_strdup(\"\");while(i<n&&line[i]!=34)i++;if(i>=n)return "
            "NULL;a=++i;while(i<n&&line[i]!=34)i++;if(i>=n)return "
            "NULL;b=i;raw=(char*)malloc((size_t)(b-a)+1);if(!raw)exit(2);{int "
            "k;for(k=0;k<b-a;k++)raw[k]=(char)line[a+k];}raw[b-a]=0;raw=(char*)basalt_track(raw);j="
            "i+1;while(j<n&&(line[j]==32||line[j]==9))j++;if(j<n&&line[j]==59)j++;while(j<n&&(line["
            "j]==32||line[j]==9))j++;if(j!=n)return "
-           "NULL;joined=basalt_inc_join(basalt_inc_active[basalt_inc_active_n-1],raw);canon=basalt_"
-           "inc_realpath(joined);basalt_inc_last_path=canon;if(!basalt_inc_begin(canon))return "
-           "NULL;f=fopen(canon,(const "
+           "NULL;expanded=basalt_inc_expand_prefix(raw);if(expanded){if(!basalt_inc_prefix_safe("
+           "raw)){basalt_inc_status=4;return "
+           "NULL;}joined=basalt_inc_dir_join(basalt_inc_project_root,expanded);canon=basalt_inc_"
+           "realpath(joined);}else{joined=basalt_inc_join(basalt_inc_active[basalt_inc_active_n-1],"
+           "raw);canon=basalt_inc_realpath(joined);}basalt_inc_last_path=canon;if(!basalt_inc_"
+           "begin(canon))return NULL;f=fopen(canon,(const "
            "char[]){114,0});if(!f){basalt_inc_status=3;if(basalt_inc_active_n)basalt_inc_active_n--"
            ";return NULL;}return(void*)f;}\n"));
   (void)(write_string(
       out,
       "static BASALT_UNUSED int basalt_include_last_status(void){return basalt_inc_status;}\n"));
-  (void)(write_string(out, "static BASALT_UNUSED void "
-                           "basalt_include_reset_session(void){basalt_inc_active_n=0;basalt_inc_"
-                           "loaded_n=0;basalt_inc_last_path=NULL;basalt_inc_status=0;}\n"));
+  (void)(write_string(
+      out, "static BASALT_UNUSED void "
+           "basalt_include_reset_session(void){basalt_inc_active_n=0;basalt_inc_loaded_n=0;basalt_"
+           "inc_last_path=NULL;basalt_inc_project_root=NULL;basalt_inc_status=0;}\n"));
   (void)(write_string(out, "static BASALT_UNUSED void* open_file(const char* p,const char* "
                            "m){return (void*)fopen(p,m);}\n"));
   (void)(write_string(

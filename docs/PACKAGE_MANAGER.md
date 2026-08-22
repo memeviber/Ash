@@ -2,7 +2,7 @@
 
 ## Status
 
-This document defines the initial package-manager contract for Basalt. The first implementation is deliberately a repository tool around the Bootstrap compiler; it does not modify or invoke the frozen OCaml Host compiler. Compiler integration is incremental so that package resolution, reproducibility, and artifact verification are stable before package imports are added to the language.
+This document defines the package-manager contract for Basalt. The implementation is deliberately a repository tool around the Bootstrap compiler; it does not modify or invoke the frozen OCaml Host compiler. Package resolution, reproducibility, and artifact verification are separated from compiler import syntax, while the Bootstrap compiler provides explicit `@lib` and `@stdlib` aliases for the verified source layout.
 
 The package manager uses five persistent concepts:
 
@@ -151,9 +151,9 @@ The current implementation exposes this command as `scripts/basalt_pkg.py` so pa
 
 ## Build integration boundary
 
-The current compiler resolves `include` paths relative to the including source file and does not yet have a package import search path. Therefore the first package-manager release materializes verified dependencies and generates a deterministic build workspace; it does not silently rewrite user source or inject arbitrary include paths. Package import syntax and compiler-level package roots are a separate compatibility milestone.
+The package manager materializes verified dependencies at `.basalt/vendor/<name>/<version>/`. The Bootstrap compiler exposes that exact layout through the explicit prefix `@lib/<name>/<version>/<entry>`. The standard library is exposed through `@stdlib/<entry>`, which resolves to `<project-root>/src/stdlib/<entry>`. The compiler captures `<project-root>` from its working directory when translation starts, so `build` invokes it from the package root and nested includes keep a stable root.
 
-Until that milestone lands, a package entry may explicitly include a vendored module through the generated workspace path. The package manager records this limitation rather than pretending that a registry dependency is already a native language import. `build` passes the Bootstrap compiler path, `--compile`, entry path, `--cc` C compiler, output path, and each repeated `--compiler-arg` as separate argv elements; it never concatenates a shell command. Use `--compiler` or `BASALT_COMPILER` for the Bootstrap compiler and `--cc` or `CC` for the generated-C compiler.
+Prefix expansion happens before canonical-path registration and therefore preserves cycle detection, duplicate-load suppression, dependency edges, and diagnostic target paths. The version component is mandatory and is not inferred from the lockfile. A legacy quoted relative include remains including-file-relative and remains supported; prefix syntax does not rewrite or invalidate it. `build` passes the Bootstrap compiler path, `--compile`, entry path, `--cc` C compiler, output path, and each repeated `--compiler-arg` as separate argv elements; it never concatenates a shell command. Use `--compiler` or `BASALT_COMPILER` for the Bootstrap compiler and `--cc` or `CC` for the generated-C compiler.
 
 ## Security contract
 
@@ -191,6 +191,5 @@ The following are intentionally deferred until the initial resolver and lockfile
 - git and arbitrary URL dependencies;
 - native C library packages and build scripts;
 - workspace packages and multiple binary targets;
-- transparent package imports in the Basalt compiler;
 - incremental compilation and binary artifact caching;
 - platform-specific dependency conditions.
