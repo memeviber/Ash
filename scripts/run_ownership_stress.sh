@@ -100,12 +100,30 @@ run_invalid() {
 printf '%s\n' '[2/3] Running ownership fixtures.'
 run_valid "$ROOT/tests/stress/move_borrow_valid.basalt"
 run_valid "$ROOT/tests/spec/valid/ownership_lifetime_valid.basalt"
+run_valid "$ROOT/tests/spec/valid/rust_borrow_valid.basalt"
+run_valid "$ROOT/tests/spec/valid/rust_borrow_flow_valid.basalt"
+run_valid "$ROOT/tests/spec/valid/rust_borrow_loop_move_valid.basalt"
+run_valid "$ROOT/tests/stress/case_borrow_lexical_nested.basalt"
 run_stdlib_valid "$ROOT/tests/regression/stdlib_filesystem_path_string_test.basalt"
 run_stdlib_valid "$ROOT/tests/regression/stdlib_utf8_test.basalt"
 run_stdlib_valid "$ROOT/tests/regression/stdlib_time_process_format_random_test.basalt"
 run_stdlib_valid "$ROOT/tests/regression/stdlib_concurrency_extended_test.basalt"
 run_stdlib_valid "$ROOT/tests/regression/string_builder_iter_test.basalt"
 for source in "$ROOT"/tests/stress/move_borrow_invalid_*.basalt; do
+  run_invalid "$source"
+done
+for source in \
+  "$ROOT/tests/spec/invalid/rust_shared_then_mut_invalid.basalt" \
+  "$ROOT/tests/spec/invalid/rust_mutate_shared_invalid.basalt" \
+  "$ROOT/tests/spec/invalid/rust_double_mut_invalid.basalt" \
+  "$ROOT/tests/spec/invalid/rust_mut_reborrow_conflict_invalid.basalt" \
+  "$ROOT/tests/spec/invalid/rust_mut_const_invalid.basalt" \
+  "$ROOT/tests/spec/invalid/rust_borrow_temporary_invalid.basalt" \
+  "$ROOT/tests/spec/invalid/rust_return_local_invalid.basalt" \
+  "$ROOT/tests/spec/invalid/rust_return_mixed_lifetime_invalid.basalt" \
+  "$ROOT/tests/spec/invalid/rust_move_while_borrowed_invalid.basalt" \
+  "$ROOT/tests/spec/invalid/rust_flow_shared_then_mut_invalid.basalt" \
+  "$ROOT/tests/stress/bad_borrow_loop_conflict.basalt"; do
   run_invalid "$source"
 done
 

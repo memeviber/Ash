@@ -39,7 +39,7 @@
 
 Both compilers parse Basalt source, perform static type checking, and emit portable **C11**. The Bootstrap compiler is verified by a *fixed-point* pass: the C output of generation `n2` must be byte-identical to the C output of generation `n3`. That guarantee is what makes Basalt genuinely self-hosted.
 
-The repository is organized for **reproducible compiler work**, not for generated build output. Source code lives under `src/`, tests under `tests/`, language documentation under `docs/`, and repeatable development commands under `scripts/`.
+The repository is organized for **reproducible compiler work**, not for generated build output. Source code lives under `src/`, tests under `tests/`, the project overview in `README.md`, and repeatable development commands under `scripts/`.
 
 ---
 
@@ -62,6 +62,7 @@ The repository is organized for **reproducible compiler work**, not for generate
 **Safety is a first-class concern:**
 
 - **Compile-time bounds checks for fixed arrays.** Indexing `T[n]` with a constant outside the array is rejected before any C is emitted &mdash; including the `0 - 1` form of `-1`.
+- **Bootstrap static borrow checking.** The self-hosted compiler tracks shared borrows (`&place`), mutable borrows (`&mut place`), `move` interaction, mutable reborrows such as `&mut *p`, lexical scope release, control-flow state, and borrowed-reference return/escape contracts. Active borrows block conflicting mutation, move, or release until their lexical owner ends.
 - **Move/borrow checking for dynamic arrays.** Values own their buffers; passing them *moves* them, releasing *consumes* them, and borrows (`&`) block mutation, moves, and release while live.
 - **Null safety through `option`.** The `option::Option<T>` module (tag + payload) makes absence explicit and total &mdash; the only way to read the payload is `unwrap_or`, so there is no panic path.
 - **Runtime fail-closed policy.** Tracked allocations are registry-checked; invalid bounds and double releases terminate deterministically with exit code `2`.
@@ -86,6 +87,7 @@ func main(): int {
 
 * Intuitive C-family syntax with explicit types
 * Static type checking with scope-aware resolution
+* Bootstrap static borrow checking (`&`, `&mut`, reborrow, lexical lifetime, return/escape analysis)
 * Ownership tracking for dynamic arrays (move / borrow / release)
 * Compile-time fixed-array bounds checks
 * Generic containers and algorithms
@@ -191,7 +193,7 @@ func main(): int {
 }
 ```
 
-For a full overview of the language surface, see the [`tests`](tests) folder and the [`docs`](docs) directory.
+For a full overview of the language surface, see the [`tests`](tests) folder and this README.
 
 ---
 
@@ -203,7 +205,7 @@ For a full overview of the language surface, see the [`tests`](tests) folder and
 | `src/bootstrap/` | Canonical self-hosting Basalt compiler source, generated C bootstrap artefact, and fixed-point checksum |
 | `src/stdlib/` | Generic containers, text/path APIs, OS boundaries, concurrency, formatting, randomness, and standard library modules |
 | `tests/regression/` | Focused language and compiler regression programs |
-| `tests/stress/` | The 164-case corpus plus the dedicated modulo stress and negative tests |
+| `tests/stress/` | The stress corpus, dedicated borrow-flow stress fixtures, modulo stress, and negative tests |
 | `tests/conformance/` | Host/Bootstrap conformance programs and runner material |
 | `tests/adversarial/` | Sanitizer-oriented and adversarial compiler tests |
 | `tests/benchmark/` | Cross-language benchmark source material |
@@ -295,7 +297,7 @@ The individual suites can be run directly:
 ./scripts/fixed_point.sh
 ```
 
-The regression suite compiles and executes every registered fixture through the Bootstrap compiler with strict GCC: valid programs must compile and run; `expect_reject` fixtures must be rejected. Selected stdlib fixtures are also compiled with strict Clang and sanitizer builds.
+The regression suite compiles and executes every registered fixture through the Bootstrap compiler with strict GCC: valid programs must compile and run; `expect_reject` fixtures must be rejected. The specification suite validates the borrow diagnostics for shared/mutable conflicts, temporary borrows, const places, return escapes, and ambiguous lifetimes. Selected stdlib and borrow fixtures are also compiled with strict Clang and sanitizer builds.
 
 The corpus covers collection growth and hashing, iterator callbacks, stable sorting, UTF-8/string boundaries, path normalization, text filesystem errors, time validation, secure `argv` process handling, mutex/cancellation, typed formatting, deterministic PRNG behavior, and ownership cleanup.
 
@@ -305,7 +307,7 @@ The corpus covers collection growth and hashing, iterator callbacks, stable sort
 
 Generated code is checked with **strict C11 warnings under GCC and Clang** and is exercised with **AddressSanitizer** and **UndefinedBehaviorSanitizer** in the ownership, adversarial, and stress workflows. Dynamic-array allocation, resizing, indexing, mutation, and release use checked runtime helpers with registry validation, overflow guards, lifetime checks, and deterministic failure on invalid bounds. Filesystem, process, time, concurrency, and entropy APIs are explicit OS boundaries with `Result` / status checks; text file reads are not a binary-buffer abstraction, process handles must be reaped before release, and unsupported Windows capabilities return documented errors rather than being emulated unsafely.
 
-Basalt does **not** yet provide complete Rust-style static borrow checking. Raw pointer dereference, pointer arithmetic, `extern`, and `includec` remain explicitly low-level interoperability boundaries. Programs using those features should follow the ownership rules in the compiler's checked-runtime helpers and should be tested with sanitizers.
+The Bootstrap compiler now provides **static lexical borrow checking for its tracked language surface**. A binding created from `&place` is shared, while `&mut place` requires a mutable place and creates an exclusive capability. The checker propagates provenance through dereference, field/index places, reborrow, direct/generic named calls, and borrowed-reference returns; it also merges moved/borrowed state conservatively across `if`, `while`, and `for`. Diagnostics 37, 68, 69, 70, and 72 cover active-loan conflicts, non-place borrows, inconsistent return lifetimes, invalid mutable places, and local-reference escapes respectively. The current model intentionally uses a conservative root-place policy rather than disjoint field/index loans, and it treats raw pointer dereference, pointer arithmetic, `extern`, and `includec` as explicitly low-level interoperability boundaries that must be validated with sanitizers.
 
 The repository intentionally excludes compiler build directories, generated test outputs, caches, and local binaries from version control.
 
@@ -316,13 +318,13 @@ The repository intentionally excludes compiler build directories, generated test
 * [x] OCaml Host compiler (reference implementation)
 * [x] Self-hosted Bootstrap compiler with fixed-point verification
 * [x] Ownership checking (move / borrow / release)
+* [x] Bootstrap static borrow checking (shared/mutable loans, reborrow, lexical lifetime, flow state, return/escape analysis)
 * [x] Compile-time fixed-array bounds checks
 * [x] `option` and `result` types
 * [x] Standard library: containers, text, paths, FS, time, process, concurrency, formatting, randomness
 * [x] AddressSanitizer + UndefinedBehaviorSanitizer workflows
 * [x] Strict C11 warning profile under GCC and Clang
-* [x] Package manager (manifest, SemVer, registry, lockfile)
-* [ ] Full Rust-style static borrow checking
+* [ ] Package manager (the implementation and offline suite are absent from this upstream snapshot)
 * [ ] Incremental compilation cache
 * [ ] Debugger and profiler integration
 * [ ] VS Code language server and extension

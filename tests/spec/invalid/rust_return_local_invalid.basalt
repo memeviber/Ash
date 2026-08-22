@@ -1,0 +1,13 @@
+func leak_local(): int* {
+  let local: int = 9;
+  let local_ptr: int* = &local;
+  return local_ptr;
+}
+
+func main(): int {
+  let escaped: int* = leak_local();
+  return *escaped;
+}
+
+// diagnostic.code: 72
+// diagnostic: reference return escapes a local owner

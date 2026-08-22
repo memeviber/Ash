@@ -1,0 +1,14 @@
+func main(): int {
+  let value: int = 1;
+  let shared: int* = &value;
+  if 1 then {
+    let mutable: int* = &mut value;
+    *mutable = 2;
+  } else {
+    return 0;
+  }
+  return *shared;
+}
+
+// diagnostic.code: 37
+// diagnostic: control-flow branch cannot create a mutable borrow over an active shared borrow

@@ -1,0 +1,16 @@
+func main(): int {
+  let value: int = 1;
+  let shared: int* = &value;
+  let i: int = 0;
+  while i < 12 {
+    {
+      let mutable: int* = &mut value;
+      *mutable = i;
+    }
+    i = i + 1;
+  }
+  return *shared;
+}
+
+// diagnostic.code: 37
+// diagnostic: loop body cannot create a mutable borrow over an active shared borrow

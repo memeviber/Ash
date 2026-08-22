@@ -1,0 +1,14 @@
+func choose(borrow first: int*, borrow second: int*): int* {
+  if 1 then return first;
+  else return second;
+}
+
+func main(): int {
+  let a: int = 1;
+  let b: int = 2;
+  let result: int* = choose(&a, &b);
+  return *result;
+}
+
+// diagnostic.code: 69
+// diagnostic: return-borrow lifetime is ambiguous

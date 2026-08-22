@@ -2502,6 +2502,7 @@ let T_BORROW: int = 91;
 let T_BORROW_MUT: int = 92;
 let T_CLOSURE: int = 93;
 let T_PRINTLN: int = 94;
+let T_MUT: int = 95;
 
 let input_kind: int* = 0;
 let input_value: int* = 0;
@@ -2865,9 +2866,11 @@ func ast_unary(): int {
     return ast_node(N_DEREF, e, 0, 0, 0, 0);
   }
   if input_take(T_AMP) == 1 then {
+    let mutable: int = 0;
+    if input_take(T_MUT) == 1 then mutable = 1;
     let e: int = ast_unary();
     if e < 0 then return (0 - 1);
-    return ast_node(N_ADDRESS, e, 0, 0, 0, 0);
+    return ast_node(N_ADDRESS, e, 0, 0, mutable, 0);
   }
   return ast_primary();
 }
@@ -3569,6 +3572,7 @@ let L_BORROW: int = 92;
 let L_BORROW_MUT: int = 93;
 let L_NOT: int = 94;
 let L_CLOSURE: int = 95;
+let L_MUT: int = 97;
 
 let source: int* = 0;
 let source_len: int = 0;
@@ -4051,6 +4055,7 @@ func word_code(start: int, length: int): int {
     if source[start] == 105 && source[start + 1] == 56 then return L_TI8;
   }
   if length == 3 then {
+    if source[start] == 109 && source[start + 1] == 117 && source[start + 2] == 116 then return L_MUT;
     if h == 315572 then return L_LET;
     if h == 312968 then return L_TINT;
     if h == 310114 then return L_FOR;
@@ -4473,6 +4478,7 @@ func map_token(k: int): int {
   if k == L_BORROW then return T_BORROW;
   if k == L_BORROW_MUT then return T_BORROW_MUT;
   if k == L_CLOSURE then return T_CLOSURE;
+  if k == L_MUT then return T_MUT;
   if k == L_COLON then return T_COLON;
   if k == L_LPAREN then return T_LPAREN;
   if k == L_RPAREN then return T_RPAREN;
@@ -4573,7 +4579,11 @@ let tc_var_moved: int* = 0;
 let tc_var_borrow_count: int* = 0;
 let tc_var_borrow_mut: int* = 0;
 let tc_var_borrow_source: int* = 0;
+let tc_var_borrow_mode: int* = 0;
+let tc_var_borrow_parent: int* = 0;
+let tc_var_borrow_param: int* = 0;
 let tc_var_param: int* = 0;
+let tc_var_param_pos: int* = 0;
 let tc_var_mode: int* = 0;
 let tc_var_closure_caps: int* = 0;
 let tc_var_closure_moved: int* = 0;
@@ -4585,6 +4595,9 @@ let tc_expr_ffi_borrowed: int = 0;
 let tc_last_var_moved: int = 0;
 let tc_last_var_index: int = 0;
 let tc_expr_borrow_source: int = 0 - 1;
+let tc_expr_borrow_origin: int = 0 - 1;
+let tc_expr_borrow_mut: int = 0;
+let tc_expr_borrow_param: int = 0;
 let tc_expr_owner_source: int = 0 - 1;
 let tc_expr_is_owned: int = 0;
 let tc_var_count: int = 0;
@@ -4604,6 +4617,31 @@ let tc_bind_name: int* = 0;
 let tc_bind_type: int* = 0;
 let tc_bind_count: int = 0;
 let tc_bind_cap: int = 0;
+let tc_fun_return_param: int* = 0;
+let tc_fun_return_mut: int* = 0;
+let tc_fun_meta_cap: int = 0;
+let tc_flow_log_owned: int* = 0;
+let tc_flow_log_moved: int* = 0;
+let tc_flow_log_borrow_count: int* = 0;
+let tc_flow_log_borrow_mut: int* = 0;
+let tc_flow_log_source: int* = 0;
+let tc_flow_log_mode: int* = 0;
+let tc_flow_log_parent: int* = 0;
+let tc_flow_log_borrow_param: int* = 0;
+let tc_flow_log_ffi: int* = 0;
+let tc_flow_log_closure_moved: int* = 0;
+let tc_flow_frame_base: int* = 0;
+let tc_flow_frame_yes: int* = 0;
+let tc_flow_frame_count: int* = 0;
+let tc_flow_frame_has_yes: int* = 0;
+let tc_flow_log_count: int = 0;
+let tc_flow_log_cap: int = 0;
+let tc_flow_depth: int = 0;
+let tc_flow_frame_cap: int = 0;
+let tc_current_function: int = 0;
+let tc_current_return_param: int = 0;
+let tc_current_return_mut: int = 0;
+let tc_current_return_seen: int = 0;
 
 func ensure_tc_vars(need: int): void {
   if need < tc_var_cap then return;
@@ -4619,12 +4657,135 @@ func ensure_tc_vars(need: int): void {
   tc_var_borrow_count = grow_ints(tc_var_borrow_count, tc_var_cap, n);
   tc_var_borrow_mut = grow_ints(tc_var_borrow_mut, tc_var_cap, n);
   tc_var_borrow_source = grow_ints(tc_var_borrow_source, tc_var_cap, n);
+  tc_var_borrow_mode = grow_ints(tc_var_borrow_mode, tc_var_cap, n);
+  tc_var_borrow_parent = grow_ints(tc_var_borrow_parent, tc_var_cap, n);
+  tc_var_borrow_param = grow_ints(tc_var_borrow_param, tc_var_cap, n);
   tc_var_param = grow_ints(tc_var_param, tc_var_cap, n);
+  tc_var_param_pos = grow_ints(tc_var_param_pos, tc_var_cap, n);
   tc_var_mode = grow_ints(tc_var_mode, tc_var_cap, n);
   tc_var_closure_caps = grow_ints(tc_var_closure_caps, tc_var_cap, n);
   tc_var_closure_moved = grow_ints(tc_var_closure_moved, tc_var_cap, n);
   tc_var_ffi_borrowed = grow_ints(tc_var_ffi_borrowed, tc_var_cap, n);
   tc_var_cap = n;
+}
+
+func ensure_tc_fun_meta(need: int): void {
+  if need < tc_fun_meta_cap then return;
+  let n: int = next_capacity(tc_fun_meta_cap, need);
+  tc_fun_return_param = grow_ints(tc_fun_return_param, tc_fun_meta_cap, n);
+  tc_fun_return_mut = grow_ints(tc_fun_return_mut, tc_fun_meta_cap, n);
+  tc_fun_meta_cap = n;
+}
+
+func ensure_tc_flow_frames(need: int): void {
+  if need < tc_flow_frame_cap then return;
+  let n: int = next_capacity(tc_flow_frame_cap, need);
+  tc_flow_frame_base = grow_ints(tc_flow_frame_base, tc_flow_frame_cap, n);
+  tc_flow_frame_yes = grow_ints(tc_flow_frame_yes, tc_flow_frame_cap, n);
+  tc_flow_frame_count = grow_ints(tc_flow_frame_count, tc_flow_frame_cap, n);
+  tc_flow_frame_has_yes = grow_ints(tc_flow_frame_has_yes, tc_flow_frame_cap, n);
+  tc_flow_frame_cap = n;
+}
+
+func ensure_tc_flow_log(need: int): void {
+  if need < tc_flow_log_cap then return;
+  let n: int = next_capacity(tc_flow_log_cap, need);
+  tc_flow_log_owned = grow_ints(tc_flow_log_owned, tc_flow_log_cap, n);
+  tc_flow_log_moved = grow_ints(tc_flow_log_moved, tc_flow_log_cap, n);
+  tc_flow_log_borrow_count = grow_ints(tc_flow_log_borrow_count, tc_flow_log_cap, n);
+  tc_flow_log_borrow_mut = grow_ints(tc_flow_log_borrow_mut, tc_flow_log_cap, n);
+  tc_flow_log_source = grow_ints(tc_flow_log_source, tc_flow_log_cap, n);
+  tc_flow_log_mode = grow_ints(tc_flow_log_mode, tc_flow_log_cap, n);
+  tc_flow_log_parent = grow_ints(tc_flow_log_parent, tc_flow_log_cap, n);
+  tc_flow_log_borrow_param = grow_ints(tc_flow_log_borrow_param, tc_flow_log_cap, n);
+  tc_flow_log_ffi = grow_ints(tc_flow_log_ffi, tc_flow_log_cap, n);
+  tc_flow_log_closure_moved = grow_ints(tc_flow_log_closure_moved, tc_flow_log_cap, n);
+  tc_flow_log_cap = n;
+}
+
+func tc_flow_append_current(count: int): void {
+  ensure_tc_flow_log(tc_flow_log_count + count);
+  let i: int = 0;
+  while i < count {
+    let slot: int = tc_flow_log_count + i;
+    tc_flow_log_owned[slot] = tc_var_owned[i]; tc_flow_log_moved[slot] = tc_var_moved[i];
+    tc_flow_log_borrow_count[slot] = tc_var_borrow_count[i]; tc_flow_log_borrow_mut[slot] = tc_var_borrow_mut[i];
+    tc_flow_log_source[slot] = tc_var_borrow_source[i]; tc_flow_log_mode[slot] = tc_var_borrow_mode[i]; tc_flow_log_parent[slot] = tc_var_borrow_parent[i];
+    tc_flow_log_borrow_param[slot] = tc_var_borrow_param[i]; tc_flow_log_ffi[slot] = tc_var_ffi_borrowed[i];
+    tc_flow_log_closure_moved[slot] = tc_var_closure_moved[i];
+    i = i + 1;
+  }
+  tc_flow_log_count = tc_flow_log_count + count;
+}
+
+func tc_flow_save_base(): void {
+  ensure_tc_flow_frames(tc_flow_depth);
+  tc_flow_frame_base[tc_flow_depth] = tc_flow_log_count;
+  tc_flow_frame_count[tc_flow_depth] = tc_var_count;
+  tc_flow_frame_yes[tc_flow_depth] = 0 - 1;
+  tc_flow_frame_has_yes[tc_flow_depth] = 0;
+  tc_flow_append_current(tc_var_count);
+  tc_flow_depth = tc_flow_depth + 1;
+}
+
+func tc_flow_save_yes(): void {
+  let frame: int = tc_flow_depth - 1;
+  if frame < 0 then return;
+  tc_flow_frame_yes[frame] = tc_flow_log_count;
+  tc_flow_append_current(tc_flow_frame_count[frame]);
+  tc_var_count = tc_flow_frame_count[frame];
+  tc_flow_frame_has_yes[frame] = 1;
+}
+
+func tc_flow_restore_base(): void {
+  let frame: int = tc_flow_depth - 1;
+  if frame < 0 then return;
+  let start: int = tc_flow_frame_base[frame];
+  let count: int = tc_flow_frame_count[frame];
+  let i: int = 0;
+  while i < count {
+    let slot: int = start + i;
+    tc_var_owned[i] = tc_flow_log_owned[slot]; tc_var_moved[i] = tc_flow_log_moved[slot];
+    tc_var_borrow_count[i] = tc_flow_log_borrow_count[slot]; tc_var_borrow_mut[i] = tc_flow_log_borrow_mut[slot];
+    tc_var_borrow_source[i] = tc_flow_log_source[slot]; tc_var_borrow_mode[i] = tc_flow_log_mode[slot]; tc_var_borrow_parent[i] = tc_flow_log_parent[slot];
+    tc_var_borrow_param[i] = tc_flow_log_borrow_param[slot]; tc_var_ffi_borrowed[i] = tc_flow_log_ffi[slot];
+    tc_var_closure_moved[i] = tc_flow_log_closure_moved[slot];
+    i = i + 1;
+  }
+  tc_var_count = count;
+}
+
+func tc_flow_merge_yes(): void {
+  let frame: int = tc_flow_depth - 1;
+  if frame < 0 then return;
+  if tc_flow_frame_has_yes[frame] == 0 then { tc_flow_save_yes(); return; }
+  let base: int = tc_flow_frame_base[frame];
+  let yes: int = tc_flow_frame_yes[frame];
+  let count: int = tc_flow_frame_count[frame];
+  let i: int = 0;
+  while i < count {
+    let slot: int = yes + i;
+    if tc_flow_log_moved[slot] == 1 || tc_var_moved[i] == 1 then tc_var_moved[i] = 1;
+    if tc_flow_log_owned[slot] == 1 && tc_var_owned[i] == 1 && tc_var_moved[i] == 0 then tc_var_owned[i] = 1; else tc_var_owned[i] = 0;
+    if tc_flow_log_borrow_count[slot] > tc_var_borrow_count[i] then tc_var_borrow_count[i] = tc_flow_log_borrow_count[slot];
+    if tc_flow_log_borrow_mut[slot] > tc_var_borrow_mut[i] then tc_var_borrow_mut[i] = tc_flow_log_borrow_mut[slot];
+    if tc_flow_log_source[slot] == tc_var_borrow_source[i] then { } else tc_var_borrow_source[i] = 0 - 1;
+    if tc_flow_log_mode[slot] == tc_var_borrow_mode[i] then { } else tc_var_borrow_mode[i] = 0;
+    if tc_flow_log_parent[slot] == tc_var_borrow_parent[i] then { } else tc_var_borrow_parent[i] = 0 - 1;
+    if tc_flow_log_borrow_param[slot] == tc_var_borrow_param[i] then { } else tc_var_borrow_param[i] = 0;
+    if tc_flow_log_ffi[slot] == 1 || tc_var_ffi_borrowed[i] == 1 then tc_var_ffi_borrowed[i] = 1;
+    if tc_flow_log_closure_moved[slot] == 1 || tc_var_closure_moved[i] == 1 then tc_var_closure_moved[i] = 1;
+    i = i + 1;
+  }
+  tc_var_count = count;
+  if base < 0 then tc_var_count = 0;
+}
+
+func tc_flow_end(): void {
+  let frame: int = tc_flow_depth - 1;
+  if frame < 0 then return;
+  tc_flow_log_count = tc_flow_frame_base[frame];
+  tc_flow_depth = frame;
 }
 
 func ensure_tc_scopes(need: int): void {
@@ -4651,8 +4812,11 @@ func tc_leave_scope(): void {
   while i < tc_var_count {
     source_index = tc_var_borrow_source[i];
     if source_index < 0 then { } else if source_index < begin then {
-      if tc_var_borrow_mut[source_index] > 0 then tc_var_borrow_mut[source_index] = tc_var_borrow_mut[source_index] - 1;
-      else if tc_var_borrow_count[source_index] > 0 then tc_var_borrow_count[source_index] = tc_var_borrow_count[source_index] - 1;
+      if tc_var_borrow_mode[i] == 3 then {
+        if tc_var_borrow_mut[source_index] > 0 then tc_var_borrow_mut[source_index] = tc_var_borrow_mut[source_index] - 1;
+      } else if tc_var_borrow_mode[i] == 2 then {
+        if tc_var_borrow_count[source_index] > 0 then tc_var_borrow_count[source_index] = tc_var_borrow_count[source_index] - 1;
+      }
     }
     let closure_cap: int = tc_var_closure_caps[i];
     while closure_cap != 0 {
@@ -5154,6 +5318,230 @@ func tc_is_owner_type(ty: int): int {
   if tc_is_owner_kind(node_kind[ty]) == 1 then return 1;
   return 0;
 }
+func tc_is_place(id: int): int {
+  if id == 0 then return 0;
+  if node_kind[id] == N_VAR || node_kind[id] == N_DEREF || node_kind[id] == N_INDEX || node_kind[id] == N_FIELD_ACCESS then return 1;
+  return 0;
+}
+func tc_place_root(id: int): int {
+  if id == 0 then return 0 - 1;
+  if node_kind[id] == N_VAR then {
+    if tc_lookup_var(node_value[id]) == 1 then {
+      if tc_var_borrow_source[tc_last_var_index] >= 0 then return tc_var_borrow_source[tc_last_var_index];
+      return tc_last_var_index;
+    }
+    return 0 - 1;
+  }
+  if node_kind[id] == N_DEREF then {
+    tc_expr(node_a[id]);
+    if tc_expr_borrow_source >= 0 then return tc_expr_borrow_source;
+    if node_kind[node_a[id]] == N_VAR && tc_lookup_var(node_value[node_a[id]]) == 1 then return tc_last_var_index;
+    return 0 - 1;
+  }
+  if node_kind[id] == N_INDEX || node_kind[id] == N_FIELD_ACCESS then {
+    tc_expr(node_a[id]);
+    if tc_expr_borrow_source >= 0 then return tc_expr_borrow_source;
+    if node_kind[node_a[id]] == N_VAR && tc_lookup_var(node_value[node_a[id]]) == 1 then return tc_last_var_index;
+  }
+  return 0 - 1;
+}
+func tc_place_borrow_param(id: int): int {
+  if id == 0 then return 0;
+  if node_kind[id] == N_VAR && tc_lookup_var(node_value[id]) == 1 then return tc_var_borrow_param[tc_last_var_index];
+  tc_expr(id);
+  return tc_expr_borrow_param;
+}
+func tc_nth_arg(head: int, wanted: int): int {
+  if wanted <= 0 then return 0;
+  let p: int = head; let index: int = 1;
+  while p != 0 {
+    if index == wanted then return p;
+    index = index + 1; p = node_next[p];
+  }
+  return 0;
+}
+func tc_provenance(id: int): int {
+  if id == 0 then return 0 - 1;
+  if node_kind[id] == N_VAR then {
+    if tc_lookup_var(node_value[id]) == 0 then return 0 - 1;
+    if tc_var_borrow_source[tc_last_var_index] >= 0 then return tc_var_borrow_source[tc_last_var_index];
+    if tc_var_borrow_param[tc_last_var_index] > 0 then return tc_last_var_index;
+    return 0 - 1;
+  }
+  if node_kind[id] == N_ADDRESS then {
+    let address_source: int = tc_provenance(node_a[id]);
+    if address_source >= 0 then return address_source;
+    return tc_place_root(node_a[id]);
+  }
+  if node_kind[id] == N_DEREF || node_kind[id] == N_INDEX || node_kind[id] == N_FIELD_ACCESS then {
+    let place_source: int = tc_provenance(node_a[id]);
+    if place_source >= 0 then return place_source;
+    return tc_place_root(node_a[id]);
+  }
+  if node_kind[id] == N_CALL then {
+    let fun: int = tc_find_function_ctx(node_value[id], node_scope[id]);
+    if fun != 0 && tc_fun_return_param[fun] > 0 then return tc_provenance(tc_nth_arg(node_a[id], tc_fun_return_param[fun]));
+  }
+  return 0 - 1;
+}
+func tc_provenance_origin(id: int): int {
+  if id == 0 then return 0 - 1;
+  if node_kind[id] == N_VAR then {
+    if tc_lookup_var(node_value[id]) == 1 then return tc_last_var_index;
+    return 0 - 1;
+  }
+  if node_kind[id] == N_ADDRESS || node_kind[id] == N_DEREF || node_kind[id] == N_INDEX || node_kind[id] == N_FIELD_ACCESS then return tc_provenance_origin(node_a[id]);
+  if node_kind[id] == N_CALL then {
+    let fun: int = tc_find_function_ctx(node_value[id], node_scope[id]);
+    if fun != 0 then {
+      ensure_tc_fun_meta(fun);
+      if tc_fun_return_param[fun] > 0 then return tc_provenance_origin(tc_nth_arg(node_a[id], tc_fun_return_param[fun]));
+    }
+  }
+  return 0 - 1;
+}
+func tc_is_loan_ancestor(ancestor: int, origin: int): int {
+  if ancestor < 0 || origin < 0 then return 0;
+  let current: int = origin;
+  let steps: int = 0;
+  while current >= 0 && current < tc_var_count && steps <= tc_var_count {
+    if current == ancestor then return 1;
+    current = tc_var_borrow_parent[current];
+    steps = steps + 1;
+  }
+  return 0;
+}
+func tc_borrow_conflict_from(root: int, origin: int, requested_mut: int): int {
+  if root < 0 then return 0;
+  let i: int = 0;
+  while i < tc_var_count {
+    if tc_var_borrow_source[i] == root && (tc_var_borrow_mode[i] == 2 || tc_var_borrow_mode[i] == 3) then {
+      if i == origin || tc_is_loan_ancestor(i, origin) == 1 then { }
+      else if requested_mut == 1 || tc_var_borrow_mode[i] == 3 then return 1;
+    }
+    i = i + 1;
+  }
+  return 0;
+}
+func tc_provenance_param(id: int): int {
+  if id == 0 then return 0;
+  if node_kind[id] == N_VAR then {
+    if tc_lookup_var(node_value[id]) == 1 then return tc_var_borrow_param[tc_last_var_index];
+    return 0;
+  }
+  if node_kind[id] == N_ADDRESS || node_kind[id] == N_DEREF || node_kind[id] == N_INDEX || node_kind[id] == N_FIELD_ACCESS then return tc_provenance_param(node_a[id]);
+  if node_kind[id] == N_CALL then {
+    let fun: int = tc_find_function_ctx(node_value[id], node_scope[id]);
+    if fun != 0 && tc_fun_return_param[fun] > 0 then return tc_provenance_param(tc_nth_arg(node_a[id], tc_fun_return_param[fun]));
+  }
+  return 0;
+}
+func tc_provenance_mut(id: int): int {
+  if id == 0 then return 0;
+  if node_kind[id] == N_ADDRESS then {
+    if node_value[id] == 1 then return 1;
+    return tc_provenance_mut(node_a[id]);
+  }
+  if node_kind[id] == N_VAR then {
+    if tc_lookup_var(node_value[id]) == 1 && tc_var_borrow_mode[tc_last_var_index] == 3 then return 1;
+    return 0;
+  }
+  if node_kind[id] == N_DEREF || node_kind[id] == N_INDEX || node_kind[id] == N_FIELD_ACCESS then return tc_provenance_mut(node_a[id]);
+  return 0;
+}
+func tc_contract_param_position(fun: int, name: int): int {
+  if fun == 0 then return 0;
+  let p: int = node_c[fun]; let index: int = 1;
+  while p != 0 {
+    if node_a[p] == name && (node_aux[p] == 2 || node_aux[p] == 3) then return index;
+    index = index + 1; p = node_next[p];
+  }
+  return 0;
+}
+func tc_contract_record(fun: int, candidate: int, mutable: int): void {
+  if candidate <= 0 then return;
+  ensure_tc_fun_meta(fun);
+  if tc_fun_return_param[fun] == 0 then { tc_fun_return_param[fun] = candidate; tc_fun_return_mut[fun] = mutable; }
+  else if tc_fun_return_param[fun] != candidate || tc_fun_return_mut[fun] != mutable then { tc_fun_return_param[fun] = 0 - 1; tc_fun_return_mut[fun] = 0; }
+}
+func tc_contract_expr_param(fun: int, id: int): int {
+  if id == 0 then return 0;
+  if node_kind[id] == N_VAR then return tc_contract_param_position(fun, node_value[id]);
+  if node_kind[id] == N_ADDRESS || node_kind[id] == N_DEREF || node_kind[id] == N_INDEX || node_kind[id] == N_FIELD_ACCESS || node_kind[id] == N_MOVE then return tc_contract_expr_param(fun, node_a[id]);
+  if node_kind[id] == N_CALL then {
+    let called: int = tc_find_function_ctx(node_value[id], node_scope[id]);
+    if called != 0 then {
+      ensure_tc_fun_meta(called);
+      if tc_fun_return_param[called] > 0 then return tc_contract_expr_param(fun, tc_nth_arg(node_a[id], tc_fun_return_param[called]));
+    }
+  }
+  return 0;
+}
+func tc_contract_expr_mut(fun: int, id: int): int {
+  if id == 0 then return 0;
+  if node_kind[id] == N_ADDRESS then return node_value[id];
+  if node_kind[id] == N_VAR then {
+    let p: int = node_c[fun];
+    while p != 0 { if node_a[p] == node_value[id] && node_aux[p] == 3 then return 1; p = node_next[p]; }
+    return 0;
+  }
+  if node_kind[id] == N_DEREF || node_kind[id] == N_INDEX || node_kind[id] == N_FIELD_ACCESS || node_kind[id] == N_MOVE then return tc_contract_expr_mut(fun, node_a[id]);
+  if node_kind[id] == N_CALL then {
+    let called: int = tc_find_function_ctx(node_value[id], node_scope[id]);
+    if called != 0 then { ensure_tc_fun_meta(called); if tc_fun_return_param[called] > 0 then return tc_fun_return_mut[called]; }
+  }
+  return 0;
+}
+func tc_contract_scan_expr(fun: int, id: int): void {
+  if id == 0 then return;
+  if node_kind[id] == N_ADDRESS || node_kind[id] == N_VAR || node_kind[id] == N_DEREF || node_kind[id] == N_INDEX || node_kind[id] == N_FIELD_ACCESS || node_kind[id] == N_MOVE || node_kind[id] == N_CALL then {
+    let pos: int = tc_contract_expr_param(fun, id);
+    if pos > 0 then tc_contract_record(fun, pos, tc_contract_expr_mut(fun, id));
+    return;
+  }
+}
+func tc_contract_scan_stmt(fun: int, id: int): void {
+  if id == 0 then return;
+  let k: int = node_kind[id];
+  if k == N_RETURN then tc_contract_scan_expr(fun, node_a[id]);
+  else if k == N_BLOCK then { let p: int = node_a[id]; while p != 0 { tc_contract_scan_stmt(fun, p); p = node_next[p]; } }
+  else if k == N_IF then { tc_contract_scan_stmt(fun, node_b[id]); tc_contract_scan_stmt(fun, node_c[id]); }
+  else if k == N_WHILE then tc_contract_scan_stmt(fun, node_b[id]);
+  else if k == N_FOR then { tc_contract_scan_stmt(fun, node_a[id]); tc_contract_scan_stmt(fun, node_c[id]); tc_contract_scan_stmt(fun, node_value[id]); }
+  else if k == N_MATCH then { let arm: int = node_b[id]; while arm != 0 { tc_contract_scan_stmt(fun, node_b[arm]); arm = node_next[arm]; } }
+}
+func tc_prepare_return_contracts(root: int): void {
+  let item: int = node_a[root];
+  while item != 0 {
+    if node_kind[item] == N_FUNC || node_kind[item] == N_GENERIC_FUNC then {
+      ensure_tc_fun_meta(item);
+      if node_b[item] != 0 && node_kind[node_b[item]] == TY_PTR then {
+      tc_fun_return_param[item] = 0; tc_fun_return_mut[item] = 0;
+      tc_contract_scan_stmt(item, node_a[item]);
+        if tc_fun_return_param[item] < 0 then { tc_error_pos = node_pos[item]; tc_fail(69); }
+      }
+    }
+    item = node_next[item];
+  }
+}
+func tc_check_mutable_place(id: int): void {
+  if id == 0 then { tc_fail(70); return; }
+  if node_kind[id] == N_VAR then {
+    if tc_lookup_var(node_value[id]) == 0 then { tc_fail(5); return; }
+    if tc_var_mode[tc_last_var_index] == 2 then { tc_fail(70); return; }
+    if tc_borrow_conflict(tc_last_var_index) == 1 then { tc_fail(37); return; }
+    return;
+  }
+  if tc_is_place(id) == 0 then { tc_fail(70); return; }
+  tc_expr(id);
+  let root: int = tc_expr_borrow_source;
+  if root < 0 then root = tc_place_root(id);
+  if root < 0 then { tc_fail(70); return; }
+  if tc_expr_borrow_mut == 1 then {
+    if root < tc_var_count && tc_var_borrow_mut[root] == 1 && tc_var_borrow_count[root] == 0 then return;
+  }
+  tc_fail(37);
+}
 func tc_borrow_conflict(index: int): int {
   if index < 0 then return 0;
   if index < tc_var_count && (tc_var_borrow_count[index] > 0 || tc_var_borrow_mut[index] > 0) then return 1;
@@ -5196,34 +5584,58 @@ func tc_check_call_borrow(arg: int, mode: int): void {
   if source_index >= tc_var_count then { tc_fail(59); return; }
   if tc_var_moved[source_index] == 1 then { tc_fail(33); return; }
   if mode == 2 then {
-    if tc_var_borrow_mut[source_index] > 0 then tc_fail(37);
+    if tc_var_borrow_mut[source_index] > 0 && tc_expr_borrow_mut == 0 then tc_fail(37);
   } else if mode == 3 then {
-    if tc_var_borrow_count[source_index] > 0 || tc_var_borrow_mut[source_index] > 0 then tc_fail(37);
+    if tc_expr_borrow_mut == 1 && tc_var_borrow_mut[source_index] == 1 && tc_var_borrow_count[source_index] == 0 then { }
+    else if tc_var_borrow_count[source_index] > 0 || tc_var_borrow_mut[source_index] > 0 then tc_fail(37);
   }
 }
 func tc_check_return_escape(source_index: int): void {
   if source_index < 0 then return;
   if source_index < tc_global_count then return;
-  if source_index < tc_var_count && tc_var_param[source_index] == 1 then return;
+  if source_index < tc_var_count && tc_var_param[source_index] == 1 && (tc_var_mode[source_index] == 2 || tc_var_mode[source_index] == 3) then return;
+  tc_fail(72);
+}
+func tc_check_explicit_return_address_escape(source_index: int): void {
+  if source_index < 0 then return;
+  if source_index < tc_global_count then return;
+  if source_index < tc_var_count && tc_var_param[source_index] == 1 && (tc_var_mode[source_index] == 2 || tc_var_mode[source_index] == 3) then return;
   tc_fail(38);
 }
-func tc_record_borrow(destination: int, source_index2: int): void {
+func tc_record_borrow_ex(destination: int, source_index2: int, mode: int, origin: int): void {
   if destination < 0 || source_index2 < 0 then return;
-  if destination < tc_var_count then { } else return;
-  if source_index2 < tc_var_count then { } else return;
+  if destination >= tc_var_count || source_index2 >= tc_var_count then return;
   if tc_var_moved[source_index2] == 1 then { tc_fail(33); return; }
-  if tc_var_borrow_mut[source_index2] > 0 then { tc_fail(37); return; }
+  if origin < 0 then origin = source_index2;
+  if tc_borrow_conflict_from(source_index2, origin, mode == 3) == 1 then { tc_fail(37); return; }
+  if mode == 3 then tc_var_borrow_mut[source_index2] = tc_var_borrow_mut[source_index2] + 1;
+  else tc_var_borrow_count[source_index2] = tc_var_borrow_count[source_index2] + 1;
   tc_var_borrow_source[destination] = source_index2;
-  tc_var_borrow_count[source_index2] = tc_var_borrow_count[source_index2] + 1;
+  tc_var_borrow_mode[destination] = mode;
+  tc_var_borrow_parent[destination] = origin;
+  if tc_var_param[source_index2] == 1 && (tc_var_mode[source_index2] == 2 || tc_var_mode[source_index2] == 3) then tc_var_borrow_param[destination] = tc_var_param_pos[source_index2];
+  else tc_var_borrow_param[destination] = tc_var_borrow_param[source_index2];
+}
+func tc_record_borrow(destination: int, source_index2: int): void {
+  tc_record_borrow_ex(destination, source_index2, 2, source_index2);
 }
 func tc_record_borrow_mut(destination: int, source_index2: int): void {
-  if destination < 0 || source_index2 < 0 then return;
-  if destination < tc_var_count then { } else return;
-  if source_index2 < tc_var_count then { } else return;
-  if tc_var_moved[source_index2] == 1 then { tc_fail(33); return; }
-  if tc_var_borrow_count[source_index2] > 0 || tc_var_borrow_mut[source_index2] > 0 then { tc_fail(37); return; }
-  tc_var_borrow_source[destination] = source_index2;
-  tc_var_borrow_mut[source_index2] = tc_var_borrow_mut[source_index2] + 1;
+  tc_record_borrow_ex(destination, source_index2, 3, source_index2);
+}
+func tc_release_borrow(index: int): void {
+  if index < 0 || index >= tc_var_count then return;
+  let source_index: int = tc_var_borrow_source[index];
+  if source_index >= 0 && source_index < tc_var_count then {
+    if tc_var_borrow_mode[index] == 3 then {
+      if tc_var_borrow_mut[source_index] > 0 then tc_var_borrow_mut[source_index] = tc_var_borrow_mut[source_index] - 1;
+    } else if tc_var_borrow_mode[index] == 2 then {
+      if tc_var_borrow_count[source_index] > 0 then tc_var_borrow_count[source_index] = tc_var_borrow_count[source_index] - 1;
+    }
+  }
+  tc_var_borrow_source[index] = 0 - 1;
+  tc_var_borrow_mode[index] = 0;
+  tc_var_borrow_parent[index] = 0 - 1;
+  tc_var_borrow_param[index] = 0;
 }
 func tc_require_mutable(id: int): void {
   if id == 0 then return;
@@ -5232,14 +5644,15 @@ func tc_require_mutable(id: int): void {
       if tc_var_mode[tc_last_var_index] == 2 then tc_fail(37);
       else if tc_borrow_conflict(tc_last_var_index) == 1 then tc_fail(37);
     }
-  } else if node_kind[id] == N_DEREF || node_kind[id] == N_INDEX || node_kind[id] == N_FIELD_ACCESS then {
-    if node_kind[node_a[id]] == N_VAR then {
-      if tc_lookup_var(node_value[node_a[id]]) == 1 && tc_var_mode[tc_last_var_index] == 2 then { tc_fail(37); return; }
-    }
-    tc_expr(id);
-    if tc_expr_borrow_source < 0 then return;
-    tc_fail(37);
+    return;
   }
+  if tc_is_place(id) == 0 then { tc_fail(70); return; }
+  tc_expr(id);
+  if tc_expr_borrow_source < 0 then return;
+  if tc_expr_borrow_mut == 1 then {
+    if tc_borrow_conflict_from(tc_expr_borrow_source, tc_expr_borrow_origin, 1) == 0 then return;
+  }
+  tc_fail(37);
 }
 
 func tc_consume_call(id: int): void {
@@ -5274,7 +5687,11 @@ func tc_add_var(name: int, kind: int, named: int, elem_kind: int, elem_name: int
   tc_var_borrow_count[tc_var_count] = 0;
   tc_var_borrow_mut[tc_var_count] = 0;
   tc_var_borrow_source[tc_var_count] = 0 - 1;
+  tc_var_borrow_mode[tc_var_count] = 0;
+  tc_var_borrow_parent[tc_var_count] = 0 - 1;
+  tc_var_borrow_param[tc_var_count] = 0;
   tc_var_param[tc_var_count] = 0;
+  tc_var_param_pos[tc_var_count] = 0;
   tc_var_mode[tc_var_count] = 0;
   tc_var_closure_caps[tc_var_count] = 0;
   tc_var_closure_moved[tc_var_count] = 0;
@@ -5292,6 +5709,9 @@ func tc_lookup_var(name: int): int {
   tc_last_var_moved = 0;
   tc_last_var_ffi_borrowed = 0;
   tc_expr_borrow_source = 0 - 1;
+  tc_expr_borrow_origin = 0 - 1;
+  tc_expr_borrow_mut = 0;
+  tc_expr_borrow_param = 0;
   tc_expr_owner_source = 0 - 1;
   tc_expr_is_owned = 0;
   tc_last_var_index = 0;
@@ -5313,6 +5733,11 @@ func tc_lookup_var(name: int): int {
       tc_last_var_moved = tc_var_moved[i];
       tc_last_var_ffi_borrowed = tc_var_ffi_borrowed[i];
       tc_expr_borrow_source = tc_var_borrow_source[i];
+      if tc_expr_borrow_source < 0 && tc_var_borrow_param[i] > 0 then tc_expr_borrow_source = i;
+      tc_expr_borrow_origin = i;
+      tc_expr_borrow_mut = 0;
+      if tc_var_borrow_mode[i] == 3 then tc_expr_borrow_mut = 1;
+      tc_expr_borrow_param = tc_var_borrow_param[i];
       tc_last_var_index = i;
       return 1;
     }
@@ -5440,7 +5865,7 @@ func tc_attach_closure_caps(destination: int, caps: int): void {
 }
 
 func tc_expr(id: int): void {
-  tc_kind = TY_INT; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0; tc_result_type = 0; tc_expr_borrow_source = 0 - 1; tc_expr_owner_source = 0 - 1; tc_expr_is_owned = 0; tc_expr_ffi_borrowed = 0;
+  tc_kind = TY_INT; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0; tc_result_type = 0; tc_expr_borrow_source = 0 - 1; tc_expr_borrow_origin = 0 - 1; tc_expr_borrow_mut = 0; tc_expr_borrow_param = 0; tc_expr_owner_source = 0 - 1; tc_expr_is_owned = 0; tc_expr_ffi_borrowed = 0;
   if id != 0 && tc_ok == 1 then tc_error_pos = node_pos[id];
   if id == 0 then { tc_fail(4); return; }
   let k: int = node_kind[id];
@@ -5498,21 +5923,25 @@ func tc_expr(id: int): void {
       if node_aux[body_cap] == 1 then tc_var_owned[tc_last_var_index] = 1;
       else {
         tc_var_borrow_source[tc_last_var_index] = node_c[body_cap];
-        if node_aux[body_cap] == 3 then tc_var_borrow_mut[tc_last_var_index] = 1;
-        else tc_var_borrow_count[tc_last_var_index] = 1;
+        tc_var_borrow_parent[tc_last_var_index] = node_c[body_cap];
+        if node_aux[body_cap] == 3 then { tc_var_borrow_mut[tc_last_var_index] = 1; if node_c[body_cap] < tc_var_count then tc_var_borrow_mut[node_c[body_cap]] = tc_var_borrow_mut[node_c[body_cap]] + 1; }
+        else { tc_var_borrow_count[tc_last_var_index] = 1; if node_c[body_cap] < tc_var_count then tc_var_borrow_count[node_c[body_cap]] = tc_var_borrow_count[node_c[body_cap]] + 1; }
       }
       body_cap = node_next[body_cap];
     }
-    let p: int = node_c[id];
+        let p: int = node_c[id];
+    let param_pos: int = 1;
     while p != 0 {
-      tc_type_node(node_b[p]);
-      let pk: int = tc_kind; let pn: int = tc_name; let pek: int = tc_elem_kind; let pen: int = tc_elem_name;
+      tc_type_node(node_b[p]); let pk: int = tc_kind; let pn: int = tc_name; let pek: int = tc_elem_kind; let pen: int = tc_elem_name;
       tc_add_var(node_a[p], pk, pn, pek, pen, node_b[p]);
       tc_var_param[tc_last_var_index] = 1;
+      tc_var_param_pos[tc_last_var_index] = param_pos;
       tc_var_mode[tc_last_var_index] = node_aux[p];
+      if node_aux[p] == 2 || node_aux[p] == 3 then { tc_var_borrow_source[tc_last_var_index] = tc_last_var_index; tc_var_borrow_mode[tc_last_var_index] = node_aux[p]; tc_var_borrow_parent[tc_last_var_index] = tc_last_var_index; tc_var_borrow_param[tc_last_var_index] = param_pos; }
       if node_aux[p] == 1 then tc_var_owned[tc_last_var_index] = 1;
       else if node_aux[p] == 3 then tc_var_borrow_mut[tc_last_var_index] = 1;
       else if tc_is_owner_kind(pk) == 1 then tc_var_owned[tc_last_var_index] = 1;
+      param_pos = param_pos + 1;
       p = node_next[p];
     }
     let saved_expected_elem_kind: int = tc_expected_elem_kind;
@@ -5572,7 +6001,7 @@ func tc_expr(id: int): void {
     return;
   }
   if k == N_VAR then {
-    if tc_lookup_var(node_value[id]) == 1 then { if tc_last_var_moved == 1 then { if tc_var_closure_moved[tc_last_var_index] == 1 then tc_fail(61); else tc_fail(33); } tc_expr_borrow_source = tc_var_borrow_source[tc_last_var_index]; tc_expr_ffi_borrowed = tc_last_var_ffi_borrowed; if tc_last_var_owned == 1 then tc_expr_owner_source = tc_last_var_index; tc_expr_is_owned = 0; tc_result_type = tc_last_var_type; if node_type[id] == 0 then node_type[id] = tc_last_var_type; node_aux[id] = tc_last_var_type; return; }
+    if tc_lookup_var(node_value[id]) == 1 then { if tc_last_var_moved == 1 then { if tc_var_closure_moved[tc_last_var_index] == 1 then tc_fail(61); else tc_fail(33); } tc_expr_borrow_source = tc_var_borrow_source[tc_last_var_index]; if tc_expr_borrow_source < 0 && tc_var_borrow_param[tc_last_var_index] > 0 then tc_expr_borrow_source = tc_last_var_index; tc_expr_borrow_mut = 0; if tc_var_borrow_mode[tc_last_var_index] == 3 then tc_expr_borrow_mut = 1; tc_expr_borrow_param = tc_var_borrow_param[tc_last_var_index]; tc_expr_ffi_borrowed = tc_last_var_ffi_borrowed; if tc_last_var_owned == 1 then tc_expr_owner_source = tc_last_var_index; tc_expr_is_owned = 0; tc_result_type = tc_last_var_type; if node_type[id] == 0 then node_type[id] = tc_last_var_type; node_aux[id] = tc_last_var_type; return; }
     let e: int = tc_find_enum_value(node_value[id]);
     if e != 0 then { tc_kind = TY_NAMED; tc_name = e; tc_result_type = ast_node(TY_NAMED, 0, 0, 0, e, 0); node_aux[id] = tc_result_type; return; }
     tc_error_symbol = node_value[id]; tc_fail(5); return;
@@ -5581,13 +6010,45 @@ func tc_expr(id: int): void {
     let address_entry: int = 0;
     if node_kind[node_a[id]] == N_VAR then address_entry = tc_find_function_ctx(node_value[node_a[id]], node_scope[node_a[id]]);
     if address_entry != 0 then { tc_kind = TY_FUN; tc_name = 0; tc_result_type = tc_signature_type(address_entry); return; }
-    tc_expr(node_a[id]); let oldk: int = tc_kind; let oldn: int = tc_name; let olde: int = tc_elem_kind; let olden: int = tc_elem_name; if node_kind[node_a[id]] == N_VAR && tc_lookup_var(node_value[node_a[id]]) == 1 then tc_expr_borrow_source = tc_last_var_index; tc_kind = TY_PTR; tc_name = oldn; tc_elem_kind = oldk; tc_elem_name = oldn; if oldk == TY_PTR then { tc_elem_kind = olde; tc_elem_name = olden; } tc_expr_owner_source = 0 - 1; tc_expr_is_owned = 0; return;
+    if tc_is_place(node_a[id]) == 0 then { tc_fail(68); return; }
+    if node_kind[node_a[id]] == N_VAR && sym_type[node_value[node_a[id]]] > 100 && node_value[node_a[id]] != 0 then { tc_fail(70); return; }
+    tc_expr(node_a[id]);
+    let oldk: int = tc_kind; let oldn: int = tc_name; let olde: int = tc_elem_kind; let olden: int = tc_elem_name;
+    let old_source: int = tc_expr_borrow_source;
+    let old_origin: int = tc_expr_borrow_origin;
+    let old_mut: int = tc_expr_borrow_mut;
+    let old_param: int = tc_expr_borrow_param;
+    let root: int = old_source;
+    if root < 0 then root = tc_place_root(node_a[id]);
+    if old_origin < 0 then old_origin = root;
+    if root < 0 || root >= tc_var_count then { tc_fail(68); return; }
+    if node_value[id] == 1 then {
+      if old_mut == 0 && tc_var_mode[root] == 2 then { tc_fail(70); return; }
+      if tc_borrow_conflict_from(root, old_origin, 1) == 1 then { tc_fail(37); return; }
+      tc_expr_borrow_mut = 1;
+    } else {
+      if tc_borrow_conflict_from(root, old_origin, 0) == 1 then { tc_fail(37); return; }
+      tc_expr_borrow_mut = 0;
+    }
+    tc_expr_borrow_source = root;
+    tc_expr_borrow_origin = old_origin;
+    tc_expr_borrow_param = old_param;
+    if tc_var_param[root] == 1 && (tc_var_mode[root] == 2 || tc_var_mode[root] == 3) then tc_expr_borrow_param = tc_var_param_pos[root];
+    tc_kind = TY_PTR; tc_name = oldn; tc_elem_kind = oldk; tc_elem_name = oldn;
+    if oldk == TY_PTR then { tc_elem_kind = olde; tc_elem_name = olden; }
+    tc_expr_owner_source = 0 - 1; tc_expr_is_owned = 0;
+    let pointee: int = tc_type_node_from_summary(oldk, oldn, olde, olden);
+    tc_result_type = ast_node(TY_PTR, pointee, 0, 0, 0, 0);
+    return;
   }
   if k == N_DEREF then {
     tc_expr(node_a[id]);
     let deref_borrow: int = tc_expr_borrow_source;
+    let deref_origin: int = tc_expr_borrow_origin;
+    let deref_mut: int = tc_expr_borrow_mut;
+    let deref_param: int = tc_expr_borrow_param;
     if tc_kind != TY_PTR then tc_fail(6);
-    else { tc_kind = tc_elem_kind; tc_name = tc_elem_name; tc_elem_kind = 0; tc_elem_name = 0; tc_expr_borrow_source = deref_borrow; }
+    else { tc_kind = tc_elem_kind; tc_name = tc_elem_name; tc_elem_kind = 0; tc_elem_name = 0; tc_expr_borrow_source = deref_borrow; tc_expr_borrow_origin = deref_origin; tc_expr_borrow_mut = deref_mut; tc_expr_borrow_param = deref_param; }
     return;
   }
   if k == N_INDEX then {
@@ -5595,6 +6056,9 @@ func tc_expr(id: int): void {
     if tc_kind != TY_INT then tc_fail(7);
     tc_expr(node_a[id]);
     let index_borrow: int = tc_expr_borrow_source;
+    let index_origin: int = tc_expr_borrow_origin;
+    let index_mut: int = tc_expr_borrow_mut;
+    let index_param: int = tc_expr_borrow_param;
     if tc_kind == TY_ARRAY then {
       let ix: int = node_b[id];
       let ik: int = 0 - 1;
@@ -5602,19 +6066,23 @@ func tc_expr(id: int): void {
       if node_kind[ix] == N_INT then { ik = node_value[ix]; is_const = 1; }
       else if node_kind[ix] == N_BINOP && node_value[ix] == OP_SUB && node_kind[node_a[ix]] == N_INT && node_value[node_a[ix]] == 0 && node_kind[node_b[ix]] == N_INT then { ik = 0 - node_value[node_b[ix]]; is_const = 1; }
       if is_const == 1 && tc_result_type != 0 && node_kind[tc_result_type] == TY_ARRAY && (ik < 0 || ik > node_value[tc_result_type] - 1) then tc_fail(45);
-      tc_kind = TY_INT; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0; tc_expr_borrow_source = 0 - 1;
+      tc_kind = TY_INT; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0; tc_expr_borrow_source = 0 - 1; tc_expr_borrow_origin = 0 - 1; tc_expr_borrow_mut = 0; tc_expr_borrow_param = 0;
     }
-    else if tc_kind == TY_DYN_ARRAY then { let ek: int = tc_elem_kind; let en: int = tc_elem_name; tc_kind = ek; tc_name = en; tc_elem_kind = 0; tc_elem_name = 0; tc_expr_borrow_source = index_borrow; }
-    else if tc_kind == TY_PTR then { tc_kind = tc_elem_kind; tc_name = tc_elem_name; tc_elem_kind = 0; tc_elem_name = 0; tc_expr_borrow_source = index_borrow; }
-    else if tc_kind == TY_STRING then { tc_kind = TY_CHAR; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0; tc_expr_borrow_source = 0 - 1; }
+    else if tc_kind == TY_DYN_ARRAY then { let ek: int = tc_elem_kind; let en: int = tc_elem_name; tc_kind = ek; tc_name = en; tc_elem_kind = 0; tc_elem_name = 0; tc_expr_borrow_source = index_borrow; tc_expr_borrow_origin = index_origin; tc_expr_borrow_mut = index_mut; tc_expr_borrow_param = index_param; }
+    else if tc_kind == TY_PTR then { tc_kind = tc_elem_kind; tc_name = tc_elem_name; tc_elem_kind = 0; tc_elem_name = 0; tc_expr_borrow_source = index_borrow; tc_expr_borrow_origin = index_origin; tc_expr_borrow_mut = index_mut; tc_expr_borrow_param = index_param; }
+    else if tc_kind == TY_STRING then { tc_kind = TY_CHAR; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0; tc_expr_borrow_source = 0 - 1; tc_expr_borrow_origin = 0 - 1; tc_expr_borrow_mut = 0; tc_expr_borrow_param = 0; }
     else tc_fail(8);
     return;
   }
   if k == N_FIELD_ACCESS then {
     tc_expr(node_a[id]);
+    let base_borrow: int = tc_expr_borrow_source;
+    let base_origin: int = tc_expr_borrow_origin;
+    let base_mut: int = tc_expr_borrow_mut;
+    let base_param: int = tc_expr_borrow_param;
     let base_kind: int = tc_kind; let base_name: int = tc_name;
     if base_kind == TY_DYN_ARRAY then {
-      if bi_has_flag(node_value[id], BI_FLAG_DYNFIELD) == 1 then { tc_kind = TY_INT; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0; return; }
+      if bi_has_flag(node_value[id], BI_FLAG_DYNFIELD) == 1 then { tc_kind = TY_INT; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0; tc_expr_borrow_source = base_borrow; tc_expr_borrow_origin = base_origin; tc_expr_borrow_mut = base_mut; tc_expr_borrow_param = base_param; return; }
       tc_fail(11); return;
     }
     if base_kind == TY_PTR then {
@@ -5625,13 +6093,13 @@ func tc_expr(id: int): void {
       let variant: int = base_name;
       let payload_field: int = node_b[variant];
       while payload_field != 0 {
-        if node_a[payload_field] == node_value[id] then { tc_type_node(node_b[payload_field]); return; }
+        if node_a[payload_field] == node_value[id] then { tc_type_node(node_b[payload_field]); tc_expr_borrow_source = base_borrow; tc_expr_borrow_origin = base_origin; tc_expr_borrow_mut = base_mut; tc_expr_borrow_param = base_param; return; }
         payload_field = node_next[payload_field];
       }
       tc_fail(11); return;
     }
     if base_kind == TY_NAMED then {
-      if node_value[id] == sym_tag_id() && tc_find_enum(base_name) != 0 then { tc_kind = TY_INT; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0; return; }
+      if node_value[id] == sym_tag_id() && tc_find_enum(base_name) != 0 then { tc_kind = TY_INT; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0; tc_expr_borrow_source = base_borrow; tc_expr_borrow_origin = base_origin; tc_expr_borrow_mut = base_mut; tc_expr_borrow_param = base_param; return; }
       let enum_decl: int = tc_find_enum(base_name);
       if enum_decl != 0 then {
         let variant_item: int = node_a[enum_decl];
@@ -5644,6 +6112,7 @@ func tc_expr(id: int): void {
             tc_elem_name = 0;
             tc_result_type = ast_node(TY_VARIANT, 0, 0, 0, variant_item, base_name);
             node_aux[id] = tc_result_type;
+            tc_expr_borrow_source = base_borrow; tc_expr_borrow_origin = base_origin; tc_expr_borrow_mut = base_mut; tc_expr_borrow_param = base_param;
             return;
           }
           variant_item = node_next[variant_item];
@@ -5659,7 +6128,7 @@ func tc_expr(id: int): void {
       while gp != 0 && ga != 0 { if tc_bind_add(node_a[gp], ga) == 0 then return; gp = node_next[gp]; ga = node_next[ga]; }
       let gf: int = node_a[sgen];
       while gf != 0 {
-        if node_a[gf] == node_value[id] then { let subst: int = tc_substitute_type(node_b[gf]); tc_type_node(subst); return; }
+        if node_a[gf] == node_value[id] then { let subst: int = tc_substitute_type(node_b[gf]); tc_type_node(subst); tc_expr_borrow_source = base_borrow; tc_expr_borrow_origin = base_origin; tc_expr_borrow_mut = base_mut; tc_expr_borrow_param = base_param; return; }
         gf = node_next[gf];
       }
       tc_fail(11); return;
@@ -5669,7 +6138,7 @@ func tc_expr(id: int): void {
     if s == 0 then { tc_fail(10); return; }
     let f: int = node_a[s];
     while f != 0 {
-      if node_a[f] == node_value[id] then { tc_type_node(node_b[f]); return; }
+      if node_a[f] == node_value[id] then { tc_type_node(node_b[f]); tc_expr_borrow_source = base_borrow; tc_expr_borrow_origin = base_origin; tc_expr_borrow_mut = base_mut; tc_expr_borrow_param = base_param; return; }
       f = node_next[f];
     }
     tc_fail(11); return;
@@ -5925,6 +6394,7 @@ func tc_expr(id: int): void {
       if btag == BI_TC_STRING then { tc_kind = TY_STRING; tc_name = 0; return; }
       tc_fail(41); return;
     }
+    ensure_tc_fun_meta(fun_node);
     if node_kind[fun_node] == N_GENERIC_FUNC then {
       tc_bind_clear();
       let generic_moves_array: int = tc_generic_moves_array(fun_node);
@@ -5946,8 +6416,14 @@ func tc_expr(id: int): void {
         ga = node_next[ga]; gp = node_next[gp];
       }
       if ga != 0 || gp != 0 then tc_fail(13);
+      let generic_ret_param: int = tc_fun_return_param[fun_node];
+      let generic_ret_arg: int = tc_nth_arg(node_a[id], generic_ret_param);
+      let generic_ret_source: int = tc_provenance(generic_ret_arg);
+      let generic_ret_mut: int = tc_fun_return_mut[fun_node];
+      let generic_ret_life: int = tc_provenance_param(generic_ret_arg);
       let generic_ret: int = tc_substitute_type(node_b[fun_node]);
       tc_type_node(generic_ret);
+      if generic_ret_param > 0 then { tc_expr_borrow_source = generic_ret_source; tc_expr_borrow_mut = generic_ret_mut; tc_expr_borrow_param = generic_ret_life; }
       node_aux[id] = tc_result_type;
       return;
     }
@@ -5968,7 +6444,13 @@ func tc_expr(id: int): void {
       arg = node_next[arg]; p = node_next[p];
     }
     if arg != 0 || p != 0 then tc_fail(13);
+    let ret_param: int = tc_fun_return_param[fun_node];
+    let ret_arg: int = tc_nth_arg(node_a[id], ret_param);
+    let ret_source: int = tc_provenance(ret_arg);
+    let ret_mut: int = tc_fun_return_mut[fun_node];
+    let ret_life: int = tc_provenance_param(ret_arg);
     tc_type_node(node_b[fun_node]);
+    if ret_param > 0 then { tc_expr_borrow_source = ret_source; tc_expr_borrow_mut = ret_mut; tc_expr_borrow_param = ret_life; }
     if node_kind[fun_node] == N_EXTERN && (tc_kind == TY_PTR || tc_kind == TY_STRING) then tc_expr_ffi_borrowed = 1;
     return;
   }
@@ -6305,7 +6787,7 @@ func tc_stmt(id: int, expected_kind: int, expected_name: int): void {
     tc_type_node(node_b[id]); let dk: int = tc_kind; let dn: int = tc_name; let de: int = tc_elem_kind; let den: int = tc_elem_name;
     tc_mark_float_expr(node_c[id], dk);
     tc_expr(node_c[id]);
-    let ek: int = tc_kind; let en: int = tc_name; let ee: int = tc_elem_kind; let een: int = tc_elem_name; let rhs_borrow: int = tc_expr_borrow_source; let rhs_ffi_borrowed: int = tc_expr_ffi_borrowed;
+    let ek: int = tc_kind; let en: int = tc_name; let ee: int = tc_elem_kind; let een: int = tc_elem_name; let rhs_borrow: int = tc_expr_borrow_source; let rhs_borrow_origin: int = tc_expr_borrow_origin; let rhs_borrow_mut: int = tc_expr_borrow_mut; let rhs_borrow_param: int = tc_expr_borrow_param; let rhs_ffi_borrowed: int = tc_expr_ffi_borrowed;
     if tc_is_owner_kind(dk) == 1 && node_kind[node_c[id]] == N_VAR then tc_fail(40);
 
     if tc_literal_fits(node_c[id], dk) == 0 then tc_fail(54);
@@ -6317,14 +6799,17 @@ func tc_stmt(id: int, expected_kind: int, expected_name: int): void {
     tc_var_ffi_borrowed[tc_last_var_index] = rhs_ffi_borrowed;
     if tc_is_owner_kind(dk) == 1 || tc_owned_initializer(node_c[id]) == 1 then tc_var_owned[tc_last_var_index] = 1;
     if dk == TY_CLOSURE && node_kind[node_c[id]] == N_CLOSURE then tc_attach_closure_caps(tc_last_var_index, node_a[node_c[id]]);
-    if dk == TY_PTR then { if rhs_borrow < 0 then { } else tc_record_borrow(tc_last_var_index, rhs_borrow); }
+    if dk == TY_PTR then { if rhs_borrow < 0 then { } else { if rhs_borrow_mut == 1 then tc_record_borrow_ex(tc_last_var_index, rhs_borrow, 3, rhs_borrow_origin); else tc_record_borrow_ex(tc_last_var_index, rhs_borrow, 2, rhs_borrow_origin); tc_var_borrow_param[tc_last_var_index] = rhs_borrow_param; } }
   } else if k == N_ASSIGN || k == N_COMPOUND_ASSIGN then {
     if node_kind[node_a[id]] == N_VAR && sym_type[node_value[node_a[id]]] > 100 then tc_fail(31);
-    tc_expr(node_a[id]); let lk: int = tc_kind; let ln: int = tc_name; let le: int = tc_elem_kind; let len: int = tc_elem_name; let lhs_borrow: int = tc_expr_borrow_source; let lhs_index: int = tc_last_var_index;
+    tc_expr(node_a[id]); let lk: int = tc_kind; let ln: int = tc_name; let le: int = tc_elem_kind; let len: int = tc_elem_name; let lhs_index: int = tc_last_var_index;
     tc_require_mutable(node_a[id]);
     tc_mark_float_expr(node_b[id], lk);
     tc_expr(node_b[id]);
     let rhs_borrow_assign: int = tc_expr_borrow_source;
+    let rhs_borrow_origin_assign: int = tc_expr_borrow_origin;
+    let rhs_borrow_mut_assign: int = tc_expr_borrow_mut;
+    let rhs_borrow_param_assign: int = tc_expr_borrow_param;
     let rhs_ffi_borrowed_assign: int = tc_expr_ffi_borrowed;
     if k == N_COMPOUND_ASSIGN then {
       let combined: int = ast_node(N_BINOP, node_a[id], node_b[id], 0, node_value[id], 0);
@@ -6338,10 +6823,13 @@ func tc_stmt(id: int, expected_kind: int, expected_name: int): void {
       tc_var_moved[lhs_index] = 0;
     }
     if tc_ok == 1 && node_kind[node_a[id]] == N_VAR && lk == TY_PTR then {
-      if lhs_borrow < 0 then { } else if lhs_borrow < tc_var_count then { if tc_var_borrow_mut[lhs_borrow] > 0 then tc_var_borrow_mut[lhs_borrow] = tc_var_borrow_mut[lhs_borrow] - 1; else if tc_var_borrow_count[lhs_borrow] > 0 then tc_var_borrow_count[lhs_borrow] = tc_var_borrow_count[lhs_borrow] - 1; }
+      tc_release_borrow(lhs_index);
       tc_var_borrow_source[lhs_index] = 0 - 1;
+      tc_var_borrow_mode[lhs_index] = 0;
+      tc_var_borrow_parent[lhs_index] = 0 - 1;
+      tc_var_borrow_param[lhs_index] = 0;
       tc_var_ffi_borrowed[lhs_index] = rhs_ffi_borrowed_assign;
-      if rhs_borrow_assign < 0 then { } else tc_record_borrow(lhs_index, rhs_borrow_assign);
+      if rhs_borrow_assign < 0 then { } else { if rhs_borrow_mut_assign == 1 then tc_record_borrow_ex(lhs_index, rhs_borrow_assign, 3, rhs_borrow_origin_assign); else tc_record_borrow_ex(lhs_index, rhs_borrow_assign, 2, rhs_borrow_origin_assign); tc_var_borrow_param[lhs_index] = rhs_borrow_param_assign; }
     }
   } else if k == N_DEFER then {
     tc_expr(node_a[id]);
@@ -6399,7 +6887,7 @@ func tc_stmt(id: int, expected_kind: int, expected_name: int): void {
   else if k == N_EXPR then { tc_expr(node_a[id]); if node_kind[node_a[id]] == N_CALL then tc_consume_call(node_a[id]); }
   else if k == N_RETURN then {
     if node_a[id] == 0 then { if expected_kind != TY_VOID then tc_fail(22); }
-    else { tc_mark_float_expr(node_a[id], expected_kind); tc_expr(node_a[id]); let return_borrow: int = tc_expr_borrow_source; if tc_literal_fits(node_a[id], expected_kind) == 0 then tc_fail(54); if expected_kind == TY_PTR then tc_check_return_escape(return_borrow); if expected_kind == TY_CLOSURE then tc_check_closure_value_escape(node_a[id]); if tc_same_full(expected_kind, expected_name, tc_expected_elem_kind, tc_expected_elem_name, tc_kind, tc_name, tc_elem_kind, tc_elem_name) == 0 then if node_kind[node_a[id]] != N_NULL then tc_fail_types(23, expected_kind, tc_kind); }
+    else { tc_mark_float_expr(node_a[id], expected_kind); tc_expr(node_a[id]); let return_borrow: int = tc_expr_borrow_source; if tc_literal_fits(node_a[id], expected_kind) == 0 then tc_fail(54); if expected_kind == TY_PTR then { if node_kind[node_a[id]] == N_ADDRESS then tc_check_explicit_return_address_escape(return_borrow); else tc_check_return_escape(return_borrow); } if expected_kind == TY_CLOSURE then tc_check_closure_value_escape(node_a[id]); if tc_same_full(expected_kind, expected_name, tc_expected_elem_kind, tc_expected_elem_name, tc_kind, tc_name, tc_elem_kind, tc_elem_name) == 0 then if node_kind[node_a[id]] != N_NULL then tc_fail_types(23, expected_kind, tc_kind); }
   } else if k == N_BREAK || k == N_CONTINUE then { if tc_loop_depth == 0 then tc_fail(24);   } else if k == N_BLOCK then {
     tc_enter_scope();
     let x: int = node_a[id]; while x != 0 { tc_stmt(x, expected_kind, expected_name); x = node_next[x]; }
@@ -6407,16 +6895,33 @@ func tc_stmt(id: int, expected_kind: int, expected_name: int): void {
 
   } else if k == N_IF then {
     tc_expr(node_a[id]); if tc_is_numeric_kind(tc_kind) == 0 && tc_kind != TY_PTR && tc_kind != TY_FUN then tc_fail(25);
-    tc_stmt(node_b[id], expected_kind, expected_name); tc_stmt(node_c[id], expected_kind, expected_name);
+    tc_flow_save_base();
+    tc_stmt(node_b[id], expected_kind, expected_name);
+    tc_flow_save_yes();
+    tc_flow_restore_base();
+    tc_stmt(node_c[id], expected_kind, expected_name);
+    tc_flow_merge_yes();
+    tc_flow_end();
   } else if k == N_WHILE then {
     tc_expr(node_a[id]); if tc_is_numeric_kind(tc_kind) == 0 && tc_kind != TY_PTR && tc_kind != TY_FUN then tc_fail(26);
+    tc_flow_save_base();
     tc_loop_depth = tc_loop_depth + 1; tc_stmt(node_b[id], expected_kind, expected_name); tc_loop_depth = tc_loop_depth - 1;
+    if node_value[id] != 0 then tc_stmt(node_value[id], expected_kind, expected_name);
+    tc_flow_save_yes();
+    tc_flow_restore_base();
+    tc_flow_merge_yes();
+    tc_flow_end();
   } else if k == N_FOR then {
     tc_enter_scope();
     if node_a[id] != 0 then tc_stmt(node_a[id], expected_kind, expected_name);
     tc_expr(node_b[id]); if tc_is_numeric_kind(tc_kind) == 0 && tc_kind != TY_PTR && tc_kind != TY_FUN then tc_fail(27);
+    tc_flow_save_base();
     tc_loop_depth = tc_loop_depth + 1; tc_stmt(node_c[id], expected_kind, expected_name); tc_loop_depth = tc_loop_depth - 1;
     if node_value[id] != 0 then tc_stmt(node_value[id], expected_kind, expected_name);
+    tc_flow_save_yes();
+    tc_flow_restore_base();
+    tc_flow_merge_yes();
+    tc_flow_end();
     tc_leave_scope();
   }
 }
@@ -6525,6 +7030,10 @@ func tc_print_hint(code: int): void {
   else if code == 60 then runtime_write_string("keep a borrowed capture within the source binding's lexical lifetime");
   else if code == 61 then runtime_write_string("closure moved-capture used after move");
   else if code == 31 then runtime_write_string("assign only to a mutable binding");
+  else if code == 68 then runtime_write_string("borrow target must be a variable, dereference, index, or field place");
+  else if code == 69 then runtime_write_string("return-borrow lifetime must come from one consistent parameter");
+  else if code == 70 then runtime_write_string("mutable borrow requires a mutable place");
+  else if code == 72 then runtime_write_string("reference return escapes its owner");
   else runtime_write_string("inspect the expression at the reported source location");
 }
 func tc_diag(): void {
@@ -6570,6 +7079,10 @@ func tc_diag(): void {
   else if tc_error_code == 59 then runtime_write_string("type error: borrow parameter requires a tracked source");
   else if tc_error_code == 60 then runtime_write_string("type error: closure capture escapes its source lifetime");
   else if tc_error_code == 61 then runtime_write_string("type error: closure moved-capture used after move");
+  else if tc_error_code == 68 then runtime_write_string("type error: borrow target is not a place");
+  else if tc_error_code == 69 then runtime_write_string("type error: inconsistent return-borrow lifetime");
+  else if tc_error_code == 70 then runtime_write_string("type error: mutable borrow requires a mutable place");
+  else if tc_error_code == 72 then runtime_write_string("type error: reference return escapes its owner");
   else if tc_error_code == 44 then runtime_write_string("type error: distinct functions collide after C mangling");
   else runtime_write_string("type error: invalid expression");
   runtime_write_char('\n');
@@ -6713,7 +7226,8 @@ func tc_check_ffi_return_type(ty: int): int {
   return tc_check_ffi_type(ty);
 }
 func tc_program(root: int): int {
-  tc_root = root; tc_ok = 1; tc_error_code = 0; tc_error_pos = 0 - 1; tc_error_expected_kind = 0; tc_error_found_kind = 0; tc_var_count = 0; tc_scope_count = 0; tc_path_count = 0; tc_loop_depth = 0;
+  tc_root = root; tc_ok = 1; tc_error_code = 0; tc_error_pos = 0 - 1; tc_error_expected_kind = 0; tc_error_found_kind = 0; tc_var_count = 0; tc_scope_count = 0; tc_path_count = 0; tc_loop_depth = 0; tc_flow_depth = 0; tc_flow_log_count = 0;
+  tc_prepare_return_contracts(root);
   let collision_item: int = node_a[root];
   while collision_item != 0 {
     if (node_kind[collision_item] == N_FUNC || node_kind[collision_item] == N_GENERIC_FUNC) && tc_reserved_function(node_value[collision_item]) == 1 then { tc_error_code = 43; tc_error_pos = node_pos[collision_item]; tc_ok = 0; tc_diag(); return 0; }
@@ -6758,8 +7272,8 @@ func tc_program(root: int): int {
 
     tc_global_count = tc_var_count;
   item = node_a[root];
-    while item != 0 { if node_kind[item] == N_FUNC then { tc_var_count = tc_global_count; tc_scope_count = 1; tc_enter_scope(); let p: int = node_c[item];
-    while p != 0 { tc_type_node(node_b[p]); let pk: int = tc_kind; let pn: int = tc_name; let pek: int = tc_elem_kind; let pen: int = tc_elem_name; tc_add_var(node_a[p], pk, pn, pek, pen, node_b[p]); tc_var_param[tc_last_var_index] = 1; tc_var_mode[tc_last_var_index] = node_aux[p]; if node_aux[p] == 1 then tc_var_owned[tc_last_var_index] = 1; else if node_aux[p] == 3 then tc_var_borrow_mut[tc_last_var_index] = 1; else if tc_is_owner_kind(pk) == 1 then tc_var_owned[tc_last_var_index] = 1; p = node_next[p]; } tc_type_node(node_b[item]);
+    while item != 0 { if node_kind[item] == N_FUNC then { tc_var_count = tc_global_count; tc_scope_count = 1; tc_enter_scope();     let p: int = node_c[item]; let param_pos: int = 1;
+    while p != 0 { tc_type_node(node_b[p]); let pk: int = tc_kind; let pn: int = tc_name; let pek: int = tc_elem_kind; let pen: int = tc_elem_name; tc_add_var(node_a[p], pk, pn, pek, pen, node_b[p]); tc_var_param[tc_last_var_index] = 1; tc_var_param_pos[tc_last_var_index] = param_pos; tc_var_mode[tc_last_var_index] = node_aux[p]; if node_aux[p] == 2 || node_aux[p] == 3 then { tc_var_borrow_source[tc_last_var_index] = tc_last_var_index; tc_var_borrow_mode[tc_last_var_index] = node_aux[p]; tc_var_borrow_param[tc_last_var_index] = param_pos; } if node_aux[p] == 1 then tc_var_owned[tc_last_var_index] = 1; else if node_aux[p] == 3 then tc_var_borrow_mut[tc_last_var_index] = 1; else if tc_is_owner_kind(pk) == 1 then tc_var_owned[tc_last_var_index] = 1; param_pos = param_pos + 1; p = node_next[p]; } tc_type_node(node_b[item]);
  tc_expected_elem_kind = tc_elem_kind; tc_expected_elem_name = tc_elem_name; tc_stmt(node_a[item], tc_kind, tc_name); tc_leave_scope(); } item = node_next[item]; }
 
   if tc_ok == 0 then { tc_diag(); return 0; }

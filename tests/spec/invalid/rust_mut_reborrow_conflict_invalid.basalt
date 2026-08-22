@@ -1,0 +1,10 @@
+func main(): int {
+  let value: int = 1;
+  let mutable: int* = &mut value;
+  let shared: int* = &*mutable;
+  *mutable = 2;
+  return *shared;
+}
+
+// diagnostic.code: 37
+// diagnostic: mutable capability is suspended while a shared reborrow is active

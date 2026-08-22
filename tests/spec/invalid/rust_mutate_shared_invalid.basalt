@@ -1,0 +1,9 @@
+func main(): int {
+  let value: int = 1;
+  let shared: int* = &value;
+  *shared = 2;
+  return value;
+}
+
+// diagnostic.code: 37
+// diagnostic: cannot mutate through a shared borrow

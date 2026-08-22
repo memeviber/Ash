@@ -1,0 +1,9 @@
+func main(): int {
+  let value: int = 1;
+  let shared: int* = &value;
+  let mutable: int* = &mut value;
+  return *shared + *mutable;
+}
+
+// diagnostic.code: 37
+// diagnostic: mutable borrow conflicts with an active shared borrow

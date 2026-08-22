@@ -1639,6 +1639,15 @@ void load_source_file(char *path);
 int map_token(int k);
 void load_tokens_from_file(char *path);
 void ensure_tc_vars(int need);
+void ensure_tc_fun_meta(int need);
+void ensure_tc_flow_frames(int need);
+void ensure_tc_flow_log(int need);
+void tc_flow_append_current(int count);
+void tc_flow_save_base(void);
+void tc_flow_save_yes(void);
+void tc_flow_restore_base(void);
+void tc_flow_merge_yes(void);
+void tc_flow_end(void);
 void ensure_tc_scopes(int need);
 void tc_enter_scope(void);
 void tc_leave_scope(void);
@@ -1684,14 +1693,35 @@ int tc_release_name(int name);
 int tc_owned_initializer(int id);
 int tc_is_owner_kind(int kind);
 int tc_is_owner_type(int ty);
+int tc_is_place(int id);
+int tc_place_root(int id);
+int tc_place_borrow_param(int id);
+int tc_nth_arg(int head, int wanted);
+int tc_provenance(int id);
+int tc_provenance_origin(int id);
+int tc_is_loan_ancestor(int ancestor, int origin);
+int tc_borrow_conflict_from(int root, int origin, int requested_mut);
+int tc_provenance_param(int id);
+int tc_provenance_mut(int id);
+int tc_contract_param_position(int fun, int name);
+void tc_contract_record(int fun, int candidate, int mutable);
+int tc_contract_expr_param(int fun, int id);
+int tc_contract_expr_mut(int fun, int id);
+void tc_contract_scan_expr(int fun, int id);
+void tc_contract_scan_stmt(int fun, int id);
+void tc_prepare_return_contracts(int root);
+void tc_check_mutable_place(int id);
 int tc_borrow_conflict(int index);
 int tc_mut_borrow_conflict(int index);
 void tc_move_var(int index);
 void tc_move_value(int id);
 void tc_check_call_borrow(int arg, int mode);
 void tc_check_return_escape(int source_index);
+void tc_check_explicit_return_address_escape(int source_index);
+void tc_record_borrow_ex(int destination, int source_index2, int mode, int origin);
 void tc_record_borrow(int destination, int source_index2);
 void tc_record_borrow_mut(int destination, int source_index2);
+void tc_release_borrow(int index);
 void tc_require_mutable(int id);
 void tc_consume_call(int id);
 void tc_add_var(int name, int kind, int named, int elem_kind, int elem_name, int type_node);
@@ -2067,6 +2097,7 @@ int T_BORROW = 91;
 int T_BORROW_MUT = 92;
 int T_CLOSURE = 93;
 int T_PRINTLN = 94;
+int T_MUT = 95;
 int *input_kind = 0;
 int *input_value = 0;
 int *input_text = 0;
@@ -2172,6 +2203,7 @@ int L_BORROW = 92;
 int L_BORROW_MUT = 93;
 int L_NOT = 94;
 int L_CLOSURE = 95;
+int L_MUT = 97;
 int *source = 0;
 int source_len = 0;
 int source_pos = 0;
@@ -2264,7 +2296,11 @@ int *tc_var_moved = 0;
 int *tc_var_borrow_count = 0;
 int *tc_var_borrow_mut = 0;
 int *tc_var_borrow_source = 0;
+int *tc_var_borrow_mode = 0;
+int *tc_var_borrow_parent = 0;
+int *tc_var_borrow_param = 0;
 int *tc_var_param = 0;
+int *tc_var_param_pos = 0;
 int *tc_var_mode = 0;
 int *tc_var_closure_caps = 0;
 int *tc_var_closure_moved = 0;
@@ -2276,6 +2312,9 @@ int tc_expr_ffi_borrowed = 0;
 int tc_last_var_moved = 0;
 int tc_last_var_index = 0;
 int tc_expr_borrow_source = (0 - 1);
+int tc_expr_borrow_origin = (0 - 1);
+int tc_expr_borrow_mut = 0;
+int tc_expr_borrow_param = 0;
 int tc_expr_owner_source = (0 - 1);
 int tc_expr_is_owned = 0;
 int tc_var_count = 0;
@@ -2295,6 +2334,31 @@ int *tc_bind_name = 0;
 int *tc_bind_type = 0;
 int tc_bind_count = 0;
 int tc_bind_cap = 0;
+int *tc_fun_return_param = 0;
+int *tc_fun_return_mut = 0;
+int tc_fun_meta_cap = 0;
+int *tc_flow_log_owned = 0;
+int *tc_flow_log_moved = 0;
+int *tc_flow_log_borrow_count = 0;
+int *tc_flow_log_borrow_mut = 0;
+int *tc_flow_log_source = 0;
+int *tc_flow_log_mode = 0;
+int *tc_flow_log_parent = 0;
+int *tc_flow_log_borrow_param = 0;
+int *tc_flow_log_ffi = 0;
+int *tc_flow_log_closure_moved = 0;
+int *tc_flow_frame_base = 0;
+int *tc_flow_frame_yes = 0;
+int *tc_flow_frame_count = 0;
+int *tc_flow_frame_has_yes = 0;
+int tc_flow_log_count = 0;
+int tc_flow_log_cap = 0;
+int tc_flow_depth = 0;
+int tc_flow_frame_cap = 0;
+int tc_current_function = 0;
+int tc_current_return_param = 0;
+int tc_current_return_mut = 0;
+int tc_current_return_seen = 0;
 int next_capacity(int old, int need) {
   int n = old;
   if (n < 16)
@@ -6657,12 +6721,17 @@ int ast_unary(void) {
   } else {
   }
   if (input_take(T_AMP) == 1) {
+    int mutable = 0;
+    if (input_take(T_MUT) == 1)
+      mutable = 1;
+    else {
+    }
     int e = ast_unary();
     if (e < 0)
       return (0 - 1);
     else {
     }
-    return ast_node(N_ADDRESS, e, 0, 0, 0, 0);
+    return ast_node(N_ADDRESS, e, 0, 0, mutable, 0);
   } else {
   }
   return ast_primary();
@@ -8503,6 +8572,10 @@ int word_code(int start, int length) {
   } else {
   }
   if (length == 3) {
+    if (((source[start] == 109) && (source[(start + 1)] == 117)) && (source[(start + 2)] == 116))
+      return L_MUT;
+    else {
+    }
     if (h == 315572)
       return L_LET;
     else {
@@ -9557,6 +9630,10 @@ int map_token(int k) {
     return T_CLOSURE;
   else {
   }
+  if (k == L_MUT)
+    return T_MUT;
+  else {
+  }
   if (k == L_COLON)
     return T_COLON;
   else {
@@ -9728,12 +9805,190 @@ void ensure_tc_vars(int need) {
   tc_var_borrow_count = grow_ints(tc_var_borrow_count, tc_var_cap, n);
   tc_var_borrow_mut = grow_ints(tc_var_borrow_mut, tc_var_cap, n);
   tc_var_borrow_source = grow_ints(tc_var_borrow_source, tc_var_cap, n);
+  tc_var_borrow_mode = grow_ints(tc_var_borrow_mode, tc_var_cap, n);
+  tc_var_borrow_parent = grow_ints(tc_var_borrow_parent, tc_var_cap, n);
+  tc_var_borrow_param = grow_ints(tc_var_borrow_param, tc_var_cap, n);
   tc_var_param = grow_ints(tc_var_param, tc_var_cap, n);
+  tc_var_param_pos = grow_ints(tc_var_param_pos, tc_var_cap, n);
   tc_var_mode = grow_ints(tc_var_mode, tc_var_cap, n);
   tc_var_closure_caps = grow_ints(tc_var_closure_caps, tc_var_cap, n);
   tc_var_closure_moved = grow_ints(tc_var_closure_moved, tc_var_cap, n);
   tc_var_ffi_borrowed = grow_ints(tc_var_ffi_borrowed, tc_var_cap, n);
   tc_var_cap = n;
+}
+void ensure_tc_fun_meta(int need) {
+  if (need < tc_fun_meta_cap)
+    return;
+  else {
+  }
+  int n = next_capacity(tc_fun_meta_cap, need);
+  tc_fun_return_param = grow_ints(tc_fun_return_param, tc_fun_meta_cap, n);
+  tc_fun_return_mut = grow_ints(tc_fun_return_mut, tc_fun_meta_cap, n);
+  tc_fun_meta_cap = n;
+}
+void ensure_tc_flow_frames(int need) {
+  if (need < tc_flow_frame_cap)
+    return;
+  else {
+  }
+  int n = next_capacity(tc_flow_frame_cap, need);
+  tc_flow_frame_base = grow_ints(tc_flow_frame_base, tc_flow_frame_cap, n);
+  tc_flow_frame_yes = grow_ints(tc_flow_frame_yes, tc_flow_frame_cap, n);
+  tc_flow_frame_count = grow_ints(tc_flow_frame_count, tc_flow_frame_cap, n);
+  tc_flow_frame_has_yes = grow_ints(tc_flow_frame_has_yes, tc_flow_frame_cap, n);
+  tc_flow_frame_cap = n;
+}
+void ensure_tc_flow_log(int need) {
+  if (need < tc_flow_log_cap)
+    return;
+  else {
+  }
+  int n = next_capacity(tc_flow_log_cap, need);
+  tc_flow_log_owned = grow_ints(tc_flow_log_owned, tc_flow_log_cap, n);
+  tc_flow_log_moved = grow_ints(tc_flow_log_moved, tc_flow_log_cap, n);
+  tc_flow_log_borrow_count = grow_ints(tc_flow_log_borrow_count, tc_flow_log_cap, n);
+  tc_flow_log_borrow_mut = grow_ints(tc_flow_log_borrow_mut, tc_flow_log_cap, n);
+  tc_flow_log_source = grow_ints(tc_flow_log_source, tc_flow_log_cap, n);
+  tc_flow_log_mode = grow_ints(tc_flow_log_mode, tc_flow_log_cap, n);
+  tc_flow_log_parent = grow_ints(tc_flow_log_parent, tc_flow_log_cap, n);
+  tc_flow_log_borrow_param = grow_ints(tc_flow_log_borrow_param, tc_flow_log_cap, n);
+  tc_flow_log_ffi = grow_ints(tc_flow_log_ffi, tc_flow_log_cap, n);
+  tc_flow_log_closure_moved = grow_ints(tc_flow_log_closure_moved, tc_flow_log_cap, n);
+  tc_flow_log_cap = n;
+}
+void tc_flow_append_current(int count) {
+  (void)(ensure_tc_flow_log((tc_flow_log_count + count)));
+  int i = 0;
+  while (i < count) {
+    int slot = (tc_flow_log_count + i);
+    tc_flow_log_owned[slot] = tc_var_owned[i];
+    tc_flow_log_moved[slot] = tc_var_moved[i];
+    tc_flow_log_borrow_count[slot] = tc_var_borrow_count[i];
+    tc_flow_log_borrow_mut[slot] = tc_var_borrow_mut[i];
+    tc_flow_log_source[slot] = tc_var_borrow_source[i];
+    tc_flow_log_mode[slot] = tc_var_borrow_mode[i];
+    tc_flow_log_parent[slot] = tc_var_borrow_parent[i];
+    tc_flow_log_borrow_param[slot] = tc_var_borrow_param[i];
+    tc_flow_log_ffi[slot] = tc_var_ffi_borrowed[i];
+    tc_flow_log_closure_moved[slot] = tc_var_closure_moved[i];
+    i = (i + 1);
+  }
+  tc_flow_log_count = (tc_flow_log_count + count);
+}
+void tc_flow_save_base(void) {
+  (void)(ensure_tc_flow_frames(tc_flow_depth));
+  tc_flow_frame_base[tc_flow_depth] = tc_flow_log_count;
+  tc_flow_frame_count[tc_flow_depth] = tc_var_count;
+  tc_flow_frame_yes[tc_flow_depth] = (0 - 1);
+  tc_flow_frame_has_yes[tc_flow_depth] = 0;
+  (void)(tc_flow_append_current(tc_var_count));
+  tc_flow_depth = (tc_flow_depth + 1);
+}
+void tc_flow_save_yes(void) {
+  int frame = (tc_flow_depth - 1);
+  if (frame < 0)
+    return;
+  else {
+  }
+  tc_flow_frame_yes[frame] = tc_flow_log_count;
+  (void)(tc_flow_append_current(tc_flow_frame_count[frame]));
+  tc_var_count = tc_flow_frame_count[frame];
+  tc_flow_frame_has_yes[frame] = 1;
+}
+void tc_flow_restore_base(void) {
+  int frame = (tc_flow_depth - 1);
+  if (frame < 0)
+    return;
+  else {
+  }
+  int start = tc_flow_frame_base[frame];
+  int count = tc_flow_frame_count[frame];
+  int i = 0;
+  while (i < count) {
+    int slot = (start + i);
+    tc_var_owned[i] = tc_flow_log_owned[slot];
+    tc_var_moved[i] = tc_flow_log_moved[slot];
+    tc_var_borrow_count[i] = tc_flow_log_borrow_count[slot];
+    tc_var_borrow_mut[i] = tc_flow_log_borrow_mut[slot];
+    tc_var_borrow_source[i] = tc_flow_log_source[slot];
+    tc_var_borrow_mode[i] = tc_flow_log_mode[slot];
+    tc_var_borrow_parent[i] = tc_flow_log_parent[slot];
+    tc_var_borrow_param[i] = tc_flow_log_borrow_param[slot];
+    tc_var_ffi_borrowed[i] = tc_flow_log_ffi[slot];
+    tc_var_closure_moved[i] = tc_flow_log_closure_moved[slot];
+    i = (i + 1);
+  }
+  tc_var_count = count;
+}
+void tc_flow_merge_yes(void) {
+  int frame = (tc_flow_depth - 1);
+  if (frame < 0)
+    return;
+  else {
+  }
+  if (tc_flow_frame_has_yes[frame] == 0) {
+    (void)(tc_flow_save_yes());
+    return;
+  } else {
+  }
+  int base = tc_flow_frame_base[frame];
+  int yes = tc_flow_frame_yes[frame];
+  int count = tc_flow_frame_count[frame];
+  int i = 0;
+  while (i < count) {
+    int slot = (yes + i);
+    if ((tc_flow_log_moved[slot] == 1) || (tc_var_moved[i] == 1))
+      tc_var_moved[i] = 1;
+    else {
+    }
+    if (((tc_flow_log_owned[slot] == 1) && (tc_var_owned[i] == 1)) && (tc_var_moved[i] == 0))
+      tc_var_owned[i] = 1;
+    else
+      tc_var_owned[i] = 0;
+    if (tc_flow_log_borrow_count[slot] > tc_var_borrow_count[i])
+      tc_var_borrow_count[i] = tc_flow_log_borrow_count[slot];
+    else {
+    }
+    if (tc_flow_log_borrow_mut[slot] > tc_var_borrow_mut[i])
+      tc_var_borrow_mut[i] = tc_flow_log_borrow_mut[slot];
+    else {
+    }
+    if (tc_flow_log_source[slot] == tc_var_borrow_source[i]) {
+    } else
+      tc_var_borrow_source[i] = (0 - 1);
+    if (tc_flow_log_mode[slot] == tc_var_borrow_mode[i]) {
+    } else
+      tc_var_borrow_mode[i] = 0;
+    if (tc_flow_log_parent[slot] == tc_var_borrow_parent[i]) {
+    } else
+      tc_var_borrow_parent[i] = (0 - 1);
+    if (tc_flow_log_borrow_param[slot] == tc_var_borrow_param[i]) {
+    } else
+      tc_var_borrow_param[i] = 0;
+    if ((tc_flow_log_ffi[slot] == 1) || (tc_var_ffi_borrowed[i] == 1))
+      tc_var_ffi_borrowed[i] = 1;
+    else {
+    }
+    if ((tc_flow_log_closure_moved[slot] == 1) || (tc_var_closure_moved[i] == 1))
+      tc_var_closure_moved[i] = 1;
+    else {
+    }
+    i = (i + 1);
+  }
+  tc_var_count = count;
+  if (base < 0)
+    tc_var_count = 0;
+  else {
+  }
+}
+void tc_flow_end(void) {
+  int frame = (tc_flow_depth - 1);
+  if (frame < 0)
+    return;
+  else {
+  }
+  tc_flow_log_count = tc_flow_frame_base[frame];
+  tc_flow_depth = frame;
 }
 void ensure_tc_scopes(int need) {
   if (need < tc_scope_cap)
@@ -9764,11 +10019,17 @@ void tc_leave_scope(void) {
     source_index = tc_var_borrow_source[i];
     if (source_index < 0) {
     } else if (source_index < begin) {
-      if (tc_var_borrow_mut[source_index] > 0)
-        tc_var_borrow_mut[source_index] = (tc_var_borrow_mut[source_index] - 1);
-      else if (tc_var_borrow_count[source_index] > 0)
-        tc_var_borrow_count[source_index] = (tc_var_borrow_count[source_index] - 1);
-      else {
+      if (tc_var_borrow_mode[i] == 3) {
+        if (tc_var_borrow_mut[source_index] > 0)
+          tc_var_borrow_mut[source_index] = (tc_var_borrow_mut[source_index] - 1);
+        else {
+        }
+      } else if (tc_var_borrow_mode[i] == 2) {
+        if (tc_var_borrow_count[source_index] > 0)
+          tc_var_borrow_count[source_index] = (tc_var_borrow_count[source_index] - 1);
+        else {
+        }
+      } else {
       }
     } else {
     }
@@ -10842,6 +11103,495 @@ int tc_is_owner_type(int ty) {
   }
   return 0;
 }
+int tc_is_place(int id) {
+  if (id == 0)
+    return 0;
+  else {
+  }
+  if ((((node_kind[id] == N_VAR) || (node_kind[id] == N_DEREF)) || (node_kind[id] == N_INDEX)) ||
+      (node_kind[id] == N_FIELD_ACCESS))
+    return 1;
+  else {
+  }
+  return 0;
+}
+int tc_place_root(int id) {
+  if (id == 0)
+    return (0 - 1);
+  else {
+  }
+  if (node_kind[id] == N_VAR) {
+    if (tc_lookup_var(node_value[id]) == 1) {
+      if (tc_var_borrow_source[tc_last_var_index] >= 0)
+        return tc_var_borrow_source[tc_last_var_index];
+      else {
+      }
+      return tc_last_var_index;
+    } else {
+    }
+    return (0 - 1);
+  } else {
+  }
+  if (node_kind[id] == N_DEREF) {
+    (void)(tc_expr(node_a[id]));
+    if (tc_expr_borrow_source >= 0)
+      return tc_expr_borrow_source;
+    else {
+    }
+    if ((node_kind[node_a[id]] == N_VAR) && (tc_lookup_var(node_value[node_a[id]]) == 1))
+      return tc_last_var_index;
+    else {
+    }
+    return (0 - 1);
+  } else {
+  }
+  if ((node_kind[id] == N_INDEX) || (node_kind[id] == N_FIELD_ACCESS)) {
+    (void)(tc_expr(node_a[id]));
+    if (tc_expr_borrow_source >= 0)
+      return tc_expr_borrow_source;
+    else {
+    }
+    if ((node_kind[node_a[id]] == N_VAR) && (tc_lookup_var(node_value[node_a[id]]) == 1))
+      return tc_last_var_index;
+    else {
+    }
+  } else {
+  }
+  return (0 - 1);
+}
+int tc_place_borrow_param(int id) {
+  if (id == 0)
+    return 0;
+  else {
+  }
+  if ((node_kind[id] == N_VAR) && (tc_lookup_var(node_value[id]) == 1))
+    return tc_var_borrow_param[tc_last_var_index];
+  else {
+  }
+  (void)(tc_expr(id));
+  return tc_expr_borrow_param;
+}
+int tc_nth_arg(int head, int wanted) {
+  if (wanted <= 0)
+    return 0;
+  else {
+  }
+  int p = head;
+  int index = 1;
+  while (p != 0) {
+    if (index == wanted)
+      return p;
+    else {
+    }
+    index = (index + 1);
+    p = node_next[p];
+  }
+  return 0;
+}
+int tc_provenance(int id) {
+  if (id == 0)
+    return (0 - 1);
+  else {
+  }
+  if (node_kind[id] == N_VAR) {
+    if (tc_lookup_var(node_value[id]) == 0)
+      return (0 - 1);
+    else {
+    }
+    if (tc_var_borrow_source[tc_last_var_index] >= 0)
+      return tc_var_borrow_source[tc_last_var_index];
+    else {
+    }
+    if (tc_var_borrow_param[tc_last_var_index] > 0)
+      return tc_last_var_index;
+    else {
+    }
+    return (0 - 1);
+  } else {
+  }
+  if (node_kind[id] == N_ADDRESS) {
+    int address_source = tc_provenance(node_a[id]);
+    if (address_source >= 0)
+      return address_source;
+    else {
+    }
+    return tc_place_root(node_a[id]);
+  } else {
+  }
+  if (((node_kind[id] == N_DEREF) || (node_kind[id] == N_INDEX)) ||
+      (node_kind[id] == N_FIELD_ACCESS)) {
+    int place_source = tc_provenance(node_a[id]);
+    if (place_source >= 0)
+      return place_source;
+    else {
+    }
+    return tc_place_root(node_a[id]);
+  } else {
+  }
+  if (node_kind[id] == N_CALL) {
+    int fun = tc_find_function_ctx(node_value[id], node_scope[id]);
+    if ((fun != 0) && (tc_fun_return_param[fun] > 0))
+      return tc_provenance(tc_nth_arg(node_a[id], tc_fun_return_param[fun]));
+    else {
+    }
+  } else {
+  }
+  return (0 - 1);
+}
+int tc_provenance_origin(int id) {
+  if (id == 0)
+    return (0 - 1);
+  else {
+  }
+  if (node_kind[id] == N_VAR) {
+    if (tc_lookup_var(node_value[id]) == 1)
+      return tc_last_var_index;
+    else {
+    }
+    return (0 - 1);
+  } else {
+  }
+  if ((((node_kind[id] == N_ADDRESS) || (node_kind[id] == N_DEREF)) ||
+       (node_kind[id] == N_INDEX)) ||
+      (node_kind[id] == N_FIELD_ACCESS))
+    return tc_provenance_origin(node_a[id]);
+  else {
+  }
+  if (node_kind[id] == N_CALL) {
+    int fun = tc_find_function_ctx(node_value[id], node_scope[id]);
+    if (fun != 0) {
+      (void)(ensure_tc_fun_meta(fun));
+      if (tc_fun_return_param[fun] > 0)
+        return tc_provenance_origin(tc_nth_arg(node_a[id], tc_fun_return_param[fun]));
+      else {
+      }
+    } else {
+    }
+  } else {
+  }
+  return (0 - 1);
+}
+int tc_is_loan_ancestor(int ancestor, int origin) {
+  if ((ancestor < 0) || (origin < 0))
+    return 0;
+  else {
+  }
+  int current = origin;
+  int steps = 0;
+  while (((current >= 0) && (current < tc_var_count)) && (steps <= tc_var_count)) {
+    if (current == ancestor)
+      return 1;
+    else {
+    }
+    current = tc_var_borrow_parent[current];
+    steps = (steps + 1);
+  }
+  return 0;
+}
+int tc_borrow_conflict_from(int root, int origin, int requested_mut) {
+  if (root < 0)
+    return 0;
+  else {
+  }
+  int i = 0;
+  while (i < tc_var_count) {
+    if ((tc_var_borrow_source[i] == root) &&
+        ((tc_var_borrow_mode[i] == 2) || (tc_var_borrow_mode[i] == 3))) {
+      if ((i == origin) || (tc_is_loan_ancestor(i, origin) == 1)) {
+      } else if ((requested_mut == 1) || (tc_var_borrow_mode[i] == 3))
+        return 1;
+      else {
+      }
+    } else {
+    }
+    i = (i + 1);
+  }
+  return 0;
+}
+int tc_provenance_param(int id) {
+  if (id == 0)
+    return 0;
+  else {
+  }
+  if (node_kind[id] == N_VAR) {
+    if (tc_lookup_var(node_value[id]) == 1)
+      return tc_var_borrow_param[tc_last_var_index];
+    else {
+    }
+    return 0;
+  } else {
+  }
+  if ((((node_kind[id] == N_ADDRESS) || (node_kind[id] == N_DEREF)) ||
+       (node_kind[id] == N_INDEX)) ||
+      (node_kind[id] == N_FIELD_ACCESS))
+    return tc_provenance_param(node_a[id]);
+  else {
+  }
+  if (node_kind[id] == N_CALL) {
+    int fun = tc_find_function_ctx(node_value[id], node_scope[id]);
+    if ((fun != 0) && (tc_fun_return_param[fun] > 0))
+      return tc_provenance_param(tc_nth_arg(node_a[id], tc_fun_return_param[fun]));
+    else {
+    }
+  } else {
+  }
+  return 0;
+}
+int tc_provenance_mut(int id) {
+  if (id == 0)
+    return 0;
+  else {
+  }
+  if (node_kind[id] == N_ADDRESS) {
+    if (node_value[id] == 1)
+      return 1;
+    else {
+    }
+    return tc_provenance_mut(node_a[id]);
+  } else {
+  }
+  if (node_kind[id] == N_VAR) {
+    if ((tc_lookup_var(node_value[id]) == 1) && (tc_var_borrow_mode[tc_last_var_index] == 3))
+      return 1;
+    else {
+    }
+    return 0;
+  } else {
+  }
+  if (((node_kind[id] == N_DEREF) || (node_kind[id] == N_INDEX)) ||
+      (node_kind[id] == N_FIELD_ACCESS))
+    return tc_provenance_mut(node_a[id]);
+  else {
+  }
+  return 0;
+}
+int tc_contract_param_position(int fun, int name) {
+  if (fun == 0)
+    return 0;
+  else {
+  }
+  int p = node_c[fun];
+  int index = 1;
+  while (p != 0) {
+    if ((node_a[p] == name) && ((node_aux[p] == 2) || (node_aux[p] == 3)))
+      return index;
+    else {
+    }
+    index = (index + 1);
+    p = node_next[p];
+  }
+  return 0;
+}
+void tc_contract_record(int fun, int candidate, int mutable) {
+  if (candidate <= 0)
+    return;
+  else {
+  }
+  (void)(ensure_tc_fun_meta(fun));
+  if (tc_fun_return_param[fun] == 0) {
+    tc_fun_return_param[fun] = candidate;
+    tc_fun_return_mut[fun] = mutable;
+  } else if ((tc_fun_return_param[fun] != candidate) || (tc_fun_return_mut[fun] != mutable)) {
+    tc_fun_return_param[fun] = (0 - 1);
+    tc_fun_return_mut[fun] = 0;
+  } else {
+  }
+}
+int tc_contract_expr_param(int fun, int id) {
+  if (id == 0)
+    return 0;
+  else {
+  }
+  if (node_kind[id] == N_VAR)
+    return tc_contract_param_position(fun, node_value[id]);
+  else {
+  }
+  if (((((node_kind[id] == N_ADDRESS) || (node_kind[id] == N_DEREF)) ||
+        (node_kind[id] == N_INDEX)) ||
+       (node_kind[id] == N_FIELD_ACCESS)) ||
+      (node_kind[id] == N_MOVE))
+    return tc_contract_expr_param(fun, node_a[id]);
+  else {
+  }
+  if (node_kind[id] == N_CALL) {
+    int called = tc_find_function_ctx(node_value[id], node_scope[id]);
+    if (called != 0) {
+      (void)(ensure_tc_fun_meta(called));
+      if (tc_fun_return_param[called] > 0)
+        return tc_contract_expr_param(fun, tc_nth_arg(node_a[id], tc_fun_return_param[called]));
+      else {
+      }
+    } else {
+    }
+  } else {
+  }
+  return 0;
+}
+int tc_contract_expr_mut(int fun, int id) {
+  if (id == 0)
+    return 0;
+  else {
+  }
+  if (node_kind[id] == N_ADDRESS)
+    return node_value[id];
+  else {
+  }
+  if (node_kind[id] == N_VAR) {
+    int p = node_c[fun];
+    while (p != 0) {
+      if ((node_a[p] == node_value[id]) && (node_aux[p] == 3))
+        return 1;
+      else {
+      }
+      p = node_next[p];
+    }
+    return 0;
+  } else {
+  }
+  if ((((node_kind[id] == N_DEREF) || (node_kind[id] == N_INDEX)) ||
+       (node_kind[id] == N_FIELD_ACCESS)) ||
+      (node_kind[id] == N_MOVE))
+    return tc_contract_expr_mut(fun, node_a[id]);
+  else {
+  }
+  if (node_kind[id] == N_CALL) {
+    int called = tc_find_function_ctx(node_value[id], node_scope[id]);
+    if (called != 0) {
+      (void)(ensure_tc_fun_meta(called));
+      if (tc_fun_return_param[called] > 0)
+        return tc_fun_return_mut[called];
+      else {
+      }
+    } else {
+    }
+  } else {
+  }
+  return 0;
+}
+void tc_contract_scan_expr(int fun, int id) {
+  if (id == 0)
+    return;
+  else {
+  }
+  if (((((((node_kind[id] == N_ADDRESS) || (node_kind[id] == N_VAR)) ||
+          (node_kind[id] == N_DEREF)) ||
+         (node_kind[id] == N_INDEX)) ||
+        (node_kind[id] == N_FIELD_ACCESS)) ||
+       (node_kind[id] == N_MOVE)) ||
+      (node_kind[id] == N_CALL)) {
+    int pos = tc_contract_expr_param(fun, id);
+    if (pos > 0)
+      (void)(tc_contract_record(fun, pos, tc_contract_expr_mut(fun, id)));
+    else {
+    }
+    return;
+  } else {
+  }
+}
+void tc_contract_scan_stmt(int fun, int id) {
+  if (id == 0)
+    return;
+  else {
+  }
+  int k = node_kind[id];
+  if (k == N_RETURN)
+    (void)(tc_contract_scan_expr(fun, node_a[id]));
+  else if (k == N_BLOCK) {
+    int p = node_a[id];
+    while (p != 0) {
+      (void)(tc_contract_scan_stmt(fun, p));
+      p = node_next[p];
+    }
+  } else if (k == N_IF) {
+    (void)(tc_contract_scan_stmt(fun, node_b[id]));
+    (void)(tc_contract_scan_stmt(fun, node_c[id]));
+  } else if (k == N_WHILE)
+    (void)(tc_contract_scan_stmt(fun, node_b[id]));
+  else if (k == N_FOR) {
+    (void)(tc_contract_scan_stmt(fun, node_a[id]));
+    (void)(tc_contract_scan_stmt(fun, node_c[id]));
+    (void)(tc_contract_scan_stmt(fun, node_value[id]));
+  } else if (k == N_MATCH) {
+    int arm = node_b[id];
+    while (arm != 0) {
+      (void)(tc_contract_scan_stmt(fun, node_b[arm]));
+      arm = node_next[arm];
+    }
+  } else {
+  }
+}
+void tc_prepare_return_contracts(int root) {
+  int item = node_a[root];
+  while (item != 0) {
+    if ((node_kind[item] == N_FUNC) || (node_kind[item] == N_GENERIC_FUNC)) {
+      (void)(ensure_tc_fun_meta(item));
+      if ((node_b[item] != 0) && (node_kind[node_b[item]] == TY_PTR)) {
+        tc_fun_return_param[item] = 0;
+        tc_fun_return_mut[item] = 0;
+        (void)(tc_contract_scan_stmt(item, node_a[item]));
+        if (tc_fun_return_param[item] < 0) {
+          tc_error_pos = node_pos[item];
+          (void)(tc_fail(69));
+        } else {
+        }
+      } else {
+      }
+    } else {
+    }
+    item = node_next[item];
+  }
+}
+void tc_check_mutable_place(int id) {
+  if (id == 0) {
+    (void)(tc_fail(70));
+    return;
+  } else {
+  }
+  if (node_kind[id] == N_VAR) {
+    if (tc_lookup_var(node_value[id]) == 0) {
+      (void)(tc_fail(5));
+      return;
+    } else {
+    }
+    if (tc_var_mode[tc_last_var_index] == 2) {
+      (void)(tc_fail(70));
+      return;
+    } else {
+    }
+    if (tc_borrow_conflict(tc_last_var_index) == 1) {
+      (void)(tc_fail(37));
+      return;
+    } else {
+    }
+    return;
+  } else {
+  }
+  if (tc_is_place(id) == 0) {
+    (void)(tc_fail(70));
+    return;
+  } else {
+  }
+  (void)(tc_expr(id));
+  int root = tc_expr_borrow_source;
+  if (root < 0)
+    root = tc_place_root(id);
+  else {
+  }
+  if (root < 0) {
+    (void)(tc_fail(70));
+    return;
+  } else {
+  }
+  if (tc_expr_borrow_mut == 1) {
+    if (((root < tc_var_count) && (tc_var_borrow_mut[root] == 1)) &&
+        (tc_var_borrow_count[root] == 0))
+      return;
+    else {
+    }
+  } else {
+  }
+  (void)(tc_fail(37));
+}
 int tc_borrow_conflict(int index) {
   if (index < 0)
     return 0;
@@ -10949,12 +11699,14 @@ void tc_check_call_borrow(int arg, int mode) {
   } else {
   }
   if (mode == 2) {
-    if (tc_var_borrow_mut[source_index] > 0)
+    if ((tc_var_borrow_mut[source_index] > 0) && (tc_expr_borrow_mut == 0))
       (void)(tc_fail(37));
     else {
     }
   } else if (mode == 3) {
-    if ((tc_var_borrow_count[source_index] > 0) || (tc_var_borrow_mut[source_index] > 0))
+    if (((tc_expr_borrow_mut == 1) && (tc_var_borrow_mut[source_index] == 1)) &&
+        (tc_var_borrow_count[source_index] == 0)) {
+    } else if ((tc_var_borrow_count[source_index] > 0) || (tc_var_borrow_mut[source_index] > 0))
       (void)(tc_fail(37));
     else {
     }
@@ -10970,59 +11722,96 @@ void tc_check_return_escape(int source_index) {
     return;
   else {
   }
-  if ((source_index < tc_var_count) && (tc_var_param[source_index] == 1))
+  if (((source_index < tc_var_count) && (tc_var_param[source_index] == 1)) &&
+      ((tc_var_mode[source_index] == 2) || (tc_var_mode[source_index] == 3)))
+    return;
+  else {
+  }
+  (void)(tc_fail(72));
+}
+void tc_check_explicit_return_address_escape(int source_index) {
+  if (source_index < 0)
+    return;
+  else {
+  }
+  if (source_index < tc_global_count)
+    return;
+  else {
+  }
+  if (((source_index < tc_var_count) && (tc_var_param[source_index] == 1)) &&
+      ((tc_var_mode[source_index] == 2) || (tc_var_mode[source_index] == 3)))
     return;
   else {
   }
   (void)(tc_fail(38));
 }
-void tc_record_borrow(int destination, int source_index2) {
+void tc_record_borrow_ex(int destination, int source_index2, int mode, int origin) {
   if ((destination < 0) || (source_index2 < 0))
     return;
   else {
   }
-  if (destination < tc_var_count) {
-  } else
+  if ((destination >= tc_var_count) || (source_index2 >= tc_var_count))
     return;
-  if (source_index2 < tc_var_count) {
-  } else
-    return;
+  else {
+  }
   if (tc_var_moved[source_index2] == 1) {
     (void)(tc_fail(33));
     return;
   } else {
   }
-  if (tc_var_borrow_mut[source_index2] > 0) {
+  if (origin < 0)
+    origin = source_index2;
+  else {
+  }
+  if (tc_borrow_conflict_from(source_index2, origin, (mode == 3)) == 1) {
     (void)(tc_fail(37));
     return;
   } else {
   }
+  if (mode == 3)
+    tc_var_borrow_mut[source_index2] = (tc_var_borrow_mut[source_index2] + 1);
+  else
+    tc_var_borrow_count[source_index2] = (tc_var_borrow_count[source_index2] + 1);
   tc_var_borrow_source[destination] = source_index2;
-  tc_var_borrow_count[source_index2] = (tc_var_borrow_count[source_index2] + 1);
+  tc_var_borrow_mode[destination] = mode;
+  tc_var_borrow_parent[destination] = origin;
+  if ((tc_var_param[source_index2] == 1) &&
+      ((tc_var_mode[source_index2] == 2) || (tc_var_mode[source_index2] == 3)))
+    tc_var_borrow_param[destination] = tc_var_param_pos[source_index2];
+  else
+    tc_var_borrow_param[destination] = tc_var_borrow_param[source_index2];
+}
+void tc_record_borrow(int destination, int source_index2) {
+  (void)(tc_record_borrow_ex(destination, source_index2, 2, source_index2));
 }
 void tc_record_borrow_mut(int destination, int source_index2) {
-  if ((destination < 0) || (source_index2 < 0))
+  (void)(tc_record_borrow_ex(destination, source_index2, 3, source_index2));
+}
+void tc_release_borrow(int index) {
+  if ((index < 0) || (index >= tc_var_count))
     return;
   else {
   }
-  if (destination < tc_var_count) {
-  } else
-    return;
-  if (source_index2 < tc_var_count) {
-  } else
-    return;
-  if (tc_var_moved[source_index2] == 1) {
-    (void)(tc_fail(33));
-    return;
+  int source_index = tc_var_borrow_source[index];
+  if ((source_index >= 0) && (source_index < tc_var_count)) {
+    if (tc_var_borrow_mode[index] == 3) {
+      if (tc_var_borrow_mut[source_index] > 0)
+        tc_var_borrow_mut[source_index] = (tc_var_borrow_mut[source_index] - 1);
+      else {
+      }
+    } else if (tc_var_borrow_mode[index] == 2) {
+      if (tc_var_borrow_count[source_index] > 0)
+        tc_var_borrow_count[source_index] = (tc_var_borrow_count[source_index] - 1);
+      else {
+      }
+    } else {
+    }
   } else {
   }
-  if ((tc_var_borrow_count[source_index2] > 0) || (tc_var_borrow_mut[source_index2] > 0)) {
-    (void)(tc_fail(37));
-    return;
-  } else {
-  }
-  tc_var_borrow_source[destination] = source_index2;
-  tc_var_borrow_mut[source_index2] = (tc_var_borrow_mut[source_index2] + 1);
+  tc_var_borrow_source[index] = (0 - 1);
+  tc_var_borrow_mode[index] = 0;
+  tc_var_borrow_parent[index] = (0 - 1);
+  tc_var_borrow_param[index] = 0;
 }
 void tc_require_mutable(int id) {
   if (id == 0)
@@ -11039,24 +11828,27 @@ void tc_require_mutable(int id) {
       }
     } else {
     }
-  } else if (((node_kind[id] == N_DEREF) || (node_kind[id] == N_INDEX)) ||
-             (node_kind[id] == N_FIELD_ACCESS)) {
-    if (node_kind[node_a[id]] == N_VAR) {
-      if ((tc_lookup_var(node_value[node_a[id]]) == 1) && (tc_var_mode[tc_last_var_index] == 2)) {
-        (void)(tc_fail(37));
-        return;
-      } else {
-      }
-    } else {
-    }
-    (void)(tc_expr(id));
-    if (tc_expr_borrow_source < 0)
+    return;
+  } else {
+  }
+  if (tc_is_place(id) == 0) {
+    (void)(tc_fail(70));
+    return;
+  } else {
+  }
+  (void)(tc_expr(id));
+  if (tc_expr_borrow_source < 0)
+    return;
+  else {
+  }
+  if (tc_expr_borrow_mut == 1) {
+    if (tc_borrow_conflict_from(tc_expr_borrow_source, tc_expr_borrow_origin, 1) == 0)
       return;
     else {
     }
-    (void)(tc_fail(37));
   } else {
   }
+  (void)(tc_fail(37));
 }
 void tc_consume_call(int id) {
   if (((id == 0) || (node_kind[id] != N_CALL)) || (tc_release_name(node_value[id]) == 0))
@@ -11118,7 +11910,11 @@ void tc_add_var(int name, int kind, int named, int elem_kind, int elem_name, int
   tc_var_borrow_count[tc_var_count] = 0;
   tc_var_borrow_mut[tc_var_count] = 0;
   tc_var_borrow_source[tc_var_count] = (0 - 1);
+  tc_var_borrow_mode[tc_var_count] = 0;
+  tc_var_borrow_parent[tc_var_count] = (0 - 1);
+  tc_var_borrow_param[tc_var_count] = 0;
   tc_var_param[tc_var_count] = 0;
+  tc_var_param_pos[tc_var_count] = 0;
   tc_var_mode[tc_var_count] = 0;
   tc_var_closure_caps[tc_var_count] = 0;
   tc_var_closure_moved[tc_var_count] = 0;
@@ -11135,6 +11931,9 @@ int tc_lookup_var(int name) {
   tc_last_var_moved = 0;
   tc_last_var_ffi_borrowed = 0;
   tc_expr_borrow_source = (0 - 1);
+  tc_expr_borrow_origin = (0 - 1);
+  tc_expr_borrow_mut = 0;
+  tc_expr_borrow_param = 0;
   tc_expr_owner_source = (0 - 1);
   tc_expr_is_owned = 0;
   tc_last_var_index = 0;
@@ -11162,6 +11961,17 @@ int tc_lookup_var(int name) {
       tc_last_var_moved = tc_var_moved[i];
       tc_last_var_ffi_borrowed = tc_var_ffi_borrowed[i];
       tc_expr_borrow_source = tc_var_borrow_source[i];
+      if ((tc_expr_borrow_source < 0) && (tc_var_borrow_param[i] > 0))
+        tc_expr_borrow_source = i;
+      else {
+      }
+      tc_expr_borrow_origin = i;
+      tc_expr_borrow_mut = 0;
+      if (tc_var_borrow_mode[i] == 3)
+        tc_expr_borrow_mut = 1;
+      else {
+      }
+      tc_expr_borrow_param = tc_var_borrow_param[i];
       tc_last_var_index = i;
       return 1;
     } else {
@@ -11443,6 +12253,9 @@ void tc_expr(int id) {
   tc_elem_name = 0;
   tc_result_type = 0;
   tc_expr_borrow_source = (0 - 1);
+  tc_expr_borrow_origin = (0 - 1);
+  tc_expr_borrow_mut = 0;
+  tc_expr_borrow_param = 0;
   tc_expr_owner_source = (0 - 1);
   tc_expr_is_owned = 0;
   tc_expr_ffi_borrowed = 0;
@@ -11569,14 +12382,25 @@ void tc_expr(int id) {
         tc_var_owned[tc_last_var_index] = 1;
       else {
         tc_var_borrow_source[tc_last_var_index] = node_c[body_cap];
-        if (node_aux[body_cap] == 3)
+        tc_var_borrow_parent[tc_last_var_index] = node_c[body_cap];
+        if (node_aux[body_cap] == 3) {
           tc_var_borrow_mut[tc_last_var_index] = 1;
-        else
+          if (node_c[body_cap] < tc_var_count)
+            tc_var_borrow_mut[node_c[body_cap]] = (tc_var_borrow_mut[node_c[body_cap]] + 1);
+          else {
+          }
+        } else {
           tc_var_borrow_count[tc_last_var_index] = 1;
+          if (node_c[body_cap] < tc_var_count)
+            tc_var_borrow_count[node_c[body_cap]] = (tc_var_borrow_count[node_c[body_cap]] + 1);
+          else {
+          }
+        }
       }
       body_cap = node_next[body_cap];
     }
     int p = node_c[id];
+    int param_pos = 1;
     while (p != 0) {
       (void)(tc_type_node(node_b[p]));
       int pk = tc_kind;
@@ -11585,7 +12409,15 @@ void tc_expr(int id) {
       int pen = tc_elem_name;
       (void)(tc_add_var(node_a[p], pk, pn, pek, pen, node_b[p]));
       tc_var_param[tc_last_var_index] = 1;
+      tc_var_param_pos[tc_last_var_index] = param_pos;
       tc_var_mode[tc_last_var_index] = node_aux[p];
+      if ((node_aux[p] == 2) || (node_aux[p] == 3)) {
+        tc_var_borrow_source[tc_last_var_index] = tc_last_var_index;
+        tc_var_borrow_mode[tc_last_var_index] = node_aux[p];
+        tc_var_borrow_parent[tc_last_var_index] = tc_last_var_index;
+        tc_var_borrow_param[tc_last_var_index] = param_pos;
+      } else {
+      }
       if (node_aux[p] == 1)
         tc_var_owned[tc_last_var_index] = 1;
       else if (node_aux[p] == 3)
@@ -11594,6 +12426,7 @@ void tc_expr(int id) {
         tc_var_owned[tc_last_var_index] = 1;
       else {
       }
+      param_pos = (param_pos + 1);
       p = node_next[p];
     }
     int saved_expected_elem_kind = tc_expected_elem_kind;
@@ -11696,6 +12529,16 @@ void tc_expr(int id) {
       } else {
       }
       tc_expr_borrow_source = tc_var_borrow_source[tc_last_var_index];
+      if ((tc_expr_borrow_source < 0) && (tc_var_borrow_param[tc_last_var_index] > 0))
+        tc_expr_borrow_source = tc_last_var_index;
+      else {
+      }
+      tc_expr_borrow_mut = 0;
+      if (tc_var_borrow_mode[tc_last_var_index] == 3)
+        tc_expr_borrow_mut = 1;
+      else {
+      }
+      tc_expr_borrow_param = tc_var_borrow_param[tc_last_var_index];
       tc_expr_ffi_borrowed = tc_last_var_ffi_borrowed;
       if (tc_last_var_owned == 1)
         tc_expr_owner_source = tc_last_var_index;
@@ -11738,13 +12581,65 @@ void tc_expr(int id) {
       return;
     } else {
     }
+    if (tc_is_place(node_a[id]) == 0) {
+      (void)(tc_fail(68));
+      return;
+    } else {
+    }
+    if (((node_kind[node_a[id]] == N_VAR) && (sym_type[node_value[node_a[id]]] > 100)) &&
+        (node_value[node_a[id]] != 0)) {
+      (void)(tc_fail(70));
+      return;
+    } else {
+    }
     (void)(tc_expr(node_a[id]));
     int oldk = tc_kind;
     int oldn = tc_name;
     int olde = tc_elem_kind;
     int olden = tc_elem_name;
-    if ((node_kind[node_a[id]] == N_VAR) && (tc_lookup_var(node_value[node_a[id]]) == 1))
-      tc_expr_borrow_source = tc_last_var_index;
+    int old_source = tc_expr_borrow_source;
+    int old_origin = tc_expr_borrow_origin;
+    int old_mut = tc_expr_borrow_mut;
+    int old_param = tc_expr_borrow_param;
+    int root = old_source;
+    if (root < 0)
+      root = tc_place_root(node_a[id]);
+    else {
+    }
+    if (old_origin < 0)
+      old_origin = root;
+    else {
+    }
+    if ((root < 0) || (root >= tc_var_count)) {
+      (void)(tc_fail(68));
+      return;
+    } else {
+    }
+    if (node_value[id] == 1) {
+      if ((old_mut == 0) && (tc_var_mode[root] == 2)) {
+        (void)(tc_fail(70));
+        return;
+      } else {
+      }
+      if (tc_borrow_conflict_from(root, old_origin, 1) == 1) {
+        (void)(tc_fail(37));
+        return;
+      } else {
+      }
+      tc_expr_borrow_mut = 1;
+    } else {
+      if (tc_borrow_conflict_from(root, old_origin, 0) == 1) {
+        (void)(tc_fail(37));
+        return;
+      } else {
+      }
+      tc_expr_borrow_mut = 0;
+    }
+    tc_expr_borrow_source = root;
+    tc_expr_borrow_origin = old_origin;
+    tc_expr_borrow_param = old_param;
+    if ((tc_var_param[root] == 1) && ((tc_var_mode[root] == 2) || (tc_var_mode[root] == 3)))
+      tc_expr_borrow_param = tc_var_param_pos[root];
     else {
     }
     tc_kind = TY_PTR;
@@ -11758,12 +12653,17 @@ void tc_expr(int id) {
     }
     tc_expr_owner_source = (0 - 1);
     tc_expr_is_owned = 0;
+    int pointee = tc_type_node_from_summary(oldk, oldn, olde, olden);
+    tc_result_type = ast_node(TY_PTR, pointee, 0, 0, 0, 0);
     return;
   } else {
   }
   if (k == N_DEREF) {
     (void)(tc_expr(node_a[id]));
     int deref_borrow = tc_expr_borrow_source;
+    int deref_origin = tc_expr_borrow_origin;
+    int deref_mut = tc_expr_borrow_mut;
+    int deref_param = tc_expr_borrow_param;
     if (tc_kind != TY_PTR)
       (void)(tc_fail(6));
     else {
@@ -11772,6 +12672,9 @@ void tc_expr(int id) {
       tc_elem_kind = 0;
       tc_elem_name = 0;
       tc_expr_borrow_source = deref_borrow;
+      tc_expr_borrow_origin = deref_origin;
+      tc_expr_borrow_mut = deref_mut;
+      tc_expr_borrow_param = deref_param;
     }
     return;
   } else {
@@ -11784,6 +12687,9 @@ void tc_expr(int id) {
     }
     (void)(tc_expr(node_a[id]));
     int index_borrow = tc_expr_borrow_source;
+    int index_origin = tc_expr_borrow_origin;
+    int index_mut = tc_expr_borrow_mut;
+    int index_param = tc_expr_borrow_param;
     if (tc_kind == TY_ARRAY) {
       int ix = node_b[id];
       int ik = (0 - 1);
@@ -11809,6 +12715,9 @@ void tc_expr(int id) {
       tc_elem_kind = 0;
       tc_elem_name = 0;
       tc_expr_borrow_source = (0 - 1);
+      tc_expr_borrow_origin = (0 - 1);
+      tc_expr_borrow_mut = 0;
+      tc_expr_borrow_param = 0;
     } else if (tc_kind == TY_DYN_ARRAY) {
       int ek = tc_elem_kind;
       int en = tc_elem_name;
@@ -11817,18 +12726,27 @@ void tc_expr(int id) {
       tc_elem_kind = 0;
       tc_elem_name = 0;
       tc_expr_borrow_source = index_borrow;
+      tc_expr_borrow_origin = index_origin;
+      tc_expr_borrow_mut = index_mut;
+      tc_expr_borrow_param = index_param;
     } else if (tc_kind == TY_PTR) {
       tc_kind = tc_elem_kind;
       tc_name = tc_elem_name;
       tc_elem_kind = 0;
       tc_elem_name = 0;
       tc_expr_borrow_source = index_borrow;
+      tc_expr_borrow_origin = index_origin;
+      tc_expr_borrow_mut = index_mut;
+      tc_expr_borrow_param = index_param;
     } else if (tc_kind == TY_STRING) {
       tc_kind = TY_CHAR;
       tc_name = 0;
       tc_elem_kind = 0;
       tc_elem_name = 0;
       tc_expr_borrow_source = (0 - 1);
+      tc_expr_borrow_origin = (0 - 1);
+      tc_expr_borrow_mut = 0;
+      tc_expr_borrow_param = 0;
     } else
       (void)(tc_fail(8));
     return;
@@ -11836,6 +12754,10 @@ void tc_expr(int id) {
   }
   if (k == N_FIELD_ACCESS) {
     (void)(tc_expr(node_a[id]));
+    int base_borrow = tc_expr_borrow_source;
+    int base_origin = tc_expr_borrow_origin;
+    int base_mut = tc_expr_borrow_mut;
+    int base_param = tc_expr_borrow_param;
     int base_kind = tc_kind;
     int base_name = tc_name;
     if (base_kind == TY_DYN_ARRAY) {
@@ -11844,6 +12766,10 @@ void tc_expr(int id) {
         tc_name = 0;
         tc_elem_kind = 0;
         tc_elem_name = 0;
+        tc_expr_borrow_source = base_borrow;
+        tc_expr_borrow_origin = base_origin;
+        tc_expr_borrow_mut = base_mut;
+        tc_expr_borrow_param = base_param;
         return;
       } else {
       }
@@ -11867,6 +12793,10 @@ void tc_expr(int id) {
       while (payload_field != 0) {
         if (node_a[payload_field] == node_value[id]) {
           (void)(tc_type_node(node_b[payload_field]));
+          tc_expr_borrow_source = base_borrow;
+          tc_expr_borrow_origin = base_origin;
+          tc_expr_borrow_mut = base_mut;
+          tc_expr_borrow_param = base_param;
           return;
         } else {
         }
@@ -11882,6 +12812,10 @@ void tc_expr(int id) {
         tc_name = 0;
         tc_elem_kind = 0;
         tc_elem_name = 0;
+        tc_expr_borrow_source = base_borrow;
+        tc_expr_borrow_origin = base_origin;
+        tc_expr_borrow_mut = base_mut;
+        tc_expr_borrow_param = base_param;
         return;
       } else {
       }
@@ -11901,6 +12835,10 @@ void tc_expr(int id) {
             tc_elem_name = 0;
             tc_result_type = ast_node(TY_VARIANT, 0, 0, 0, variant_item, base_name);
             node_aux[id] = tc_result_type;
+            tc_expr_borrow_source = base_borrow;
+            tc_expr_borrow_origin = base_origin;
+            tc_expr_borrow_mut = base_mut;
+            tc_expr_borrow_param = base_param;
             return;
           } else {
           }
@@ -11934,6 +12872,10 @@ void tc_expr(int id) {
         if (node_a[gf] == node_value[id]) {
           int subst = tc_substitute_type(node_b[gf]);
           (void)(tc_type_node(subst));
+          tc_expr_borrow_source = base_borrow;
+          tc_expr_borrow_origin = base_origin;
+          tc_expr_borrow_mut = base_mut;
+          tc_expr_borrow_param = base_param;
           return;
         } else {
         }
@@ -11958,6 +12900,10 @@ void tc_expr(int id) {
     while (f != 0) {
       if (node_a[f] == node_value[id]) {
         (void)(tc_type_node(node_b[f]));
+        tc_expr_borrow_source = base_borrow;
+        tc_expr_borrow_origin = base_origin;
+        tc_expr_borrow_mut = base_mut;
+        tc_expr_borrow_param = base_param;
         return;
       } else {
       }
@@ -12764,6 +13710,7 @@ void tc_expr(int id) {
       return;
     } else {
     }
+    (void)(ensure_tc_fun_meta(fun_node));
     if (node_kind[fun_node] == N_GENERIC_FUNC) {
       (void)(tc_bind_clear());
       int generic_moves_array = tc_generic_moves_array(fun_node);
@@ -12801,8 +13748,19 @@ void tc_expr(int id) {
         (void)(tc_fail(13));
       else {
       }
+      int generic_ret_param = tc_fun_return_param[fun_node];
+      int generic_ret_arg = tc_nth_arg(node_a[id], generic_ret_param);
+      int generic_ret_source = tc_provenance(generic_ret_arg);
+      int generic_ret_mut = tc_fun_return_mut[fun_node];
+      int generic_ret_life = tc_provenance_param(generic_ret_arg);
       int generic_ret = tc_substitute_type(node_b[fun_node]);
       (void)(tc_type_node(generic_ret));
+      if (generic_ret_param > 0) {
+        tc_expr_borrow_source = generic_ret_source;
+        tc_expr_borrow_mut = generic_ret_mut;
+        tc_expr_borrow_param = generic_ret_life;
+      } else {
+      }
       node_aux[id] = tc_result_type;
       return;
     } else {
@@ -12859,7 +13817,18 @@ void tc_expr(int id) {
       (void)(tc_fail(13));
     else {
     }
+    int ret_param = tc_fun_return_param[fun_node];
+    int ret_arg = tc_nth_arg(node_a[id], ret_param);
+    int ret_source = tc_provenance(ret_arg);
+    int ret_mut = tc_fun_return_mut[fun_node];
+    int ret_life = tc_provenance_param(ret_arg);
     (void)(tc_type_node(node_b[fun_node]));
+    if (ret_param > 0) {
+      tc_expr_borrow_source = ret_source;
+      tc_expr_borrow_mut = ret_mut;
+      tc_expr_borrow_param = ret_life;
+    } else {
+    }
     if ((node_kind[fun_node] == N_EXTERN) && ((tc_kind == TY_PTR) || (tc_kind == TY_STRING)))
       tc_expr_ffi_borrowed = 1;
     else {
@@ -13513,6 +14482,9 @@ void tc_stmt(int id, int expected_kind, int expected_name) {
     int ee = tc_elem_kind;
     int een = tc_elem_name;
     int rhs_borrow = tc_expr_borrow_source;
+    int rhs_borrow_origin = tc_expr_borrow_origin;
+    int rhs_borrow_mut = tc_expr_borrow_mut;
+    int rhs_borrow_param = tc_expr_borrow_param;
     int rhs_ffi_borrowed = tc_expr_ffi_borrowed;
     if ((tc_is_owner_kind(dk) == 1) && (node_kind[node_c[id]] == N_VAR))
       (void)(tc_fail(40));
@@ -13546,8 +14518,13 @@ void tc_stmt(int id, int expected_kind, int expected_name) {
     }
     if (dk == TY_PTR) {
       if (rhs_borrow < 0) {
-      } else
-        (void)(tc_record_borrow(tc_last_var_index, rhs_borrow));
+      } else {
+        if (rhs_borrow_mut == 1)
+          (void)(tc_record_borrow_ex(tc_last_var_index, rhs_borrow, 3, rhs_borrow_origin));
+        else
+          (void)(tc_record_borrow_ex(tc_last_var_index, rhs_borrow, 2, rhs_borrow_origin));
+        tc_var_borrow_param[tc_last_var_index] = rhs_borrow_param;
+      }
     } else {
     }
   } else if ((k == N_ASSIGN) || (k == N_COMPOUND_ASSIGN)) {
@@ -13560,12 +14537,14 @@ void tc_stmt(int id, int expected_kind, int expected_name) {
     int ln = tc_name;
     int le = tc_elem_kind;
     int len = tc_elem_name;
-    int lhs_borrow = tc_expr_borrow_source;
     int lhs_index = tc_last_var_index;
     (void)(tc_require_mutable(node_a[id]));
     (void)(tc_mark_float_expr(node_b[id], lk));
     (void)(tc_expr(node_b[id]));
     int rhs_borrow_assign = tc_expr_borrow_source;
+    int rhs_borrow_origin_assign = tc_expr_borrow_origin;
+    int rhs_borrow_mut_assign = tc_expr_borrow_mut;
+    int rhs_borrow_param_assign = tc_expr_borrow_param;
     int rhs_ffi_borrowed_assign = tc_expr_ffi_borrowed;
     if (k == N_COMPOUND_ASSIGN) {
       int combined = ast_node(N_BINOP, node_a[id], node_b[id], 0, node_value[id], 0);
@@ -13594,21 +14573,20 @@ void tc_stmt(int id, int expected_kind, int expected_name) {
     } else {
     }
     if (((tc_ok == 1) && (node_kind[node_a[id]] == N_VAR)) && (lk == TY_PTR)) {
-      if (lhs_borrow < 0) {
-      } else if (lhs_borrow < tc_var_count) {
-        if (tc_var_borrow_mut[lhs_borrow] > 0)
-          tc_var_borrow_mut[lhs_borrow] = (tc_var_borrow_mut[lhs_borrow] - 1);
-        else if (tc_var_borrow_count[lhs_borrow] > 0)
-          tc_var_borrow_count[lhs_borrow] = (tc_var_borrow_count[lhs_borrow] - 1);
-        else {
-        }
-      } else {
-      }
+      (void)(tc_release_borrow(lhs_index));
       tc_var_borrow_source[lhs_index] = (0 - 1);
+      tc_var_borrow_mode[lhs_index] = 0;
+      tc_var_borrow_parent[lhs_index] = (0 - 1);
+      tc_var_borrow_param[lhs_index] = 0;
       tc_var_ffi_borrowed[lhs_index] = rhs_ffi_borrowed_assign;
       if (rhs_borrow_assign < 0) {
-      } else
-        (void)(tc_record_borrow(lhs_index, rhs_borrow_assign));
+      } else {
+        if (rhs_borrow_mut_assign == 1)
+          (void)(tc_record_borrow_ex(lhs_index, rhs_borrow_assign, 3, rhs_borrow_origin_assign));
+        else
+          (void)(tc_record_borrow_ex(lhs_index, rhs_borrow_assign, 2, rhs_borrow_origin_assign));
+        tc_var_borrow_param[lhs_index] = rhs_borrow_param_assign;
+      }
     } else {
     }
   } else if (k == N_DEFER) {
@@ -13706,9 +14684,12 @@ void tc_stmt(int id, int expected_kind, int expected_name) {
         (void)(tc_fail(54));
       else {
       }
-      if (expected_kind == TY_PTR)
-        (void)(tc_check_return_escape(return_borrow));
-      else {
+      if (expected_kind == TY_PTR) {
+        if (node_kind[node_a[id]] == N_ADDRESS)
+          (void)(tc_check_explicit_return_address_escape(return_borrow));
+        else
+          (void)(tc_check_return_escape(return_borrow));
+      } else {
       }
       if (expected_kind == TY_CLOSURE)
         (void)(tc_check_closure_value_escape(node_a[id]));
@@ -13742,17 +14723,31 @@ void tc_stmt(int id, int expected_kind, int expected_name) {
       (void)(tc_fail(25));
     else {
     }
+    (void)(tc_flow_save_base());
     (void)(tc_stmt(node_b[id], expected_kind, expected_name));
+    (void)(tc_flow_save_yes());
+    (void)(tc_flow_restore_base());
     (void)(tc_stmt(node_c[id], expected_kind, expected_name));
+    (void)(tc_flow_merge_yes());
+    (void)(tc_flow_end());
   } else if (k == N_WHILE) {
     (void)(tc_expr(node_a[id]));
     if (((tc_is_numeric_kind(tc_kind) == 0) && (tc_kind != TY_PTR)) && (tc_kind != TY_FUN))
       (void)(tc_fail(26));
     else {
     }
+    (void)(tc_flow_save_base());
     tc_loop_depth = (tc_loop_depth + 1);
     (void)(tc_stmt(node_b[id], expected_kind, expected_name));
     tc_loop_depth = (tc_loop_depth - 1);
+    if (node_value[id] != 0)
+      (void)(tc_stmt(node_value[id], expected_kind, expected_name));
+    else {
+    }
+    (void)(tc_flow_save_yes());
+    (void)(tc_flow_restore_base());
+    (void)(tc_flow_merge_yes());
+    (void)(tc_flow_end());
   } else if (k == N_FOR) {
     (void)(tc_enter_scope());
     if (node_a[id] != 0)
@@ -13764,6 +14759,7 @@ void tc_stmt(int id, int expected_kind, int expected_name) {
       (void)(tc_fail(27));
     else {
     }
+    (void)(tc_flow_save_base());
     tc_loop_depth = (tc_loop_depth + 1);
     (void)(tc_stmt(node_c[id], expected_kind, expected_name));
     tc_loop_depth = (tc_loop_depth - 1);
@@ -13771,6 +14767,10 @@ void tc_stmt(int id, int expected_kind, int expected_name) {
       (void)(tc_stmt(node_value[id], expected_kind, expected_name));
     else {
     }
+    (void)(tc_flow_save_yes());
+    (void)(tc_flow_restore_base());
+    (void)(tc_flow_merge_yes());
+    (void)(tc_flow_end());
     (void)(tc_leave_scope());
   } else {
   }
@@ -13986,6 +14986,15 @@ void tc_print_hint(int code) {
     (void)(runtime_write_string("closure moved-capture used after move"));
   else if (code == 31)
     (void)(runtime_write_string("assign only to a mutable binding"));
+  else if (code == 68)
+    (void)(runtime_write_string(
+        "borrow target must be a variable, dereference, index, or field place"));
+  else if (code == 69)
+    (void)(runtime_write_string("return-borrow lifetime must come from one consistent parameter"));
+  else if (code == 70)
+    (void)(runtime_write_string("mutable borrow requires a mutable place"));
+  else if (code == 72)
+    (void)(runtime_write_string("reference return escapes its owner"));
   else
     (void)(runtime_write_string("inspect the expression at the reported source location"));
 }
@@ -14075,6 +15084,14 @@ void tc_diag(void) {
     (void)(runtime_write_string("type error: closure capture escapes its source lifetime"));
   else if (tc_error_code == 61)
     (void)(runtime_write_string("type error: closure moved-capture used after move"));
+  else if (tc_error_code == 68)
+    (void)(runtime_write_string("type error: borrow target is not a place"));
+  else if (tc_error_code == 69)
+    (void)(runtime_write_string("type error: inconsistent return-borrow lifetime"));
+  else if (tc_error_code == 70)
+    (void)(runtime_write_string("type error: mutable borrow requires a mutable place"));
+  else if (tc_error_code == 72)
+    (void)(runtime_write_string("type error: reference return escapes its owner"));
   else if (tc_error_code == 44)
     (void)(runtime_write_string("type error: distinct functions collide after C mangling"));
   else
@@ -14313,6 +15330,9 @@ int tc_program(int root) {
   tc_scope_count = 0;
   tc_path_count = 0;
   tc_loop_depth = 0;
+  tc_flow_depth = 0;
+  tc_flow_log_count = 0;
+  (void)(tc_prepare_return_contracts(root));
   int collision_item = node_a[root];
   while (collision_item != 0) {
     if (((node_kind[collision_item] == N_FUNC) || (node_kind[collision_item] == N_GENERIC_FUNC)) &&
@@ -14446,6 +15466,7 @@ int tc_program(int root) {
       tc_scope_count = 1;
       (void)(tc_enter_scope());
       int p = node_c[item];
+      int param_pos = 1;
       while (p != 0) {
         (void)(tc_type_node(node_b[p]));
         int pk = tc_kind;
@@ -14454,7 +15475,14 @@ int tc_program(int root) {
         int pen = tc_elem_name;
         (void)(tc_add_var(node_a[p], pk, pn, pek, pen, node_b[p]));
         tc_var_param[tc_last_var_index] = 1;
+        tc_var_param_pos[tc_last_var_index] = param_pos;
         tc_var_mode[tc_last_var_index] = node_aux[p];
+        if ((node_aux[p] == 2) || (node_aux[p] == 3)) {
+          tc_var_borrow_source[tc_last_var_index] = tc_last_var_index;
+          tc_var_borrow_mode[tc_last_var_index] = node_aux[p];
+          tc_var_borrow_param[tc_last_var_index] = param_pos;
+        } else {
+        }
         if (node_aux[p] == 1)
           tc_var_owned[tc_last_var_index] = 1;
         else if (node_aux[p] == 3)
@@ -14463,6 +15491,7 @@ int tc_program(int root) {
           tc_var_owned[tc_last_var_index] = 1;
         else {
         }
+        param_pos = (param_pos + 1);
         p = node_next[p];
       }
       (void)(tc_type_node(node_b[item]));

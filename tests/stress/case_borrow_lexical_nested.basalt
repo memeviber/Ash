@@ -1,0 +1,51 @@
+func main(): int {
+  let value: int = 0;
+  let round: int = 0;
+  while round < 24 {
+    {
+      let a: int* = &value;
+      {
+        let b: int* = &value;
+        {
+          let c: int* = &value;
+          {
+            let d: int* = &value;
+            if *a + *b + *c + *d != 0 then return 1;
+          }
+          if *a + *b + *c != 0 then return 2;
+        }
+        if *a + *b != 0 then return 3;
+      }
+      if *a != 0 then return 4;
+    }
+    if round % 2 == 0 then {
+      let left: int* = &value;
+      {
+        let left_nested: int* = &value;
+        if *left + *left_nested != 0 then return 5;
+      }
+    } else {
+      let right: int* = &value;
+      {
+        let right_nested: int* = &value;
+        if *right + *right_nested != 0 then return 6;
+      }
+    }
+    round = round + 1;
+  }
+  {
+    let root: int* = &mut value;
+    {
+      let child: int* = &mut *root;
+      {
+        let shared_child: int* = &*child;
+        if *shared_child != 0 then return 7;
+      }
+      *child = 23;
+    }
+    *root = *root + 1;
+  }
+  return value - 24;
+}
+
+// diagnostic: valid

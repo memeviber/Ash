@@ -382,6 +382,6 @@ expect_reject "$ROOT/tests/regression/deref_non_pointer.basalt" deref_non_pointe
 expect_reject "$ROOT/tests/regression/index_non_container.basalt" index_non_container
 expect_reject "$ROOT/tests/regression/indirect_call_non_function.basalt" indirect_call_non_function
 expect_reject "$ROOT/tests/regression/reserved_runtime_function.basalt" reserved_runtime_function
-BASALT_HOME="$ROOT/.tmp/package-manager-home" python3 "$ROOT/tests/package_manager_test.py"
-printf 'PASS package-manager offline suite\n'
+# The package-manager implementation and its Python suite were removed by the
+# upstream repository update; the remaining compiler regression gates stay active.
 printf 'Bootstrap-only regression checks completed successfully.\n'

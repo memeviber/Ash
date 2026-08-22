@@ -1,0 +1,9 @@
+func main(): int {
+  let value: int = 1;
+  let first: int* = &mut value;
+  let second: int* = &mut value;
+  return *first + *second;
+}
+
+// diagnostic.code: 37
+// diagnostic: cannot create two active mutable borrows

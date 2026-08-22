@@ -1,0 +1,9 @@
+const value: int = 1;
+
+func main(): int {
+  let mutable: int* = &mut value;
+  return *mutable;
+}
+
+// diagnostic.code: 70
+// diagnostic: mutable borrow requires a mutable place

@@ -1,0 +1,16 @@
+include "../../../src/stdlib/array.basalt"
+
+func consume(move values: array::Array<int>): int {
+  values = array::free(values);
+  return 0;
+}
+
+func main(): int {
+  let values: array::Array<int> = array::new(2, 7);
+  let first: array::Array<int>* = &values;
+  consume(move values);
+  return 0;
+}
+
+// diagnostic.code: 37
+// diagnostic: move conflicts with an active shared borrow

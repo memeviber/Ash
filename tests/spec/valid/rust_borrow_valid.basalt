@@ -1,0 +1,52 @@
+func read_ref(borrow p: int*): int {
+  return *p;
+}
+
+func write_ref(borrow_mut p: int*): int {
+  *p = 11;
+  return *p;
+}
+
+func identity_ref(borrow p: int*): int* {
+  return &*p;
+}
+
+func shared_aliases(borrow p: int*): int {
+  let first: int* = &*p;
+  let second: int* = &*p;
+  return *first + *second;
+}
+
+func mutable_reborrow(borrow_mut p: int*): int {
+  let child: int* = &mut *p;
+  *child = 17;
+  return *child;
+}
+
+func identity_mut(borrow_mut p: int*): int* {
+  return p;
+}
+
+func forward_mut(borrow_mut p: int*): int* {
+  return identity_mut(p);
+}
+
+func main(): int {
+  let value: int = 7;
+  {
+    let first: int* = &value;
+    let second: int* = &value;
+    if *first != 7 then return 1;
+    if *second != 7 then return 2;
+    if shared_aliases(&value) != 14 then return 3;
+    if read_ref(first) != 7 then return 4;
+  }
+  if write_ref(&mut value) != 11 then return 5;
+  if *identity_ref(&value) != 11 then return 6;
+  if mutable_reborrow(&mut value) != 17 then return 7;
+  let mutable_alias: int* = forward_mut(&mut value);
+  *mutable_alias = 23;
+  return value - 23;
+}
+
+// diagnostic: valid

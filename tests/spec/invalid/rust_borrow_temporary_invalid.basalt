@@ -1,0 +1,7 @@
+func main(): int {
+  let pointer: int* = &(1 + 2);
+  return *pointer;
+}
+
+// diagnostic.code: 68
+// diagnostic: cannot borrow a temporary expression
